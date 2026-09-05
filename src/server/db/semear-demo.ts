@@ -156,7 +156,7 @@ async function principal() {
     const proximoNome = () => NOMES[nomeAtual++ % NOMES.length];
 
     const hoje = new Date();
-    let totais = { grupos: 0, pastores: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
+    const totais = { grupos: 0, pastores: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
 
     for (const [indice, missao] of MISSOES.entries()) {
       const slug = missao.nome.toLowerCase().normalize("NFD")
