@@ -2,6 +2,9 @@
   "name": "inteligencia-evangelizadora",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -73,7 +76,6 @@
     "tsx": "^4.23.13",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@10.26.2",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
@@ -81,5 +83,6 @@
       "@firebase/util",
       "sharp"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.26.2"
 }
