@@ -77,15 +77,37 @@ export async function GET() {
         : `faltando: ${faltamDocumentos.join(", ")} — o resto do sistema funciona, só o anexo de arquivos fica indisponível`,
   });
 
-  const chave = process.env.FIREBASE_PRIVATE_KEY ?? "";
-  if (chave) {
-    verificacoes.push({
-      nome: "Formato da chave privada do Firebase",
-      ok: chave.includes("BEGIN PRIVATE KEY"),
-      detalhe: chave.includes("BEGIN PRIVATE KEY")
-        ? "parece uma chave PEM"
-        : "não contém BEGIN PRIVATE KEY — cole o campo private_key inteiro do JSON",
-    });
+  /*
+   * A chave é validada com o `crypto` do próprio Node, sem passar pelo
+   * firebase-admin. Assim o resultado separa duas perguntas que se confundem:
+   * "a credencial está certa?" e "a biblioteca consegue carregar?". Uma chave
+   * malformada dá erro de decodificação; um problema de módulo dá
+   * ERR_REQUIRE_ESM — e o segundo acontece antes do primeiro, escondendo-o.
+   */
+  const bruta = process.env.FIREBASE_PRIVATE_KEY ?? "";
+  if (bruta) {
+    const chave = bruta.replace(/\\n/g, "\n").replace(/^["']|["']$/g, "");
+    const pistas = [
+      bruta.includes("\\n") ? "veio com \\n literal" : "veio com quebras de linha reais",
+      /^["']/.test(bruta) ? "está entre aspas (remova-as)" : null,
+      `${chave.split("\n").length} linhas`,
+    ].filter(Boolean);
+
+    let ok = false;
+    let motivo = "";
+    try {
+      const { createPrivateKey } = await import("node:crypto");
+      const objeto = createPrivateKey(chave);
+      ok = true;
+      motivo = `${objeto.asymmetricKeyType?.toUpperCase() ?? "chave"} válida · ${pistas.join(" · ")}`;
+    } catch (erro) {
+      motivo =
+        `não pôde ser lida (${(erro as Error).message.slice(0, 80)}) · ` +
+        `${pistas.join(" · ")} — cole o campo private_key inteiro do JSON, ` +
+        "de BEGIN a END, sem aspas em volta";
+    }
+
+    verificacoes.push({ nome: "Chave privada do Firebase", ok, detalhe: motivo });
   }
 
   // ─── Banco ────────────────────────────────────────────────────────────────
@@ -160,10 +182,19 @@ export async function GET() {
     await adminAuth().listUsers(1);
     verificacoes.push({ nome: "Credenciais do Firebase Admin", ok: true });
   } catch (erro) {
+    const mensagem = (erro as Error)?.message ?? "falhou";
+    const problemaDeModulo =
+      mensagem.includes("ERR_REQUIRE_ESM") ||
+      mensagem.includes("Failed to load external module");
+
     verificacoes.push({
       nome: "Credenciais do Firebase Admin",
       ok: false,
-      detalhe: (erro as Error)?.message?.slice(0, 160) ?? "falhou",
+      detalhe: problemaDeModulo
+        ? "a biblioteca não carregou — isto é versão do Node, não credencial. " +
+          "Confira a linha 'Versão do Node' acima: precisa ser 22.12 ou maior. " +
+          `Detalhe: ${mensagem.slice(0, 110)}`
+        : mensagem.slice(0, 180),
     });
   }
 
