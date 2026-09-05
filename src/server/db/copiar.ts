@@ -23,7 +23,6 @@ import {
 const ORDEM = [
   "usuarios",
   "missoes",
-  "usuario_missoes",
   "missao_indicadores",
   "grupos_oracao",
   "grupo_responsaveis",
@@ -69,9 +68,9 @@ async function principal() {
 
     // Ambos os lados precisam de escopo de admin: as tabelas têm FORCE RLS.
     await co.query("begin");
-    await co.query("select set_config('app.eh_admin','on',true)");
+    await co.query("select set_config('app.papel', 'admin', true)");
     await cd.query("begin");
-    await cd.query("select set_config('app.eh_admin','on',true)");
+    await cd.query("select set_config('app.papel', 'admin', true)");
 
     let total = 0;
 

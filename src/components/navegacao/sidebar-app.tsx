@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Settings,
   Sparkles,
+  UsersRound,
 } from "lucide-react";
 
 import {
@@ -32,7 +33,14 @@ const ACOMPANHAMENTO = [
   { titulo: "Relatórios", href: "/relatorios", Icone: ChartColumnIncreasing },
 ];
 
-export function SidebarApp({ ehAdmin }: { ehAdmin: boolean }) {
+export function SidebarApp({
+  ehAdmin,
+  podeConvidar,
+}: {
+  ehAdmin: boolean;
+  /** Admin master ou responsável de missão: os dois gerem acessos. */
+  podeConvidar: boolean;
+}) {
   const caminho = usePathname();
 
   // "/" só está ativo em si mesmo; os demais também nas subpáginas.
@@ -80,23 +88,40 @@ export function SidebarApp({ ehAdmin }: { ehAdmin: boolean }) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {ehAdmin ? (
+        {podeConvidar ? (
           <SidebarGroup>
-            <SidebarGroupLabel>Administração</SidebarGroupLabel>
+            <SidebarGroupLabel>Gestão</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    isActive={estaAtivo("/config")}
-                    tooltip="Configurações"
+                    isActive={estaAtivo("/equipe")}
+                    tooltip="Equipe"
                   >
-                    <Link href="/config">
-                      <Settings aria-hidden />
-                      <span>Configurações</span>
+                    <Link href="/equipe">
+                      <UsersRound aria-hidden />
+                      <span>Equipe</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+
+                {/* Tipos de ação e categorias valem para todas as missões:
+                    quem as define é o administrador master. */}
+                {ehAdmin ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={estaAtivo("/config")}
+                      tooltip="Configurações"
+                    >
+                      <Link href="/config">
+                        <Settings aria-hidden />
+                        <span>Configurações</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

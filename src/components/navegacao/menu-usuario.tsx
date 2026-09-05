@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signOut } from "firebase/auth";
-import { LoaderCircle, LogOut } from "lucide-react";
+import { KeyRound, LoaderCircle, LogOut } from "lucide-react";
 
 import { auth } from "@/lib/firebase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -74,6 +75,13 @@ export function MenuUsuario({
           <p className="text-muted-foreground truncate text-xs">{email}</p>
           <p className="text-muted-foreground text-xs capitalize">{papel}</p>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link href="/conta">
+            <KeyRound className="size-4" aria-hidden />
+            Minha conta
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={sair}

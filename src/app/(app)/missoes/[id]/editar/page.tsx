@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
 import { FormularioMissao } from "@/features/missoes/components/formulario-missao";
 import { obterMissao } from "@/features/missoes/queries";
+import { redirect } from "next/navigation";
+
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Editar missão" };
@@ -18,6 +20,11 @@ export default async function PaginaEditarMissao({
 
   if (!missao) notFound();
 
+  // O auxiliar registra os dados da missão, mas não altera o cadastro dela.
+  // O RLS recusaria a escrita de qualquer forma; parar aqui evita mostrar um
+  // formulário que só falharia ao salvar.
+  if (!usuario.podeEditarMissao) redirect(`/missoes/${id}`);
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <CabecalhoPagina titulo="Editar missão" descricao={missao.nome} />
@@ -32,9 +39,7 @@ export default async function PaginaEditarMissao({
           regiao: missao.regiao ?? "",
           endereco: missao.endereco ?? "",
           dataFundacao: missao.dataFundacao ?? "",
-          responsavelNome: missao.responsavelNome ?? "",
           contatoTelefone: missao.contatoTelefone ?? "",
-          contatoEmail: missao.contatoEmail ?? "",
           membrosTotal: missao.membrosTotal,
           observacoes: missao.observacoes ?? "",
           ativo: missao.ativo,

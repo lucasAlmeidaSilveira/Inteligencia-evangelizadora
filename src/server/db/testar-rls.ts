@@ -11,8 +11,8 @@ import {
 } from "./conexao";
 
 /**
- * Prova, contra o banco real, que um responsável não alcança dados de outra
- * missão — nem lendo, nem escrevendo.
+ * Prova, contra o banco real, que os três níveis de acesso valem no Postgres —
+ * não apenas na interface.
  *
  *   pnpm db:testar-rls
  *
@@ -29,25 +29,35 @@ function conferir(descricao: string, condicao: boolean) {
 
 async function escopo(
   c: PoolClient,
-  valores: { usuarioId?: string; ehAdmin?: boolean },
+  valores: { usuarioId?: string; papel?: string; missaoId?: string },
 ) {
   await c.query(
-    "select set_config('app.usuario_id', $1, true), set_config('app.eh_admin', $2, true)",
-    [valores.usuarioId ?? "", valores.ehAdmin ? "on" : "off"],
+    `select set_config('app.usuario_id', $1, true),
+            set_config('app.papel', $2, true),
+            set_config('app.missao_id', $3, true)`,
+    [valores.usuarioId ?? "", valores.papel ?? "", valores.missaoId ?? ""],
   );
 }
 
-async function principal() {
-  const pool = new Pool({
-    ...configuracaoDeConexao(urlDaAplicacao()),
-    max: 1,
-  });
+/** Executa algo que deve ser rejeitado e diz se foi mesmo. */
+async function deveRejeitar(c: PoolClient, sql: string, valores: unknown[] = []) {
+  await c.query("savepoint tentativa");
+  try {
+    await c.query(sql, valores);
+    await c.query("release savepoint tentativa");
+    return false;
+  } catch {
+    await c.query("rollback to savepoint tentativa");
+    return true;
+  }
+}
 
+async function principal() {
+  const pool = new Pool({ ...configuracaoDeConexao(urlDaAplicacao()), max: 1 });
   const c = await pool.connect();
 
   try {
     await c.query("begin");
-    // O pooler do Neon recusa `options` na conexão: o schema é definido aqui.
     await c.query(DEFINIR_SEARCH_PATH);
 
     /*
@@ -55,55 +65,48 @@ async function principal() {
      * RLS. Um papel com BYPASSRLS ignora todas as políticas — mais forte até
      * que FORCE ROW LEVEL SECURITY — e faria todas as verificações abaixo
      * passarem por engano, dando um atestado de segurança falso.
-     *
-     * Foi exatamente o que aconteceu ao migrar para o Neon: o `neondb_owner`
-     * vem com esse atributo ligado.
      */
-    const { rows: papel } = await c.query<{
+    const { rows: papelDb } = await c.query<{
       current_user: string;
       rolbypassrls: boolean;
       rolsuper: boolean;
     }>(`select current_user, rolbypassrls, rolsuper
           from pg_roles where rolname = current_user`);
 
-    console.log(`\nConexão (papel: ${papel[0].current_user})`);
+    console.log(`\nConexão (papel: ${papelDb[0].current_user})`);
     conferir(
       "o papel da aplicação NÃO ignora o RLS",
-      !papel[0].rolbypassrls && !papel[0].rolsuper,
+      !papelDb[0].rolbypassrls && !papelDb[0].rolsuper,
     );
 
-    if (papel[0].rolbypassrls || papel[0].rolsuper) {
+    if (papelDb[0].rolbypassrls || papelDb[0].rolsuper) {
       console.error(
         "\n✗ Este papel ignora as políticas. Rode `pnpm db:criar-papel` e use\n" +
-          "  a DATABASE_URL que ele gera. Sem isso, o isolamento entre missões\n" +
-          "  não existe — e nenhuma verificação abaixo significaria nada.\n",
+          "  a DATABASE_URL que ele gera.\n",
       );
       process.exit(1);
     }
-    await escopo(c, { ehAdmin: true });
 
     // ─── Cenário ────────────────────────────────────────────────────────────
-    const { rows: missoes } = await c.query<{ id: string }>(
+    await escopo(c, { papel: "admin" });
+
+    const { rows: missoesCriadas } = await c.query<{ id: string }>(
       `insert into missoes (nome, slug) values
          ('Missão Teste Norte', 'teste-norte'),
          ('Missão Teste Sul',   'teste-sul')
        returning id`,
     );
-    const [norte, sul] = missoes.map((m) => m.id);
+    const [norte, sul] = missoesCriadas.map((m) => m.id);
 
     const { rows: pessoas } = await c.query<{ id: string }>(
-      `insert into usuarios (firebase_uid, nome, email, papel) values
-         ('teste-ana',  'Ana Teste',  'ana@teste.local',  'responsavel'),
-         ('teste-bruno','Bruno Teste','bruno@teste.local','responsavel')
+      `insert into usuarios (firebase_uid, nome, email, papel, missao_id) values
+         ('teste-ana',   'Ana Responsável',   'ana@teste.local',   'responsavel', $1),
+         ('teste-bruno', 'Bruno Auxiliar',    'bruno@teste.local', 'auxiliar',    $1),
+         ('teste-carla', 'Carla Responsável', 'carla@teste.local', 'responsavel', $2)
        returning id`,
+      [norte, sul],
     );
-    const [ana, bruno] = pessoas.map((p) => p.id);
-
-    await c.query(
-      `insert into usuario_missoes (usuario_id, missao_id)
-       values ($1, $2), ($3, $4)`,
-      [ana, norte, bruno, sul],
-    );
+    const [ana, bruno, carla] = pessoas.map((p) => p.id);
 
     const { rows: tipos } = await c.query<{ id: string }>(
       "select id from tipos_evento limit 1",
@@ -116,105 +119,203 @@ async function principal() {
       [norte, tipos[0].id, sul],
     );
 
-    // ─── Ana: responsável apenas pela Missão Norte ──────────────────────────
-    console.log("\nAna (responsável — Missão Norte)");
-    await escopo(c, { usuarioId: ana });
-
-    const vistas = await c.query("select nome from missoes order by nome");
+    // ─── Estrutura: um responsável por missão ───────────────────────────────
+    console.log("\nEstrutura de papéis");
     conferir(
-      `enxerga 1 missão, a sua (viu ${vistas.rowCount})`,
+      "recusa um segundo responsável na mesma missão",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-dup', 'Duplicado', 'dup@teste.local', 'responsavel', $1)`,
+        [norte],
+      ),
+    );
+    conferir(
+      "recusa administrador vinculado a uma missão",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-adm', 'Admin', 'adm@teste.local', 'admin', $1)`,
+        [norte],
+      ),
+    );
+    conferir(
+      "recusa auxiliar sem missão",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-solto', 'Solto', 'solto@teste.local', 'auxiliar', null)`,
+      ),
+    );
+
+    // ─── Ana: responsável pelo Norte ────────────────────────────────────────
+    console.log("\nAna (responsável — Missão Norte)");
+    await escopo(c, { usuarioId: ana, papel: "responsavel", missaoId: norte });
+
+    const vistas = await c.query("select nome from missoes");
+    conferir(
+      `enxerga só a sua missão (viu ${vistas.rowCount})`,
       vistas.rowCount === 1 && vistas.rows[0].nome === "Missão Teste Norte",
     );
 
     const eventos = await c.query("select titulo from eventos");
+    conferir("enxerga só os eventos da sua missão", eventos.rowCount === 1);
+
     conferir(
-      `enxerga 1 evento, o da sua missão (viu ${eventos.rowCount})`,
-      eventos.rowCount === 1 && eventos.rows[0].titulo === "Evento do Norte",
+      "edita o cadastro da própria missão",
+      (await c.query("update missoes set membros_total = 50 where id = $1", [norte]))
+        .rowCount === 1,
     );
 
-    const porId = await c.query("select 1 from missoes where id = $1", [sul]);
     conferir(
-      "não alcança a Missão Sul nem pedindo pelo ID direto",
-      porId.rowCount === 0,
+      "não altera a missão alheia",
+      (await c.query("update missoes set membros_total = 999 where id = $1", [sul]))
+        .rowCount === 0,
     );
 
-    const alterar = await c.query(
-      "update missoes set membros_total = 999 where id = $1",
-      [sul],
-    );
     conferir(
-      "não consegue alterar a Missão Sul (0 linhas afetadas)",
-      alterar.rowCount === 0,
-    );
-
-    let bloqueou = false;
-    try {
-      await c.query("savepoint tentativa");
-      await c.query(
-        `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
-         values ($1, $2, 'Invasão', now(), now() + interval '1 hour')`,
-        [sul, tipos[0].id],
-      );
-      await c.query("release savepoint tentativa");
-    } catch {
-      bloqueou = true;
-      await c.query("rollback to savepoint tentativa");
-    }
-    conferir("não consegue criar evento na Missão Sul", bloqueou);
-
-    let criouMissao = false;
-    try {
-      await c.query("savepoint tentativa2");
-      await c.query(
+      "não cria missão nova",
+      await deveRejeitar(
+        c,
         "insert into missoes (nome, slug) values ('Pirata', 'pirata')",
-      );
-      criouMissao = true;
-      await c.query("release savepoint tentativa2");
-    } catch {
-      await c.query("rollback to savepoint tentativa2");
-    }
-    conferir("não consegue criar missão nova (é ato de admin)", !criouMissao);
+      ),
+    );
 
-    // ─── Bruno: o espelho ───────────────────────────────────────────────────
-    console.log("\nBruno (responsável — Missão Sul)");
-    await escopo(c, { usuarioId: bruno });
+    conferir(
+      "convida auxiliar para a própria missão",
+      !(await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-novo', 'Novo Auxiliar', 'novo@teste.local', 'auxiliar', $1)`,
+        [norte],
+      )),
+    );
 
-    const dele = await c.query("select nome from missoes");
+    conferir(
+      "não cria outro responsável",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-r2', 'Outro', 'outro@teste.local', 'responsavel', $1)`,
+        [sul],
+      ),
+    );
+
+    conferir(
+      "não cria administrador",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-a2', 'Falso Admin', 'falso@teste.local', 'admin', null)`,
+      ),
+    );
+
+    conferir(
+      "não convida para outra missão",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-x', 'Invasor', 'invasor@teste.local', 'auxiliar', $1)`,
+        [sul],
+      ),
+    );
+
+    // A linha antiga passa no USING (auxiliar da mesma missão), mas a nova
+    // reprova no WITH CHECK. Nesse caso o Postgres lança erro em vez de
+    // afetar zero linhas — mais explícito, e é o que se espera aqui.
+    conferir(
+      "não promove o próprio auxiliar a responsável",
+      await deveRejeitar(
+        c,
+        "update usuarios set papel = 'responsavel' where id = $1",
+        [bruno],
+      ),
+    );
+
+    conferir(
+      "não enxerga usuários de outra missão",
+      (await c.query("select 1 from usuarios where id = $1", [carla])).rowCount === 0,
+    );
+
+    // ─── Bruno: auxiliar do Norte ───────────────────────────────────────────
+    console.log("\nBruno (auxiliar — Missão Norte)");
+    await escopo(c, { usuarioId: bruno, papel: "auxiliar", missaoId: norte });
+
+    conferir(
+      "enxerga a sua missão",
+      (await c.query("select 1 from missoes")).rowCount === 1,
+    );
+
+    conferir(
+      "registra grupo de oração",
+      !(await deveRejeitar(
+        c,
+        "insert into grupos_oracao (missao_id, nome) values ($1, 'Grupo do Bruno')",
+        [norte],
+      )),
+    );
+
+    conferir(
+      "registra ação apostólica",
+      !(await deveRejeitar(
+        c,
+        `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
+         values ($1, $2, 'Ação do Bruno', now(), now() + interval '1 hour')`,
+        [norte, tipos[0].id],
+      )),
+    );
+
+    conferir(
+      "NÃO altera o cadastro da missão",
+      (await c.query("update missoes set nome = 'Renomeada' where id = $1", [norte]))
+        .rowCount === 0,
+    );
+
+    conferir(
+      "NÃO convida ninguém",
+      await deveRejeitar(
+        c,
+        `insert into usuarios (firebase_uid, nome, email, papel, missao_id)
+         values ('teste-b1', 'Convidado', 'conv@teste.local', 'auxiliar', $1)`,
+        [norte],
+      ),
+    );
+
+    // ─── Carla: responsável pelo Sul ────────────────────────────────────────
+    console.log("\nCarla (responsável — Missão Sul)");
+    await escopo(c, { usuarioId: carla, papel: "responsavel", missaoId: sul });
     conferir(
       "enxerga apenas a Missão Sul",
-      dele.rowCount === 1 && dele.rows[0].nome === "Missão Teste Sul",
+      (await c.query("select nome from missoes")).rows[0]?.nome ===
+        "Missão Teste Sul",
     );
 
-    // ─── Admin ──────────────────────────────────────────────────────────────
-    console.log("\nAdministrador");
-    await escopo(c, { ehAdmin: true });
-
-    const todas = await c.query("select id from missoes where id in ($1, $2)", [
-      norte,
-      sul,
-    ]);
-    conferir("enxerga as duas missões", todas.rowCount === 2);
-
-    const todosEventos = await c.query(
-      "select id from eventos where missao_id in ($1, $2)",
-      [norte, sul],
+    // ─── Administrador master ───────────────────────────────────────────────
+    console.log("\nAdministrador master");
+    await escopo(c, { papel: "admin" });
+    conferir(
+      "enxerga as duas missões",
+      (await c.query("select 1 from missoes where id in ($1,$2)", [norte, sul]))
+        .rowCount === 2,
     );
-    conferir("enxerga os dois eventos", todosEventos.rowCount === 2);
+    conferir(
+      "enxerga todos os usuários criados",
+      (await c.query("select 1 from usuarios where id in ($1,$2,$3)", [ana, bruno, carla]))
+        .rowCount === 3,
+    );
 
-    // ─── Sem escopo: ninguém ────────────────────────────────────────────────
+    // ─── Sem sessão ─────────────────────────────────────────────────────────
     console.log("\nSem sessão (escopo vazio)");
     await escopo(c, {});
-
-    const anonimo = await c.query("select id from missoes");
-    conferir("não enxerga missão alguma", anonimo.rowCount === 0);
-
-    const config = await c.query("select id from tipos_evento");
+    conferir(
+      "não enxerga missão alguma",
+      (await c.query("select id from missoes")).rowCount === 0,
+    );
     conferir(
       "não enxerga nem as tabelas de configuração",
-      config.rowCount === 0,
+      (await c.query("select id from tipos_evento")).rowCount === 0,
     );
   } finally {
-    // Nada do teste permanece no banco.
     await c.query("rollback").catch(() => undefined);
     c.release();
     await pool.end();
@@ -224,7 +325,7 @@ async function principal() {
     console.error(`\n✗ ${falhas} verificação(ões) falharam.\n`);
     process.exit(1);
   }
-  console.log("\n✓ Isolamento entre missões confirmado.\n");
+  console.log("\n✓ Três níveis de acesso confirmados no banco.\n");
 }
 
 principal().catch((erro) => {

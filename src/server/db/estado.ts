@@ -27,21 +27,19 @@ async function principal() {
     await c.query("begin");
     // O pooler do Neon recusa `options` na conexão: o schema é definido aqui.
     await c.query(DEFINIR_SEARCH_PATH);
-    await c.query("select set_config('app.eh_admin', 'on', true)");
+    await c.query("select set_config('app.papel', 'admin', true)");
 
     const { rows: pessoas } = await c.query<{
       nome: string;
       email: string;
       papel: string;
       ativo: boolean;
-      missoes: number;
+      missao: string | null;
     }>(`
-      select u.nome, u.email, u.papel, u.ativo,
-             count(um.missao_id)::int as missoes
+      select u.nome, u.email, u.papel, u.ativo, m.nome as missao
         from usuarios u
-        left join usuario_missoes um on um.usuario_id = u.id
-       group by u.id
-       order by u.criado_em
+        left join missoes m on m.id = u.missao_id
+       order by u.papel, u.nome
     `);
 
     const { rows: contagens } = await c.query<{
@@ -65,9 +63,7 @@ async function principal() {
     }
     for (const p of pessoas) {
       const escopo =
-        p.papel === "admin"
-          ? "todas as missões"
-          : `${p.missoes} missão(ões)`;
+        p.papel === "admin" ? "todas as missões" : (p.missao ?? "sem missão");
       console.log(
         `  • ${p.nome} <${p.email}> — ${p.papel}, ${escopo}${p.ativo ? "" : " [inativo]"}`,
       );

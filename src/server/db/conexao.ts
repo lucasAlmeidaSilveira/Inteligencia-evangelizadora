@@ -30,13 +30,17 @@ export function configuracaoDeConexao(url: string | undefined): PoolConfig {
   endereco.searchParams.delete("sslmode");
   endereco.searchParams.delete("channel_binding");
 
+  const local =
+    endereco.hostname === "localhost" || endereco.hostname === "127.0.0.1";
+
   // O Neon apresenta certificado de autoridade pública; o Render usa um
-  // autoassinado, que a verificação estrita recusaria.
+  // autoassinado, que a verificação estrita recusaria. Banco local não fala
+  // TLS — insistir nele só produz um erro de handshake confuso.
   const verificarCertificado = endereco.hostname.endsWith(".neon.tech");
 
   return {
     connectionString: endereco.toString(),
-    ssl: { rejectUnauthorized: verificarCertificado },
+    ssl: local ? false : { rejectUnauthorized: verificarCertificado },
   };
 }
 

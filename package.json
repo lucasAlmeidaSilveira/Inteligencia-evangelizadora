@@ -23,7 +23,12 @@
     "testar:schemas": "tsx src/features/__testes__/schemas.ts",
     "testar:consultas": "tsx src/features/__testes__/consultas.ts",
     "db:copiar": "tsx src/server/db/copiar.ts",
-    "db:criar-papel": "tsx src/server/db/criar-papel.ts"
+    "db:criar-papel": "tsx src/server/db/criar-papel.ts",
+    "demo:semear": "tsx src/server/db/semear-demo.ts",
+    "demo:subir": "./scripts/demo.sh subir",
+    "demo:resemear": "./scripts/demo.sh resemear",
+    "demo:derrubar": "./scripts/demo.sh derrubar",
+    "dev:demo": "DATABASE_URL=postgresql://ie_app:demo@localhost:5433/ie_demo DATABASE_URL_ADMIN=postgresql://postgres:demo@localhost:5433/ie_demo next dev"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

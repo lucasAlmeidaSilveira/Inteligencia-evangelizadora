@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { obterMissao } from "@/features/missoes/queries";
+import { requerUsuario } from "@/server/auth/sessao";
 
 import { NavAbas } from "./nav-abas";
 
@@ -37,7 +38,10 @@ export default async function LayoutMissao({
 }
 
 async function CabecalhoMissao({ id }: { id: string }) {
-  const missao = await obterMissao(id);
+  const [missao, usuario] = await Promise.all([
+    obterMissao(id),
+    requerUsuario(),
+  ]);
 
   // Com RLS ligado, "não existe" e "não é sua" chegam iguais — e devem mesmo.
   if (!missao) notFound();
@@ -62,12 +66,14 @@ async function CabecalhoMissao({ id }: { id: string }) {
           ) : null}
         </div>
 
-        <Button asChild variant="outline" className="shrink-0">
-          <Link href={`/missoes/${missao.id}/editar`}>
-            <Pencil aria-hidden />
-            Editar
-          </Link>
-        </Button>
+        {usuario.podeEditarMissao ? (
+          <Button asChild variant="outline" className="shrink-0">
+            <Link href={`/missoes/${missao.id}/editar`}>
+              <Pencil aria-hidden />
+              Editar
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       <NavAbas missaoId={missao.id} />

@@ -6,9 +6,10 @@ import { and, eq, sql } from "drizzle-orm";
 import { gerarSlug } from "@/lib/slug";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
-import { gruposOracao, missaoIndicadores, missoes } from "@/server/db/schema";
+import { gruposOracao, missaoIndicadores, missoes, usuarios } from "@/server/db/schema";
+import { adminAuth } from "@/server/firebase/admin";
 
-import { competenciaSchema, missaoSchema } from "./schemas";
+import { competenciaSchema, criacaoMissaoSchema, missaoSchema } from "./schemas";
 
 /** Só admin cria missão — o RLS já barra, mas a mensagem aqui é legível. */
 const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
@@ -38,29 +39,81 @@ async function slugLivre(tx: Transacao, base: string) {
   }
 }
 
+/**
+ * Criação de missão — sempre ato do administrador master.
+ *
+ * O responsável é convidado no mesmo passo, e a ação devolve o link para ele
+ * definir a senha. Uma missão sem ninguém que responda por ela é um estado que
+ * alguém precisa lembrar de resolver depois; resolvê-lo aqui, no momento em
+ * que a informação está à mão, evita a missão órfã.
+ */
 export async function criarMissao(entrada: unknown) {
-  const validado = missaoSchema.safeParse(entrada);
+  const validado = criacaoMissaoSchema.safeParse(entrada);
   if (!validado.success) {
     return falha("Confira os campos destacados.", camposComErro(validado.error));
   }
 
+  const { responsavelNome, responsavelEmail, ...dadosMissao } = validado.data;
+  const convidar = Boolean(responsavelNome && responsavelEmail);
+
   try {
+    // A conta no Firebase nasce antes da transação. Se o banco falhar depois,
+    // sobra uma conta sem vínculo — inofensiva, e reaproveitada no próximo
+    // convite, que procura por e-mail antes de criar.
+    const conta = convidar
+      ? await adminAuth()
+          .getUserByEmail(responsavelEmail!)
+          .catch(() =>
+            adminAuth().createUser({
+              email: responsavelEmail!,
+              displayName: responsavelNome!,
+            }),
+          )
+      : null;
+
     const id = await comUsuario(async (tx, usuario) => {
       if (!usuario.ehAdmin) throw new Error(APENAS_ADMIN);
 
       const [criada] = await tx
         .insert(missoes)
         .values({
-          ...validado.data,
-          slug: await slugLivre(tx, gerarSlug(validado.data.nome)),
+          ...dadosMissao,
+          slug: await slugLivre(tx, gerarSlug(dadosMissao.nome)),
         })
         .returning({ id: missoes.id });
+
+      if (conta) {
+        await tx
+          .insert(usuarios)
+          .values({
+            firebaseUid: conta.uid,
+            nome: responsavelNome!,
+            email: responsavelEmail!,
+            papel: "responsavel",
+            missaoId: criada.id,
+            ativo: true,
+          })
+          .onConflictDoUpdate({
+            target: usuarios.firebaseUid,
+            set: {
+              nome: responsavelNome!,
+              papel: "responsavel",
+              missaoId: criada.id,
+              ativo: true,
+            },
+          });
+      }
 
       return criada.id;
     });
 
+    const link = convidar
+      ? await adminAuth().generatePasswordResetLink(responsavelEmail!)
+      : null;
+
     revalidarArvore(id);
-    return sucesso({ id });
+    revalidatePath("/equipe");
+    return sucesso({ id, link, email: responsavelEmail });
   } catch (erro) {
     if (erro instanceof Error && erro.message === APENAS_ADMIN) {
       return falha(APENAS_ADMIN);

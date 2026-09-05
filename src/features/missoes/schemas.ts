@@ -38,17 +38,7 @@ export const missaoSchema = z.object({
       (v) => v === null || new Date(v) <= new Date(),
       "A fundação não pode ser no futuro.",
     ),
-  responsavelNome: opcional(120),
   contatoTelefone: opcional(30),
-  contatoEmail: z
-    .string()
-    .trim()
-    .nullish()
-    .transform((v) => (v ? v : null))
-    .refine(
-      (v) => v === null || z.email().safeParse(v).success,
-      "E-mail inválido.",
-    ),
   membrosTotal: z
     .preprocess(
       // Campo vazio, nulo ou ausente significa "sem contagem" — vira zero.
@@ -67,6 +57,48 @@ export const missaoSchema = z.object({
 });
 
 export type DadosMissao = z.input<typeof missaoSchema>;
+
+/**
+ * Criação de missão, que é sempre ato do administrador master.
+ *
+ * O responsável entra junto: uma missão sem ninguém que responda por ela fica
+ * órfã, e alguém precisa lembrar de convidar depois. Ainda assim é opcional —
+ * nem sempre o nome já está definido no momento do cadastro, e travar a
+ * criação por isso só levaria a e-mails inventados.
+ */
+export const criacaoMissaoSchema = missaoSchema
+  .safeExtend({
+    responsavelNome: z
+      .string()
+      .trim()
+      .max(120, "No máximo 120 caracteres.")
+      .nullish()
+      .transform((v) => (v ? v : null)),
+    responsavelEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .nullish()
+      .transform((v) => (v ? v : null))
+      .refine(
+        (v) => v === null || z.email().safeParse(v).success,
+        "E-mail inválido.",
+      ),
+  })
+  .refine(
+    (d) =>
+      (d.responsavelNome === null) === (d.responsavelEmail === null),
+    {
+      message: "Informe nome e e-mail do responsável, ou deixe os dois vazios.",
+      path: ["responsavelEmail"],
+    },
+  )
+  .refine(
+    (d) => d.responsavelNome === null || d.responsavelNome.length >= 3,
+    { message: "Informe o nome completo.", path: ["responsavelNome"] },
+  );
+
+export type DadosCriacaoMissao = z.input<typeof criacaoMissaoSchema>;
 
 /** Snapshot mensal — o dia é sempre 1, imposto também por CHECK no banco. */
 export const competenciaSchema = z.object({

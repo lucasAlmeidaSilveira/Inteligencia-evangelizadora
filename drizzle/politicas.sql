@@ -1,14 +1,17 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- Row Level Security — Inteligência Evangelizadora
 --
--- Arquivo idempotente: reaplicado a cada `pnpm db:migrate`. Toda função usa
--- CREATE OR REPLACE e toda policy é derrubada antes de ser recriada.
+-- Arquivo idempotente: reaplicado a cada `pnpm db:migrate`.
 --
 -- Contexto: usando Firebase Auth, o Postgres não conhece o usuário final.
 -- Quem informa é a aplicação, via `set_config('app.*', ..., true)` no início
 -- de cada transação (ver src/server/db/escopo.ts). Como o escopo é local à
 -- transação, ele nunca sobrevive para a próxima requisição que reutilizar a
 -- mesma conexão do pool.
+--
+-- IMPORTANTE: a aplicação conecta como `ie_app`, papel sem BYPASSRLS. Um papel
+-- com esse atributo ignora todas as políticas abaixo — mais forte até que
+-- FORCE ROW LEVEL SECURITY. `pnpm db:testar-rls` verifica isso antes de tudo.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ─── Leitura do escopo da requisição ───────────────────────────────────────
@@ -21,28 +24,77 @@ create or replace function ie.firebase_uid() returns text
   language sql stable
   as $$ select nullif(current_setting('app.firebase_uid', true), '') $$;
 
+create or replace function ie.papel() returns text
+  language sql stable
+  as $$ select nullif(current_setting('app.papel', true), '') $$;
+
+/*
+ * Missão a que a pessoa pertence. Nula para o admin, que não pertence a
+ * nenhuma — e por isso enxerga todas.
+ *
+ * O segundo termo do coalesce resolve o ovo e a galinha do carregamento da
+ * sessão: nesse instante só o firebase_uid é conhecido, e sem ele o JOIN com
+ * `missoes` viria vazio pelo próprio RLS — a sessão seria descartada e a
+ * pessoa ficaria trancada fora do sistema. O COALESCE do Postgres não avalia
+ * os argumentos à direita do primeiro não-nulo, então a subconsulta custa
+ * zero no caminho normal, em que o escopo já está definido.
+ */
+/*
+ * SECURITY DEFINER de propósito, e é a única do arquivo.
+ *
+ * Sem isso há recursão: a policy de `usuarios` chama `missao_do_usuario()`,
+ * que consultaria `usuarios`, disparando a policy de novo — o Postgres estoura
+ * a pilha. Rodando como dona, a função lê a tabela sem passar pelo RLS.
+ *
+ * A superfície é mínima: não aceita parâmetro e só devolve a missão da linha
+ * cujo firebase_uid veio do escopo — que por sua vez veio de um cookie de
+ * sessão verificado no servidor. Não há como perguntar pela missão de outra
+ * pessoa. O `search_path` é fixado porque uma função SECURITY DEFINER com
+ * search_path aberto pode ser induzida a chamar objetos plantados por quem a
+ * invoca.
+ */
+create or replace function ie.missao_pelo_token() returns uuid
+  language sql stable security definer
+  set search_path = ie, pg_temp
+  as $$
+    select u.missao_id from ie.usuarios u
+     where u.firebase_uid = nullif(current_setting('app.firebase_uid', true), '')
+  $$;
+
+create or replace function ie.missao_do_usuario() returns uuid
+  language sql stable
+  as $$
+    select coalesce(
+      nullif(current_setting('app.missao_id', true), '')::uuid,
+      ie.missao_pelo_token()
+    )
+  $$;
+
 create or replace function ie.eh_admin() returns boolean
   language sql stable
-  as $$ select coalesce(current_setting('app.eh_admin', true), 'off') = 'on' $$;
+  as $$ select ie.papel() = 'admin' $$;
+
+create or replace function ie.eh_responsavel() returns boolean
+  language sql stable
+  as $$ select ie.papel() = 'responsavel' $$;
 
 -- Sem escopo definido não existe usuário: nega tudo por omissão.
 create or replace function ie.autenticado() returns boolean
   language sql stable
   as $$ select ie.usuario_id() is not null $$;
 
-/*
- * Admin enxerga qualquer missão; os demais, apenas as vinculadas a si.
- * Consulta `usuario_missoes`, cuja policy depende somente das funções acima —
- * a cadeia é de mão única, então não há recursão de policies.
- */
+/* Ver e registrar dados de uma missão: admin em qualquer uma; responsável e
+   auxiliar apenas na sua. */
 create or replace function ie.tem_acesso_missao(alvo uuid) returns boolean
   language sql stable
+  as $$ select ie.eh_admin() or (alvo is not null and alvo = ie.missao_do_usuario()) $$;
+
+/* Alterar o cadastro da própria missão é do responsável, não do auxiliar. */
+create or replace function ie.pode_editar_missao(alvo uuid) returns boolean
+  language sql stable
   as $$
-    select ie.eh_admin() or exists (
-      select 1 from ie.usuario_missoes um
-      where um.missao_id = alvo
-        and um.usuario_id = ie.usuario_id()
-    )
+    select ie.eh_admin()
+        or (ie.eh_responsavel() and alvo is not null and alvo = ie.missao_do_usuario())
   $$;
 
 -- ─── atualizado_em automático ──────────────────────────────────────────────
@@ -72,15 +124,14 @@ end $$;
 
 -- ─── Habilitar RLS ─────────────────────────────────────────────────────────
 /*
- * FORCE é indispensável aqui. O Render entrega um usuário que é dono das
- * tabelas, e o dono ignora RLS por padrão — sem FORCE, todas as policies
- * abaixo seriam decorativas.
+ * FORCE cobre o caso de a aplicação conectar como dona das tabelas. Não
+ * substitui o cuidado com BYPASSRLS, que é mais forte e ignora até o FORCE.
  */
 do $$
 declare t text;
 begin
   foreach t in array array[
-    'usuarios', 'usuario_missoes', 'missoes', 'missao_indicadores',
+    'usuarios', 'missoes', 'missao_indicadores',
     'grupos_oracao', 'grupo_responsaveis', 'tipos_evento',
     'categorias_financeiras', 'eventos', 'evento_lancamentos',
     'evento_documentos', 'evento_links'
@@ -90,38 +141,46 @@ begin
   end loop;
 end $$;
 
--- ─── Identidade ────────────────────────────────────────────────────────────
+-- ─── Usuários ──────────────────────────────────────────────────────────────
 
+/*
+ * Cada um vê a si mesmo sempre — inclusive antes de o escopo completo existir,
+ * no momento em que a sessão é carregada pelo firebase_uid.
+ * Além disso, quem pertence a uma missão vê os colegas dela: saber quem mais
+ * tem acesso aos dados da própria missão é legítimo e evita duplicidade de
+ * convites.
+ */
 drop policy if exists usuarios_leitura on ie.usuarios;
 create policy usuarios_leitura on ie.usuarios for select
-  using (firebase_uid = ie.firebase_uid() or ie.eh_admin());
+  using (
+    firebase_uid = ie.firebase_uid()
+    or ie.eh_admin()
+    or (missao_id is not null and missao_id = ie.missao_do_usuario())
+  );
 
 drop policy if exists usuarios_admin on ie.usuarios;
 create policy usuarios_admin on ie.usuarios for all
   using (ie.eh_admin()) with check (ie.eh_admin());
 
 /*
- * Aceita também a identificação pelo firebase_uid. Sem isso, carregar o
- * usuário exigiria duas idas ao banco: uma para descobrir o id e outra,
- * depois de reaplicar o escopo, para ler os vínculos. Com o banco distante,
- * cada ida a menos vale mais que a consulta em si.
+ * O responsável administra apenas auxiliares da própria missão.
  *
- * A subconsulta em `usuarios` não gera recursão: a policy de `usuarios`
- * depende apenas das funções de escopo, nunca de `usuario_missoes`.
+ * USING vale para a linha antes da alteração e WITH CHECK para a depois — as
+ * duas precisam passar. É isso que impede, com uma regra só, promover um
+ * auxiliar a responsável ou transferi-lo para outra missão.
  */
-drop policy if exists usuario_missoes_leitura on ie.usuario_missoes;
-create policy usuario_missoes_leitura on ie.usuario_missoes for select
+drop policy if exists usuarios_do_responsavel on ie.usuarios;
+create policy usuarios_do_responsavel on ie.usuarios for all
   using (
-    ie.eh_admin()
-    or usuario_id = ie.usuario_id()
-    or usuario_id = (
-      select u.id from ie.usuarios u where u.firebase_uid = ie.firebase_uid()
-    )
+    ie.eh_responsavel()
+    and papel = 'auxiliar'
+    and missao_id = ie.missao_do_usuario()
+  )
+  with check (
+    ie.eh_responsavel()
+    and papel = 'auxiliar'
+    and missao_id = ie.missao_do_usuario()
   );
-
-drop policy if exists usuario_missoes_admin on ie.usuario_missoes;
-create policy usuario_missoes_admin on ie.usuario_missoes for all
-  using (ie.eh_admin()) with check (ie.eh_admin());
 
 -- ─── Missões ───────────────────────────────────────────────────────────────
 
@@ -129,20 +188,22 @@ drop policy if exists missoes_leitura on ie.missoes;
 create policy missoes_leitura on ie.missoes for select
   using (ie.tem_acesso_missao(id));
 
--- Criar e apagar missão é ato de admin; editar a própria, não.
+-- Criar e apagar missão é ato do administrador master.
 drop policy if exists missoes_criar on ie.missoes;
 create policy missoes_criar on ie.missoes for insert
   with check (ie.eh_admin());
-
-drop policy if exists missoes_editar on ie.missoes;
-create policy missoes_editar on ie.missoes for update
-  using (ie.tem_acesso_missao(id)) with check (ie.tem_acesso_missao(id));
 
 drop policy if exists missoes_apagar on ie.missoes;
 create policy missoes_apagar on ie.missoes for delete
   using (ie.eh_admin());
 
+-- Editar o cadastro é do responsável; o auxiliar registra, mas não altera.
+drop policy if exists missoes_editar on ie.missoes;
+create policy missoes_editar on ie.missoes for update
+  using (ie.pode_editar_missao(id)) with check (ie.pode_editar_missao(id));
+
 -- ─── Tudo que pertence a uma missão ────────────────────────────────────────
+-- Responsável e auxiliar registram igualmente: é o trabalho do dia a dia.
 
 drop policy if exists missao_indicadores_escopo on ie.missao_indicadores;
 create policy missao_indicadores_escopo on ie.missao_indicadores for all
@@ -198,7 +259,7 @@ create policy evento_links_escopo on ie.evento_links for all
     select 1 from ie.eventos e
     where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
 
--- ─── Configuração: todos leem, só admin altera ─────────────────────────────
+-- ─── Configuração: todos leem, só o admin master altera ────────────────────
 
 drop policy if exists tipos_evento_leitura on ie.tipos_evento;
 create policy tipos_evento_leitura on ie.tipos_evento for select

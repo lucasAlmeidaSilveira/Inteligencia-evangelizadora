@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   CalendarDays,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -51,15 +53,29 @@ export default async function PaginaVisaoGeral({
   const missao = await obterMissao(id);
   if (!missao) notFound();
 
-  const temContato =
-    missao.responsavelNome ||
+  const temDados =
+    missao.responsavel ||
     missao.contatoTelefone ||
-    missao.contatoEmail ||
     missao.endereco ||
     missao.dataFundacao;
 
   return (
     <div className="space-y-6">
+      {!missao.responsavel ? (
+        <div className="border-warning/40 bg-warning/8 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Missão sem responsável</p>
+            <p className="text-muted-foreground text-sm text-pretty">
+              Ninguém responde por esta missão nem pode convidar auxiliares para
+              ela. Convide o responsável em Equipe.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href="/equipe">Ir para Equipe</Link>
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <CartaoMetrica
           Icone={Users}
@@ -103,7 +119,7 @@ export default async function PaginaVisaoGeral({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {temContato ? (
+        {temDados ? (
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-base">Dados da missão</CardTitle>
@@ -112,7 +128,7 @@ export default async function PaginaVisaoGeral({
               <Linha
                 Icone={User}
                 rotulo="Responsável"
-                valor={missao.responsavelNome}
+                valor={missao.responsavel?.nome ?? null}
               />
               <Linha
                 Icone={Phone}
@@ -121,8 +137,8 @@ export default async function PaginaVisaoGeral({
               />
               <Linha
                 Icone={Mail}
-                rotulo="E-mail"
-                valor={missao.contatoEmail}
+                rotulo="E-mail do responsável"
+                valor={missao.responsavel?.email ?? null}
               />
               <Linha
                 Icone={CalendarDays}

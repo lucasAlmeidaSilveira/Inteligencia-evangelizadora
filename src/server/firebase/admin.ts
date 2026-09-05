@@ -3,7 +3,7 @@ import "server-only";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
-import { serverEnv } from "@/server/env";
+import { envFirebase } from "@/server/env";
 
 let app: App | undefined;
 
@@ -16,7 +16,7 @@ function obterApp() {
     return app;
   }
 
-  const env = serverEnv();
+  const env = envFirebase();
   app = initializeApp({
     credential: cert({
       projectId: env.FIREBASE_PROJECT_ID,

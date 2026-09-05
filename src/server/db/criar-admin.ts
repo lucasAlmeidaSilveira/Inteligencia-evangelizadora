@@ -61,7 +61,7 @@ async function principal() {
     await drizzle(pool).transaction(async (tx) => {
       await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
         await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
-      await tx.execute(sql`select set_config('app.eh_admin', 'on', true)`);
+      await tx.execute(sql`select set_config('app.papel', 'admin', true)`);
       await tx
         .insert(usuarios)
         .values({

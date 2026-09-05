@@ -1,14 +1,43 @@
 import "server-only";
 
 import { cache } from "react";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { comUsuario } from "@/server/dados";
-import { missaoIndicadores, missoes } from "@/server/db/schema";
+import { missaoIndicadores, missoes, usuarios } from "@/server/db/schema";
+import type { Transacao } from "@/server/db/index";
 
 import { agregadosPorMissao, membrosDaMissao, ZERADO } from "./agregados";
 
 export type { Agregados } from "./agregados";
+
+/**
+ * Quem responde por cada missão — a conta com papel `responsavel` vinculada.
+ * Consulta separada, não subconsulta correlacionada: dentro de um fragmento
+ * `sql` o Drizzle escreve a tabela externa sem qualificar o schema, e o
+ * Postgres resolve o nome para a coluna homônima da tabela interna.
+ */
+async function responsaveisPorMissao(tx: Transacao, ids: string[]) {
+  const mapa = new Map<string, { id: string; nome: string; email: string }>();
+  if (ids.length === 0) return mapa;
+
+  const linhas = await tx
+    .select({
+      id: usuarios.id,
+      missaoId: usuarios.missaoId,
+      nome: usuarios.nome,
+      email: usuarios.email,
+    })
+    .from(usuarios)
+    .where(
+      and(inArray(usuarios.missaoId, ids), eq(usuarios.papel, "responsavel")),
+    );
+
+  for (const l of linhas) {
+    if (l.missaoId) mapa.set(l.missaoId, { id: l.id, nome: l.nome, email: l.email });
+  }
+  return mapa;
+}
 
 export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
   return comUsuario(async (tx) => {
@@ -19,7 +48,6 @@ export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
         slug: missoes.slug,
         cidade: missoes.cidade,
         regiao: missoes.regiao,
-        responsavelNome: missoes.responsavelNome,
         membrosTotal: missoes.membrosTotal,
         ativo: missoes.ativo,
       })
@@ -30,10 +58,11 @@ export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
       ? base
       : base.where(eq(missoes.ativo, true)));
 
-    const agregados = await agregadosPorMissao(
-      tx,
-      lista.map((m) => m.id),
-    );
+    const ids = lista.map((m) => m.id);
+    const [agregados, responsaveis] = await Promise.all([
+      agregadosPorMissao(tx, ids),
+      responsaveisPorMissao(tx, ids),
+    ]);
 
     return lista.map((missao) => {
       const derivados = agregados.get(missao.id) ?? ZERADO;
@@ -44,6 +73,7 @@ export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
       return {
         ...missao,
         ...derivados,
+        responsavel: responsaveis.get(missao.id) ?? null,
         membrosExibidos: membros.valor,
         membrosEstimados: membros.estimado,
       };
@@ -64,9 +94,7 @@ export const obterMissao = cache(async (id: string) => {
         regiao: missoes.regiao,
         endereco: missoes.endereco,
         dataFundacao: missoes.dataFundacao,
-        responsavelNome: missoes.responsavelNome,
         contatoTelefone: missoes.contatoTelefone,
-        contatoEmail: missoes.contatoEmail,
         membrosTotal: missoes.membrosTotal,
         observacoes: missoes.observacoes,
         ativo: missoes.ativo,
@@ -80,8 +108,11 @@ export const obterMissao = cache(async (id: string) => {
     // e a distinção não deve vazar para quem perguntou.
     if (!missao) return null;
 
-    const derivados =
-      (await agregadosPorMissao(tx, [missao.id])).get(missao.id) ?? ZERADO;
+    const [agregados, responsaveis] = await Promise.all([
+      agregadosPorMissao(tx, [missao.id]),
+      responsaveisPorMissao(tx, [missao.id]),
+    ]);
+    const derivados = agregados.get(missao.id) ?? ZERADO;
     const membros = membrosDaMissao(
       missao.membrosTotal,
       derivados.pessoasEmGrupos,
@@ -89,6 +120,7 @@ export const obterMissao = cache(async (id: string) => {
     return {
       ...missao,
       ...derivados,
+      responsavel: responsaveis.get(missao.id) ?? null,
       membrosExibidos: membros.valor,
       membrosEstimados: membros.estimado,
     };

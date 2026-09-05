@@ -3,11 +3,10 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
-import { comEscopo, type Escopo } from "@/server/db/escopo";
-import { usuarioMissoes, usuarios } from "@/server/db/schema";
-import type { Papel } from "@/server/db/schema";
+import { comEscopo, type Escopo, type Papel } from "@/server/db/escopo";
+import { missoes, usuarios } from "@/server/db/schema";
 import type { Transacao } from "@/server/db/index";
 import { adminAuth } from "@/server/firebase/admin";
 import { COOKIE_SESSAO } from "@/lib/auth-cookie";
@@ -23,9 +22,15 @@ export type UsuarioSessao = {
   nome: string;
   email: string;
   papel: Papel;
+  /** Missão a que pertence. Nula para o admin, que enxerga todas. */
+  missaoId: string | null;
+  missaoNome: string | null;
   ehAdmin: boolean;
-  /** Missões que este usuário pode enxergar. Vazio para admin — ele vê todas. */
-  missoes: string[];
+  ehResponsavel: boolean;
+  /** Admin convida qualquer um; responsável, auxiliares da própria missão. */
+  podeConvidar: boolean;
+  /** Alterar o cadastro da missão — o auxiliar registra, mas não altera. */
+  podeEditarMissao: boolean;
 };
 
 /**
@@ -83,8 +88,8 @@ async function carregarPorFirebaseUid(
   firebaseUid: string,
 ): Promise<UsuarioSessao | null> {
   return comEscopo({ firebaseUid }, async (tx: Transacao) => {
-    // Usuário e vínculos numa consulta só. Duas consultas custariam uma ida a
-    // mais ao banco — o que, a 200 ms de distância, o usuário sente.
+    // Uma consulta só. A missão vem por junção, não por consulta separada:
+    // cada ida a menos ao banco aparece no tempo de resposta de toda página.
     const [linha] = await tx
       .select({
         id: usuarios.id,
@@ -93,19 +98,24 @@ async function carregarPorFirebaseUid(
         email: usuarios.email,
         papel: usuarios.papel,
         ativo: usuarios.ativo,
-        missoes: sql<
-          string[]
-        >`coalesce(array_agg(${usuarioMissoes.missaoId}) filter (where ${usuarioMissoes.missaoId} is not null), '{}')`,
+        missaoId: usuarios.missaoId,
+        missaoNome: missoes.nome,
+        missaoAtiva: missoes.ativo,
       })
       .from(usuarios)
-      .leftJoin(usuarioMissoes, eq(usuarioMissoes.usuarioId, usuarios.id))
+      .leftJoin(missoes, eq(missoes.id, usuarios.missaoId))
       .where(eq(usuarios.firebaseUid, firebaseUid))
-      .groupBy(usuarios.id)
       .limit(1);
 
     if (!linha || !linha.ativo) return null;
 
+    // Missão arquivada tranca quem depende dela: sem isso, desativar uma
+    // missão deixaria seus responsáveis navegando num sistema vazio, sem
+    // entender por quê.
+    if (linha.papel !== "admin" && !linha.missaoAtiva) return null;
+
     const ehAdmin = linha.papel === "admin";
+    const ehResponsavel = linha.papel === "responsavel";
 
     return {
       id: linha.id,
@@ -113,9 +123,12 @@ async function carregarPorFirebaseUid(
       nome: linha.nome,
       email: linha.email,
       papel: linha.papel,
+      missaoId: linha.missaoId,
+      missaoNome: linha.missaoNome,
       ehAdmin,
-      // Admin enxerga todas; a lista só importa para os demais.
-      missoes: ehAdmin ? [] : linha.missoes,
+      ehResponsavel,
+      podeConvidar: ehAdmin || ehResponsavel,
+      podeEditarMissao: ehAdmin || ehResponsavel,
     };
   });
 }
@@ -159,11 +172,19 @@ export async function requerAdmin(): Promise<UsuarioSessao> {
   return usuario;
 }
 
+/** Para telas de gestão de acessos: admin master ou responsável da missão. */
+export async function requerQuemConvida(): Promise<UsuarioSessao> {
+  const usuario = await requerUsuario();
+  if (!usuario.podeConvidar) redirect("/");
+  return usuario;
+}
+
 /** Escopo de banco correspondente ao usuário — o que as policies vão ler. */
 export function escopoDe(usuario: UsuarioSessao): Escopo {
   return {
     firebaseUid: usuario.firebaseUid,
     usuarioId: usuario.id,
-    ehAdmin: usuario.ehAdmin,
+    papel: usuario.papel,
+    missaoId: usuario.missaoId,
   };
 }

@@ -7,7 +7,6 @@ import {
   integer,
   numeric,
   pgSchema,
-  primaryKey,
   text,
   time,
   timestamp,
@@ -21,7 +20,21 @@ import {
  */
 export const ie = pgSchema("ie");
 
-export const papelEnum = ie.enum("papel", ["admin", "responsavel"]);
+/**
+ * Três níveis, do mais amplo ao mais restrito:
+ *
+ * - `admin`        — administrador master. Cria missões, configura o sistema e
+ *                    enxerga tudo. Não pertence a missão alguma.
+ * - `responsavel`  — um por missão. Edita os dados da missão e convida os
+ *                    auxiliares dela.
+ * - `auxiliar`     — registra grupos, ações, financeiro e indicadores da sua
+ *                    missão. Não edita a missão nem convida ninguém.
+ */
+export const papelEnum = ie.enum("papel", [
+  "admin",
+  "responsavel",
+  "auxiliar",
+]);
 
 export const statusEventoEnum = ie.enum("status_evento", [
   "planejado",
@@ -64,12 +77,37 @@ export const usuarios = ie.table(
     firebaseUid: text("firebase_uid").notNull().unique(),
     nome: text("nome").notNull(),
     email: text("email").notNull().unique(),
-    papel: papelEnum("papel").notNull().default("responsavel"),
+    // Sem valor padrão de propósito: permissão é decisão explícita de quem
+    // convida, nunca algo que a pessoa herda por omissão.
+    papel: papelEnum("papel").notNull(),
+    /**
+     * A missão a que a pessoa pertence. Nulo apenas para o admin, que não
+     * pertence a nenhuma. `restrict` de propósito: apagar uma missão que ainda
+     * tem gente vinculada apagaria acessos em silêncio — o admin precisa
+     * resolver o que fazer com essas pessoas antes.
+     */
+    missaoId: uuid("missao_id").references(() => missoes.id, {
+      onDelete: "restrict",
+    }),
     ativo: boolean("ativo").notNull().default(true),
     ultimoAcessoEm: timestamp("ultimo_acesso_em", { withTimezone: true }),
     ...auditoria,
   },
-  (t) => [index("idx_usuarios_papel").on(t.papel)],
+  (t) => [
+    index("idx_usuarios_papel").on(t.papel),
+    index("idx_usuarios_missao").on(t.missaoId),
+    // Admin não pertence a missão; todos os demais pertencem a exatamente uma.
+    check(
+      "papel_e_missao_coerentes",
+      sql`(${t.papel} = 'admin' and ${t.missaoId} is null) or (${t.papel} <> 'admin' and ${t.missaoId} is not null)`,
+    ),
+    // No máximo um responsável por missão — imposto pelo banco, não por
+    // convenção: dois responsáveis significaria duas pessoas convidando gente
+    // sem que nenhuma respondesse pela outra.
+    uniqueIndex("uq_responsavel_por_missao")
+      .on(t.missaoId)
+      .where(sql`${t.papel} = 'responsavel'`),
+  ],
 );
 
 /* ═════════════════════════════════ Missões ════════════════════════════════ */
@@ -84,9 +122,10 @@ export const missoes = ie.table(
     regiao: text("regiao"),
     endereco: text("endereco"),
     dataFundacao: date("data_fundacao"),
-    responsavelNome: text("responsavel_nome"),
+    /* Quem responde pela missão não é mais um texto livre: é a conta com papel
+       `responsavel` vinculada a ela. Nome e e-mail vêm de lá — uma fonte só,
+       que não fica desatualizada quando o responsável muda. */
     contatoTelefone: text("contato_telefone"),
-    contatoEmail: text("contato_email"),
     /** Valor corrente. O histórico vive em `missaoIndicadores` e é opcional. */
     membrosTotal: integer("membros_total").notNull().default(0),
     observacoes: text("observacoes"),
@@ -96,27 +135,6 @@ export const missoes = ie.table(
   (t) => [
     check("membros_total_nao_negativo", sql`${t.membrosTotal} >= 0`),
     index("idx_missoes_ativo").on(t.ativo),
-  ],
-);
-
-/** Escopo de quem não é admin. N:N desde o início — um responsável pode
- *  responder por mais de uma missão sem exigir migração depois. */
-export const usuarioMissoes = ie.table(
-  "usuario_missoes",
-  {
-    usuarioId: uuid("usuario_id")
-      .notNull()
-      .references(() => usuarios.id, { onDelete: "cascade" }),
-    missaoId: uuid("missao_id")
-      .notNull()
-      .references(() => missoes.id, { onDelete: "cascade" }),
-    criadoEm: timestamp("criado_em", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.usuarioId, t.missaoId] }),
-    index("idx_usuario_missoes_missao").on(t.missaoId),
   ],
 );
 
@@ -355,26 +373,18 @@ export const eventoLinks = ie.table(
 
 /* ═════════════════════════════ Relacionamentos ════════════════════════════ */
 
-export const usuariosRelations = relations(usuarios, ({ many }) => ({
-  missoes: many(usuarioMissoes),
+export const usuariosRelations = relations(usuarios, ({ one }) => ({
+  missao: one(missoes, {
+    fields: [usuarios.missaoId],
+    references: [missoes.id],
+  }),
 }));
 
 export const missoesRelations = relations(missoes, ({ many }) => ({
-  usuarios: many(usuarioMissoes),
+  usuarios: many(usuarios),
   grupos: many(gruposOracao),
   eventos: many(eventos),
   indicadores: many(missaoIndicadores),
-}));
-
-export const usuarioMissoesRelations = relations(usuarioMissoes, ({ one }) => ({
-  usuario: one(usuarios, {
-    fields: [usuarioMissoes.usuarioId],
-    references: [usuarios.id],
-  }),
-  missao: one(missoes, {
-    fields: [usuarioMissoes.missaoId],
-    references: [missoes.id],
-  }),
 }));
 
 export const missaoIndicadoresRelations = relations(

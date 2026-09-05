@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,11 +22,16 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-import { criarMissao, atualizarMissao } from "../actions";
-import { missaoSchema } from "../schemas";
+import { DialogoLink } from "@/features/config/components/painel-usuarios";
 
-type Entrada = z.input<typeof missaoSchema>;
-type Saida = z.output<typeof missaoSchema>;
+import { atualizarMissao, criarMissao } from "../actions";
+import { criacaoMissaoSchema } from "../schemas";
+
+/* O formulário sempre usa o schema de criação: os campos do responsável são
+   opcionais, e na edição eles simplesmente não são renderizados. Cada action
+   revalida com o schema que lhe cabe. */
+type Entrada = z.input<typeof criacaoMissaoSchema>;
+type Saida = z.output<typeof criacaoMissaoSchema>;
 
 export const VALORES_INICIAIS: Entrada = {
   nome: "",
@@ -33,12 +39,12 @@ export const VALORES_INICIAIS: Entrada = {
   regiao: "",
   endereco: "",
   dataFundacao: "",
-  responsavelNome: "",
   contatoTelefone: "",
-  contatoEmail: "",
   membrosTotal: "",
   observacoes: "",
   ativo: true,
+  responsavelNome: "",
+  responsavelEmail: "",
 };
 
 export function FormularioMissao({
@@ -53,9 +59,12 @@ export function FormularioMissao({
   podeArquivar?: boolean;
 }) {
   const router = useRouter();
+  const [convite, setConvite] = useState<{ link: string; email: string } | null>(
+    null,
+  );
 
   const form = useForm<Entrada, unknown, Saida>({
-    resolver: zodResolver(missaoSchema),
+    resolver: zodResolver(criacaoMissaoSchema),
     defaultValues: valores,
   });
 
@@ -84,9 +93,25 @@ export function FormularioMissao({
 
     toast.success(missaoId ? "Missão atualizada" : "Missão criada");
 
-    const destino =
-      missaoId ?? (resultado as { dados: { id: string } }).dados.id;
-    router.push(`/missoes/${destino}`);
+    if (!missaoId) {
+      const dados = (resultado as {
+        dados: { id: string; link: string | null; email: string | null };
+      }).dados;
+
+      // Com responsável convidado, o link é a última coisa a fazer antes de
+      // sair da tela — navegar direto o perderia.
+      if (dados.link && dados.email) {
+        setConvite({ link: dados.link, email: dados.email });
+        router.refresh();
+        return;
+      }
+
+      router.push(`/missoes/${dados.id}`);
+      router.refresh();
+      return;
+    }
+
+    router.push(`/missoes/${missaoId}`);
     router.refresh();
   }
 
@@ -159,17 +184,12 @@ export function FormularioMissao({
       <Card>
         <CardHeader>
           <CardTitle>Contato</CardTitle>
-          <CardDescription>Quem responde pela missão no dia a dia.</CardDescription>
+          <CardDescription>
+            Telefone público da missão. Quem responde por ela é definido pela
+            conta de responsável, em Equipe.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
-          <Campo
-            rotulo="Responsável"
-            erro={errors.responsavelNome?.message}
-            className="sm:col-span-2"
-          >
-            {(props) => <Input {...props} {...register("responsavelNome")} />}
-          </Campo>
-
           <Campo rotulo="Telefone" erro={errors.contatoTelefone?.message}>
             {(props) => (
               <Input
@@ -181,14 +201,42 @@ export function FormularioMissao({
               />
             )}
           </Campo>
-
-          <Campo rotulo="E-mail" erro={errors.contatoEmail?.message}>
-            {(props) => (
-              <Input {...props} type="email" {...register("contatoEmail")} />
-            )}
-          </Campo>
         </CardContent>
       </Card>
+
+      {!missaoId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Responsável pela missão</CardTitle>
+            <CardDescription>
+              Quem vai responder por ela e convidar os auxiliares. A conta é
+              criada sem senha: ao salvar, você recebe um link para enviar.
+              Pode ficar em branco e ser definido depois, em Equipe.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5 sm:grid-cols-2">
+            <Campo
+              rotulo="Nome completo"
+              erro={errors.responsavelNome?.message}
+            >
+              {(props) => (
+                <Input {...props} {...register("responsavelNome")} />
+              )}
+            </Campo>
+
+            <Campo rotulo="E-mail" erro={errors.responsavelEmail?.message}>
+              {(props) => (
+                <Input
+                  {...props}
+                  type="email"
+                  inputMode="email"
+                  {...register("responsavelEmail")}
+                />
+              )}
+            </Campo>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -279,6 +327,14 @@ export function FormularioMissao({
           )}
         </Button>
       </div>
+
+      {convite ? (
+        <DialogoLink
+          link={convite.link}
+          email={convite.email}
+          aoFechar={() => router.push("/missoes")}
+        />
+      ) : null}
     </form>
   );
 }

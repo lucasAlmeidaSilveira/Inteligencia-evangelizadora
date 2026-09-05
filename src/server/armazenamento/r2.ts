@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { serverEnv } from "@/server/env";
+import { envR2 } from "@/server/env";
 
 export const TAMANHO_MAXIMO_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -36,7 +36,7 @@ let cliente: S3Client | null = null;
 function obterCliente() {
   if (cliente) return cliente;
 
-  const env = serverEnv();
+  const env = envR2();
   cliente = new S3Client({
     region: "auto",
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -71,7 +71,7 @@ export function montarChave(
  *  os bytes pelo servidor Next. Quem autoriza é a Server Action que gera esta
  *  URL — ela só a devolve depois de confirmar acesso à missão. */
 export async function urlDeUpload(chave: string, tipoMime: string) {
-  const env = serverEnv();
+  const env = envR2();
   return getSignedUrl(
     obterCliente(),
     new PutObjectCommand({
@@ -86,7 +86,7 @@ export async function urlDeUpload(chave: string, tipoMime: string) {
 /** URL temporária de download. O bucket permanece privado: sem esta
  *  assinatura, conhecer a chave não dá acesso a nada. */
 export async function urlDeDownload(chave: string, nomeExibicao: string) {
-  const env = serverEnv();
+  const env = envR2();
   return getSignedUrl(
     obterCliente(),
     new GetObjectCommand({
@@ -99,7 +99,7 @@ export async function urlDeDownload(chave: string, nomeExibicao: string) {
 }
 
 export async function removerObjeto(chave: string) {
-  const env = serverEnv();
+  const env = envR2();
   await obterCliente().send(
     new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: chave }),
   );

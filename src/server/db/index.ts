@@ -3,12 +3,12 @@ import "server-only";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-import { serverEnv } from "@/server/env";
+import { envBanco } from "@/server/env";
 
 import { configuracaoDeConexao } from "./conexao";
 import * as schema from "./schema";
 
-const env = serverEnv();
+const env = envBanco();
 
 // A instância serverless reaproveita o módulo entre invocações; guardar o pool
 // no globalThis evita abrir um novo a cada hot-reload em desenvolvimento.

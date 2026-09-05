@@ -3,9 +3,25 @@
 Acompanhamento das missões de São Paulo: membros, grupos de oração e ações
 apostólicas — com dashboards, calendário mensal e controle financeiro por evento.
 
-Dois pontos de vista sobre os mesmos dados: **administrador geral**, que vê o
-panorama de todas as missões, e **responsável de missão**, que enxerga apenas
-a sua.
+## Quem faz o quê
+
+| | Admin master | Responsável | Auxiliar |
+|---|---|---|---|
+| Criar e excluir missão | ✓ | | |
+| Tipos de ação e categorias | ✓ | | |
+| Editar cadastro da missão | ✓ | ✓ (a sua) | |
+| Convidar pessoas | ✓ (qualquer) | ✓ (auxiliares da sua missão) | |
+| Grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
+| Painel, calendário e relatórios | todas as missões | a sua | a sua |
+| Trocar a própria senha | ✓ | ✓ | ✓ |
+
+Cada pessoa pertence a **uma** missão; o admin master não pertence a nenhuma e
+por isso enxerga todas. Cada missão tem **exatamente um** responsável — imposto
+por índice único parcial no banco, não por convenção.
+
+O fluxo começa no admin master: ele cria a missão e, no mesmo passo, convida o
+responsável, recebendo um link para enviar. Dali em diante o responsável se
+vira sozinho, convidando os auxiliares da sua missão.
 
 ## Stack
 
@@ -26,7 +42,7 @@ O banco não conhece o usuário final — quem o informa é a aplicação, grava
 (`src/server/db/escopo.ts`). As políticas de RLS em `drizzle/politicas.sql`
 leem esses valores.
 
-Quatro detalhes que sustentam isso e não devem ser mexidos sem entender:
+Cinco detalhes que sustentam isso e não devem ser mexidos sem entender:
 
 - **A aplicação conecta como `ie_app`, nunca como dona do schema.** Um papel
   com o atributo `BYPASSRLS` ignora todas as políticas — é mais forte que
@@ -88,6 +104,10 @@ pnpm admin:criar seu@email.com "Seu Nome"
 pnpm db:testar-rls             # prova que o isolamento entre missões funciona
 ```
 
+O `admin:criar` existe só para o primeiro acesso — o problema do ovo e da
+galinha. Dali em diante, usuários são convidados pela própria interface, em
+**Configurações → Usuários**.
+
 O último comando imprime um link para definir a senha — sem ele não há como
 entrar, já que não existe cadastro público.
 
@@ -124,6 +144,12 @@ src/
 ├─ app/
 │  ├─ (auth)/login/          entrada
 │  ├─ (app)/                 área autenticada (shell + páginas)
+│  │  ├─ missoes/            missões, grupos de oração, indicadores
+│  │  ├─ eventos/            ações apostólicas: geral, financeiro, documentos, links
+│  │  ├─ calendario/         grade mensal
+│  │  ├─ relatorios/         consolidações + exportação CSV
+│  │  ├─ config/             tipos, categorias e usuários (só admin)
+│  │  └─ conta/              troca de senha, para qualquer usuário
 │  └─ api/auth/sessao/       troca do token Firebase pelo cookie de sessão
 ├─ components/
 │  ├─ ui/                    shadcn
@@ -135,6 +161,16 @@ src/
 
 Leitura em Server Components, escrita em Server Actions validadas por zod.
 Não há camada REST intermediária: ela só reimplementaria o que o RLS já faz.
+
+## Gráficos
+
+A paleta das séries foi validada por script, não escolhida a olho: faixa de
+luminosidade, piso de croma, separação para daltonismo e contraste contra a
+superfície. As duas paletas — clara e escura — foram validadas em separado; a
+escura não é uma inversão da clara.
+
+Cor nunca é o único diferenciador: as linhas têm padrões de traço distintos,
+séries têm legenda, e todo gráfico oferece "Ver como tabela".
 
 ## Identidade visual
 

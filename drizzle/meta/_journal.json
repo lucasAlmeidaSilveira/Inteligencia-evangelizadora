@@ -15,6 +15,20 @@
       "when": 1788623927995,
       "tag": "0001_big_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788636938874,
+      "tag": "0002_lowly_stephen_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788637236052,
+      "tag": "0003_premium_gorilla_man",
+      "breakpoints": true
     }
   ]
 }

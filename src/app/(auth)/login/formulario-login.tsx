@@ -32,6 +32,18 @@ function mensagemDeErro(codigo: unknown) {
       return "Esta conta foi desativada. Fale com o administrador.";
     case "auth/network-request-failed":
       return "Sem conexão. Verifique sua internet e tente de novo.";
+    case "auth/unauthorized-domain":
+      // Acontece em toda implantação nova: o Firebase só aceita autenticação
+      // vinda de domínios que estejam na lista dele.
+      return "Este endereço não está autorizado no Firebase. Adicione o domínio em Authentication → Settings → Authorized domains.";
+    case "auth/operation-not-allowed":
+      return "Login por e-mail e senha está desativado no Firebase. Ative em Authentication → Sign-in method.";
+    case "auth/invalid-api-key":
+    case "auth/api-key-not-valid":
+    case "auth/api-key-not-valid.-please-pass-a-valid-api-key.":
+      return "A chave pública do Firebase está incorreta ou ausente nas variáveis de ambiente.";
+    case "auth/invalid-email":
+      return "E-mail inválido.";
     default:
       return null;
   }
@@ -64,10 +76,26 @@ export function FormularioLogin() {
       });
 
       if (!resposta.ok) {
-        const { erro: mensagem } = await resposta.json();
-        // A conta existe no Firebase mas não foi liberada no sistema.
+        // A conta existe no Firebase mas não foi liberada no sistema — ou o
+        // servidor falhou. Um 500 devolve HTML, não JSON: tentar `.json()`
+        // direto lançaria e o motivo real ficaria escondido atrás da mensagem
+        // genérica do catch.
+        const corpo = await resposta.text();
+        let mensagem: string | null = null;
+        try {
+          mensagem = (JSON.parse(corpo) as { erro?: string }).erro ?? null;
+        } catch {
+          mensagem = null;
+        }
+
         await auth.signOut();
-        setErro(mensagem ?? "Não foi possível entrar.");
+
+        setErro(
+          mensagem ??
+            (resposta.status >= 500
+              ? "O servidor não conseguiu concluir o acesso. Abra /api/saude para ver o que está faltando na configuração."
+              : "Não foi possível entrar."),
+        );
         return;
       }
 

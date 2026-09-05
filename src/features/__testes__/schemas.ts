@@ -5,6 +5,7 @@ config({ path: ".env.local" });
 import type { z } from "zod";
 
 import { grupoSchema } from "@/features/grupos/schemas";
+import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
 
 /**
@@ -153,8 +154,61 @@ verificar(
   "registro sem observação",
 );
 
+
+/* ─── Exportação CSV ─────────────────────────────────────────────────────── */
+
+console.log("\nCSV do relatório");
+
+const csv = relatorioParaCsv({
+  porMissao: [
+    {
+      id: "1",
+      nome: "Missão São José",
+      acoes: 3,
+      participantes: 240,
+      servos: 18,
+      receitas: 1500.5,
+      despesas: 300.25,
+      saldo: 1200.25,
+    },
+    {
+      // Nome com aspas e ponto e vírgula: os dois caracteres que quebram CSV.
+      id: "2",
+      nome: 'Missão "Aparecida"; Zona Leste',
+      acoes: 1,
+      participantes: 80,
+      servos: 6,
+      receitas: 0,
+      despesas: 45.9,
+      saldo: -45.9,
+    },
+  ],
+  porTipo: [],
+  total: {
+    acoes: 4,
+    participantes: 320,
+    servos: 24,
+    receitas: 1500.5,
+    despesas: 346.15,
+    saldo: 1154.35,
+  },
+  periodo: { de: new Date(2026, 0, 1), ate: new Date(2026, 11, 31) },
+});
+
+// Sem o BOM, o Excel lê UTF-8 como Latin-1 e "Ação" vira "AÃ§Ã£o".
+ok("começa com BOM UTF-8", csv.charCodeAt(0) === 0xfeff);
+ok("usa ponto e vírgula como separador", csv.includes("Nome;Ações"));
+ok("decimal com vírgula", csv.includes("1500,50"));
+ok("preserva valor negativo", csv.includes("-45,90"));
+ok("escapa aspas dentro do campo", csv.includes('""Aparecida""'));
+ok(
+  "envolve em aspas o campo que contém ponto e vírgula",
+  csv.includes('"Missão ""Aparecida""; Zona Leste"'),
+);
+ok("quebra de linha CRLF", csv.split("\r\n").length > 4);
+
 if (falhas) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam.\n`);
   process.exit(1);
 }
-console.log("\n✓ Schemas idempotentes: cliente e servidor concordam.\n");
+console.log("\n✓ Schemas idempotentes e CSV no formato esperado.\n");

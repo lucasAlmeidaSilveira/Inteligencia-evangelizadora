@@ -15,25 +15,30 @@ import * as schema from "./schema";
  * missão passa por aqui: é o que torna impossível esquecer um filtro e
  * devolver dados de outra missão.
  */
+export type Papel = "admin" | "responsavel" | "auxiliar";
+
 export type Escopo = {
   firebaseUid?: string;
   usuarioId?: string;
-  ehAdmin?: boolean;
+  papel?: Papel;
+  /** Nula para o admin, que não pertence a missão alguma. */
+  missaoId?: string | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID_FIREBASE = /^[A-Za-z0-9_-]{1,128}$/;
+const PAPEIS = new Set<Papel>(["admin", "responsavel", "auxiliar"]);
 
 /**
  * O escopo entra na mesma ida ao banco que o BEGIN.
  *
- * Com o banco a 200 ms de distância, cada ida e volta pesa mais que a consulta
- * em si — juntar as duas primeiras corta um quarto do tempo da transação.
- * Isso exige o protocolo simples, que não aceita parâmetros, então os valores
- * são validados por formato antes de entrar na string. Qualquer coisa fora do
+ * Com o banco a alguma distância, cada ida e volta pesa mais que a consulta em
+ * si — juntar as duas primeiras corta um quarto do tempo da transação. Isso
+ * exige o protocolo simples, que não aceita parâmetros, então os valores são
+ * validados por formato antes de entrar na string. Qualquer coisa fora do
  * padrão vira escopo vazio, que o RLS trata como "ninguém".
  */
-function literal(valor: string | undefined, formato: RegExp) {
+function literal(valor: string | null | undefined, formato: RegExp) {
   return valor && formato.test(valor) ? valor : "";
 }
 
@@ -43,21 +48,23 @@ export async function comEscopo<T>(
 ): Promise<T> {
   const firebaseUid = literal(escopo.firebaseUid, UID_FIREBASE);
   const usuarioId = literal(escopo.usuarioId, UUID);
-  const ehAdmin = escopo.ehAdmin ? "on" : "off";
+  const missaoId = literal(escopo.missaoId, UUID);
+  const papel = escopo.papel && PAPEIS.has(escopo.papel) ? escopo.papel : "";
 
   const cliente = await pool.connect();
 
   try {
     // `set_config(..., true)` é local à transação: some no commit ou rollback
     // e nunca vaza para a próxima requisição que reutilizar esta conexão.
+    //
     // O `search_path` entra junto: o pooler do Neon recusa defini-lo como
-    // parâmetro de inicialização da conexão, e por transação é mais seguro
-    // com pooling — a conexão é compartilhada entre requisições.
+    // parâmetro de inicialização da conexão.
     await cliente.query(
       `begin; ${DEFINIR_SEARCH_PATH};` +
         ` select set_config('app.firebase_uid', '${firebaseUid}', true),` +
         ` set_config('app.usuario_id', '${usuarioId}', true),` +
-        ` set_config('app.eh_admin', '${ehAdmin}', true);`,
+        ` set_config('app.papel', '${papel}', true),` +
+        ` set_config('app.missao_id', '${missaoId}', true);`,
     );
 
     const tx = drizzle(cliente, { schema }) as Transacao;

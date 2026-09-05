@@ -51,7 +51,7 @@ async function principal() {
     await c.query("begin");
     // O pooler do Neon recusa `options` na conexão: o schema é definido aqui.
     await c.query(DEFINIR_SEARCH_PATH);
-    await c.query("select set_config('app.eh_admin', 'on', true)");
+    await c.query("select set_config('app.papel', 'admin', true)");
 
     const { rows: m } = await c.query<{ id: string }>(
       "insert into missoes (nome, slug) values ('Regras', 'regras-teste') returning id",

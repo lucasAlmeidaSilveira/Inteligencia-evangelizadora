@@ -49,6 +49,12 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("competencia")) {
       return "Já existe registro para esse mês.";
     }
+    if (restricao.includes("responsavel_por_missao")) {
+      return "Esta missão já tem um responsável. Troque o papel do atual antes de indicar outro.";
+    }
+    if (restricao.includes("email")) {
+      return "Já existe usuário com esse e-mail.";
+    }
     if (restricao.includes("responsavel_ordem")) {
       return "Essa posição de pastor já está ocupada.";
     }
@@ -65,10 +71,16 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("valor_positivo")) {
       return "O valor precisa ser maior que zero.";
     }
+    if (restricao.includes("papel_e_missao_coerentes")) {
+      return "O administrador master não pertence a missão alguma; os demais precisam de uma.";
+    }
     return "Algum valor informado não é aceito.";
   }
 
   if (codigo === "23503") {
+    if (restricao.includes("usuarios_missao_id")) {
+      return "Esta missão ainda tem usuários vinculados. Transfira ou desative essas pessoas antes de excluí-la.";
+    }
     return "Este registro está vinculado a outros e não pode ser removido.";
   }
 
