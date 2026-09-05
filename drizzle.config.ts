@@ -8,8 +8,12 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
-    ssl: { rejectUnauthorized: false },
+    // Alterar estrutura exige o dono do schema.
+    url: (process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL)!,
+    // Verificação estrita só onde há certificado de autoridade pública.
+    ssl: {
+      rejectUnauthorized: (process.env.DATABASE_URL_ADMIN ?? process.env.DATABASE_URL ?? "").includes(".neon.tech"),
+    },
   },
   // Restringe o diff ao nosso schema: sem isso o drizzle-kit enxergaria as
   // tabelas do Glyvo em `public` e proporia apagá-las.

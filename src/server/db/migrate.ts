@@ -9,6 +9,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
+import {
+  configuracaoDeConexao,
+  urlAdministrativa,
+} from "./conexao";
+
 /**
  * Aplica as migrations geradas pelo drizzle-kit e, em seguida, reaplica as
  * políticas de RLS. `politicas.sql` é idempotente de propósito: assim ele
@@ -16,14 +21,7 @@ import { Pool } from "pg";
  * cada ajuste de policy.
  */
 async function principal() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL ausente em .env.local");
-
-  const pool = new Pool({
-    connectionString: url,
-    ssl: { rejectUnauthorized: false },
-    max: 1,
-  });
+  const pool = new Pool({ ...configuracaoDeConexao(urlAdministrativa()), max: 1 });
 
   try {
     console.log("→ Aplicando migrations…");

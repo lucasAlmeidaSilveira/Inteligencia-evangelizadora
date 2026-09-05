@@ -176,12 +176,17 @@ export const gruposOracao = ie.table(
 );
 
 /**
- * De 1 a 3 responsáveis por grupo. O limite não precisa de trigger:
- * `ordem` restrita a 1..3 mais unicidade por grupo já torna o quarto
- * responsável impossível de inserir — e sem condição de corrida, que é o
- * ponto fraco de validar contando linhas.
+ * De 1 a 3 pastores por grupo — "pastor" é o termo usado pelas missões para
+ * quem responde por um grupo de oração.
+ *
+ * O limite não precisa de trigger: `ordem` restrita a 1..3 mais unicidade por
+ * grupo já torna o quarto pastor impossível de inserir — e sem a condição de
+ * corrida que existe ao validar contando linhas.
  */
-export const grupoResponsaveis = ie.table(
+export const grupoPastores = ie.table(
+  // Nome físico preservado de quando o domínio dizia "responsável". Renomear
+  // a tabela exigiria uma migração destrutiva sem ganho algum: o código, a
+  // interface e as consultas já falam "pastor", que é o termo das missões.
   "grupo_responsaveis",
   {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -190,7 +195,6 @@ export const grupoResponsaveis = ie.table(
       .references(() => gruposOracao.id, { onDelete: "cascade" }),
     nome: text("nome").notNull(),
     telefone: text("telefone"),
-    email: text("email"),
     ordem: integer("ordem").notNull().default(1),
     criadoEm: timestamp("criado_em", { withTimezone: true })
       .notNull()
@@ -390,19 +394,16 @@ export const gruposOracaoRelations = relations(
       fields: [gruposOracao.missaoId],
       references: [missoes.id],
     }),
-    responsaveis: many(grupoResponsaveis),
+    pastores: many(grupoPastores),
   }),
 );
 
-export const grupoResponsaveisRelations = relations(
-  grupoResponsaveis,
-  ({ one }) => ({
-    grupo: one(gruposOracao, {
-      fields: [grupoResponsaveis.grupoId],
-      references: [gruposOracao.id],
-    }),
+export const grupoPastoresRelations = relations(grupoPastores, ({ one }) => ({
+  grupo: one(gruposOracao, {
+    fields: [grupoPastores.grupoId],
+    references: [gruposOracao.id],
   }),
-);
+}));
 
 export const eventosRelations = relations(eventos, ({ one, many }) => ({
   missao: one(missoes, {
@@ -455,7 +456,7 @@ export type Usuario = typeof usuarios.$inferSelect;
 export type Missao = typeof missoes.$inferSelect;
 export type MissaoIndicador = typeof missaoIndicadores.$inferSelect;
 export type GrupoOracao = typeof gruposOracao.$inferSelect;
-export type GrupoResponsavel = typeof grupoResponsaveis.$inferSelect;
+export type GrupoPastor = typeof grupoPastores.$inferSelect;
 export type TipoEvento = typeof tiposEvento.$inferSelect;
 export type CategoriaFinanceira = typeof categoriasFinanceiras.$inferSelect;
 export type Evento = typeof eventos.$inferSelect;

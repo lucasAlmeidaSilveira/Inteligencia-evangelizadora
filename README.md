@@ -13,7 +13,7 @@ a sua.
 |---|---|
 | Aplicação | Next.js 16 (App Router), React 19, TypeScript |
 | Interface | Tailwind CSS v4, shadcn/ui sobre Radix, lucide-react |
-| Banco | PostgreSQL (Render), schema `ie`, via Drizzle ORM |
+| Banco | PostgreSQL (Neon, região São Paulo), schema `ie`, via Drizzle ORM |
 | Autenticação | Firebase Auth (e-mail e senha) |
 | Arquivos | Cloudflare R2, bucket privado |
 
@@ -26,7 +26,14 @@ O banco não conhece o usuário final — quem o informa é a aplicação, grava
 (`src/server/db/escopo.ts`). As políticas de RLS em `drizzle/politicas.sql`
 leem esses valores.
 
-Três detalhes que sustentam isso e não devem ser mexidos sem entender:
+Quatro detalhes que sustentam isso e não devem ser mexidos sem entender:
+
+- **A aplicação conecta como `ie_app`, nunca como dona do schema.** Um papel
+  com o atributo `BYPASSRLS` ignora todas as políticas — é mais forte que
+  `FORCE ROW LEVEL SECURITY` — e o `neondb_owner` que o Neon cria vem com ele
+  ligado. Rodar a aplicação com esse papel desligaria o isolamento entre
+  missões silenciosamente. `pnpm db:testar-rls` verifica isso antes de
+  qualquer outra coisa e falha se a conexão estiver errada.
 
 - **`set_config(..., true)`** deixa o escopo local à transação. Ele desaparece
   no commit e nunca vaza para a próxima requisição que reutilizar a conexão.
@@ -60,18 +67,25 @@ nele. `R2_ACCOUNT_ID` aparece na URL do painel do R2.
 
 ### 3. Banco
 
-Use a *External Database URL* do Postgres do Render em `DATABASE_URL`.
-As tabelas ficam no schema `ie`, separadas das do Glyvo — nada em `public`
-é tocado.
+Crie um projeto no [Neon](https://neon.com) na região **AWS South America
+(São Paulo)** — `aws-sa-east-1`. A região não pode ser alterada depois, e é
+ela que mantém as consultas em ~22 ms em vez de ~214 ms.
+
+Coloque a connection string em `DATABASE_URL_ADMIN` e rode `pnpm db:criar-papel`:
+ele cria o papel `ie_app`, concede as permissões de dados (não de estrutura) e
+grava as duas URLs no `.env.local`.
 
 ### 4. Variáveis e migração
 
 ```bash
 cp .env.example .env.local     # preencha os valores
 pnpm install
+pnpm db:testar                 # confere conexão e permissões
 pnpm db:migrate                # cria o schema e aplica as políticas de RLS
+pnpm db:criar-papel            # cria o papel da aplicação, sem BYPASSRLS
 pnpm db:seed                   # tipos de evento e categorias financeiras iniciais
 pnpm admin:criar seu@email.com "Seu Nome"
+pnpm db:testar-rls             # prova que o isolamento entre missões funciona
 ```
 
 O último comando imprime um link para definir a senha — sem ele não há como
@@ -92,7 +106,13 @@ pnpm dev
 | `pnpm db:migrate` | Aplica migrations **e** reaplica as políticas de RLS |
 | `pnpm db:studio` | Navegador visual do banco |
 | `pnpm db:seed` | Dados de configuração iniciais (reexecutável) |
+| `pnpm db:criar-papel` | Cria/renova o papel `ie_app` e grava as URLs |
+| `pnpm db:copiar` | Copia os dados de outro banco (migração de provedor) |
+| `pnpm db:estado` | Retrato rápido do que existe no banco |
 | `pnpm admin:criar` | Cria o primeiro administrador |
+| `pnpm db:testar` · `db:testar-rls` · `db:testar-regras` | Conexão, isolamento e regras de domínio |
+| `pnpm testar:schemas` · `testar:consultas` | Validação e consultas, contra números conhecidos |
+| `pnpm firebase:testar` · `firebase:importar` · `r2:testar` | Credenciais dos serviços externos |
 
 `politicas.sql` é idempotente de propósito: reaplicado a cada migração, ele
 acompanha mudanças de schema sem exigir uma migration própria por policy.
@@ -122,3 +142,22 @@ A paleta é **provisional** — roxo litúrgico com dourado quente — e vive
 inteiramente em custom properties no topo de `src/app/globals.css`. Trocar a
 identidade quando a marca for definida é editar aquele arquivo, não caçar
 valores hexadecimais pelo código.
+
+## Desempenho
+
+O banco fica em São Paulo por um motivo medido: cada ida e volta custa ~22 ms
+de lá, contra ~214 ms de Oregon. Como uma página faz várias, a diferença
+aparece inteira na tela — as mesmas rotas saíram de 1,8–2,6 s para 0,2–0,35 s.
+
+Duas escolhas no código dependem disso e valem preservar:
+
+- **`BEGIN` e o escopo do RLS viajam na mesma ida.** São enviados como uma
+  instrução só, o que exige o protocolo simples do Postgres; por isso os
+  valores são validados por formato antes de entrar na string.
+- **Uma transação por página, não uma por consulta.** `obterEventoCompleto`
+  busca evento, lançamentos, documentos e links de uma vez; o `cache` do React
+  faz o layout e a aba dividirem o mesmo resultado.
+
+Toda rota tem `loading.tsx` com esqueleto da altura do conteúdo real, e os
+layouts de detalhe transmitem em partes — o cabeçalho carrega em fronteira
+própria para não segurar a navegação.

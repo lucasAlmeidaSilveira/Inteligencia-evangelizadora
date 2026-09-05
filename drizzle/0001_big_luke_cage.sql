@@ -1,0 +1,1 @@
+ALTER TABLE "ie"."grupo_responsaveis" DROP COLUMN "email";

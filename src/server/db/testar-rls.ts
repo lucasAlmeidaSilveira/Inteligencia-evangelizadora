@@ -4,6 +4,12 @@ config({ path: ".env.local" });
 
 import { Pool, type PoolClient } from "pg";
 
+import {
+  configuracaoDeConexao,
+  DEFINIR_SEARCH_PATH,
+  urlDaAplicacao,
+} from "./conexao";
+
 /**
  * Prova, contra o banco real, que um responsável não alcança dados de outra
  * missão — nem lendo, nem escrevendo.
@@ -33,16 +39,47 @@ async function escopo(
 
 async function principal() {
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    ...configuracaoDeConexao(urlDaAplicacao()),
     max: 1,
-    options: `-c search_path=${process.env.DB_SCHEMA ?? "ie"},public`,
   });
 
   const c = await pool.connect();
 
   try {
     await c.query("begin");
+    // O pooler do Neon recusa `options` na conexão: o schema é definido aqui.
+    await c.query(DEFINIR_SEARCH_PATH);
+
+    /*
+     * Antes de qualquer coisa: confirmar que este papel está mesmo sujeito ao
+     * RLS. Um papel com BYPASSRLS ignora todas as políticas — mais forte até
+     * que FORCE ROW LEVEL SECURITY — e faria todas as verificações abaixo
+     * passarem por engano, dando um atestado de segurança falso.
+     *
+     * Foi exatamente o que aconteceu ao migrar para o Neon: o `neondb_owner`
+     * vem com esse atributo ligado.
+     */
+    const { rows: papel } = await c.query<{
+      current_user: string;
+      rolbypassrls: boolean;
+      rolsuper: boolean;
+    }>(`select current_user, rolbypassrls, rolsuper
+          from pg_roles where rolname = current_user`);
+
+    console.log(`\nConexão (papel: ${papel[0].current_user})`);
+    conferir(
+      "o papel da aplicação NÃO ignora o RLS",
+      !papel[0].rolbypassrls && !papel[0].rolsuper,
+    );
+
+    if (papel[0].rolbypassrls || papel[0].rolsuper) {
+      console.error(
+        "\n✗ Este papel ignora as políticas. Rode `pnpm db:criar-papel` e use\n" +
+          "  a DATABASE_URL que ele gera. Sem isso, o isolamento entre missões\n" +
+          "  não existe — e nenhuma verificação abaixo significaria nada.\n",
+      );
+      process.exit(1);
+    }
     await escopo(c, { ehAdmin: true });
 
     // ─── Cenário ────────────────────────────────────────────────────────────

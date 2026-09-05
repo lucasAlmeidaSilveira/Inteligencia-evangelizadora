@@ -1,0 +1,158 @@
+import { notFound } from "next/navigation";
+import {
+  CalendarDays,
+  Mail,
+  MapPin,
+  Phone,
+  Sparkles,
+  User,
+  Users,
+  UsersRound,
+} from "lucide-react";
+
+import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { obterMissao } from "@/features/missoes/queries";
+import { formatarData, formatarNumero, formatarRelativo } from "@/lib/format";
+
+function Linha({
+  Icone,
+  rotulo,
+  valor,
+}: {
+  Icone: typeof User;
+  rotulo: string;
+  valor: string | null;
+}) {
+  if (!valor) return null;
+  return (
+    <div className="flex gap-3">
+      <Icone
+        className="text-muted-foreground mt-0.5 size-4 shrink-0"
+        aria-hidden
+      />
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-muted-foreground text-xs">{rotulo}</p>
+        <p className="text-sm break-words">{valor}</p>
+      </div>
+    </div>
+  );
+}
+
+export default async function PaginaVisaoGeral({
+  params,
+}: PageProps<"/missoes/[id]">) {
+  const { id } = await params;
+  const missao = await obterMissao(id);
+  if (!missao) notFound();
+
+  const temContato =
+    missao.responsavelNome ||
+    missao.contatoTelefone ||
+    missao.contatoEmail ||
+    missao.endereco ||
+    missao.dataFundacao;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <CartaoMetrica
+          Icone={Users}
+          rotulo="Membros"
+          valor={formatarNumero(missao.membrosExibidos)}
+          detalhe={
+            missao.membrosEstimados
+              ? "Estimado pela soma dos grupos de oração"
+              : undefined
+          }
+        />
+        <CartaoMetrica
+          Icone={UsersRound}
+          rotulo="Grupos de oração"
+          valor={formatarNumero(missao.gruposAtivos)}
+          detalhe={
+            missao.pessoasEmGrupos > 0
+              ? `${formatarNumero(missao.pessoasEmGrupos)} pessoas reunidas`
+              : undefined
+          }
+        />
+        <CartaoMetrica
+          Icone={Sparkles}
+          rotulo="Ações apostólicas"
+          valor={formatarNumero(missao.eventosTotal)}
+        />
+        <CartaoMetrica
+          Icone={CalendarDays}
+          rotulo="Próxima ação"
+          valor={
+            missao.proximoEvento
+              ? formatarData(missao.proximoEvento)
+              : "Nenhuma"
+          }
+          detalhe={
+            missao.proximoEvento
+              ? formatarRelativo(missao.proximoEvento)
+              : "Sem eventos futuros agendados"
+          }
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {temContato ? (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">Dados da missão</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-5 sm:grid-cols-2">
+              <Linha
+                Icone={User}
+                rotulo="Responsável"
+                valor={missao.responsavelNome}
+              />
+              <Linha
+                Icone={Phone}
+                rotulo="Telefone"
+                valor={missao.contatoTelefone}
+              />
+              <Linha
+                Icone={Mail}
+                rotulo="E-mail"
+                valor={missao.contatoEmail}
+              />
+              <Linha
+                Icone={CalendarDays}
+                rotulo="Fundação"
+                valor={
+                  missao.dataFundacao ? formatarData(missao.dataFundacao) : null
+                }
+              />
+              <Linha
+                Icone={MapPin}
+                rotulo="Endereço"
+                valor={missao.endereco}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {missao.observacoes ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Observações</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-relaxed whitespace-pre-line">
+                {missao.observacoes}
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+    </div>
+  );
+}

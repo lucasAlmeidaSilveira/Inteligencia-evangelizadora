@@ -100,9 +100,24 @@ drop policy if exists usuarios_admin on ie.usuarios;
 create policy usuarios_admin on ie.usuarios for all
   using (ie.eh_admin()) with check (ie.eh_admin());
 
+/*
+ * Aceita também a identificação pelo firebase_uid. Sem isso, carregar o
+ * usuário exigiria duas idas ao banco: uma para descobrir o id e outra,
+ * depois de reaplicar o escopo, para ler os vínculos. Com o banco distante,
+ * cada ida a menos vale mais que a consulta em si.
+ *
+ * A subconsulta em `usuarios` não gera recursão: a policy de `usuarios`
+ * depende apenas das funções de escopo, nunca de `usuario_missoes`.
+ */
 drop policy if exists usuario_missoes_leitura on ie.usuario_missoes;
 create policy usuario_missoes_leitura on ie.usuario_missoes for select
-  using (usuario_id = ie.usuario_id() or ie.eh_admin());
+  using (
+    ie.eh_admin()
+    or usuario_id = ie.usuario_id()
+    or usuario_id = (
+      select u.id from ie.usuarios u where u.firebase_uid = ie.firebase_uid()
+    )
+  );
 
 drop policy if exists usuario_missoes_admin on ie.usuario_missoes;
 create policy usuario_missoes_admin on ie.usuario_missoes for all
@@ -147,7 +162,8 @@ create policy eventos_escopo on ie.eventos for all
 -- ─── Filhos: herdam o acesso do pai ────────────────────────────────────────
 
 drop policy if exists grupo_responsaveis_escopo on ie.grupo_responsaveis;
-create policy grupo_responsaveis_escopo on ie.grupo_responsaveis for all
+drop policy if exists grupo_pastores_escopo on ie.grupo_responsaveis;
+create policy grupo_pastores_escopo on ie.grupo_responsaveis for all
   using (exists (
     select 1 from ie.grupos_oracao g
     where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)))

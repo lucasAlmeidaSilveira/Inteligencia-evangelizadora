@@ -6,6 +6,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 
+import {
+  configuracaoDeConexao,
+  DEFINIR_SEARCH_PATH,
+} from "./conexao";
+
 import { categoriasFinanceiras, tiposEvento } from "./schema";
 
 /**
@@ -17,14 +22,16 @@ import { categoriasFinanceiras, tiposEvento } from "./schema";
  * definitiva do cliente.
  */
 const TIPOS_EVENTO = [
-  { nome: "Celebração", cor: "#7C3AED", ordem: 1 },
-  { nome: "Retiro", cor: "#0891B2", ordem: 2 },
-  { nome: "Evangelização de rua", cor: "#DC2626", ordem: 3 },
-  { nome: "Formação", cor: "#2563EB", ordem: 4 },
-  { nome: "Ação social", cor: "#059669", ordem: 5 },
-  { nome: "Encontro de grupos", cor: "#A16207", ordem: 6 },
-  { nome: "Vigília", cor: "#4338CA", ordem: 7 },
-  { nome: "Evento musical", cor: "#DB2777", ordem: 8 },
+  { nome: "Evento Pequeno Porte", cor: "#DB2777", ordem: 1 },
+  { nome: "Evento Médio Porte", cor: "#8B5CF6", ordem: 2 },
+  { nome: "Evento Grande Porte", cor: "#EC4899", ordem: 3 },
+  { nome: "Celebração", cor: "#7C3AED", ordem: 4 },
+  { nome: "Retiro", cor: "#0891B2", ordem: 5 },
+  { nome: "Evangelização", cor: "#DC2626", ordem: 6 },
+  { nome: "Formação", cor: "#2563EB", ordem: 7 },
+  { nome: "Ação social", cor: "#059669", ordem: 8 },
+  { nome: "Encontro de grupos", cor: "#A16207", ordem: 9 },
+  { nome: "Vigília", cor: "#4338CA", ordem: 10 },
 ];
 
 const CATEGORIAS = [
@@ -45,10 +52,8 @@ async function principal() {
   if (!url) throw new Error("DATABASE_URL ausente em .env.local");
 
   const pool = new Pool({
-    connectionString: url,
-    ssl: { rejectUnauthorized: false },
+    ...configuracaoDeConexao(url),
     max: 1,
-    options: `-c search_path=${process.env.DB_SCHEMA ?? "ie"},public`,
   });
 
   const db = drizzle(pool);
@@ -57,6 +62,8 @@ async function principal() {
     await db.transaction(async (tx) => {
       // As tabelas têm FORCE RLS: mesmo sendo dono do banco, este script
       // precisa se declarar admin para conseguir escrever.
+      await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
+        await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
       await tx.execute(sql`select set_config('app.eh_admin', 'on', true)`);
 
       await tx

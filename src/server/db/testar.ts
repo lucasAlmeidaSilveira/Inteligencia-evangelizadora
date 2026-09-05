@@ -4,6 +4,11 @@ config({ path: ".env.local" });
 
 import { Pool } from "pg";
 
+import {
+  configuracaoDeConexao,
+  urlAdministrativa,
+} from "./conexao";
+
 /**
  * Verifica a conexão com o Postgres do Render antes de migrar:
  * conecta, identifica o banco e confirma que dá para criar o schema `ie`.
@@ -20,8 +25,7 @@ async function principal() {
 
   const schema = process.env.DB_SCHEMA ?? "ie";
   const pool = new Pool({
-    connectionString: url,
-    ssl: { rejectUnauthorized: false },
+    ...configuracaoDeConexao(urlAdministrativa()),
     max: 1,
     connectionTimeoutMillis: 15_000,
   });

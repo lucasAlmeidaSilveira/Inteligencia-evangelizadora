@@ -17,7 +17,13 @@
     "firebase:testar": "tsx src/server/firebase/testar.ts",
     "db:testar": "tsx src/server/db/testar.ts",
     "firebase:importar": "tsx src/server/firebase/importar.ts",
-    "db:testar-rls": "tsx src/server/db/testar-rls.ts"
+    "db:testar-rls": "tsx src/server/db/testar-rls.ts",
+    "db:estado": "tsx src/server/db/estado.ts",
+    "db:testar-regras": "tsx src/server/db/testar-regras.ts",
+    "testar:schemas": "tsx src/features/__testes__/schemas.ts",
+    "testar:consultas": "tsx src/features/__testes__/consultas.ts",
+    "db:copiar": "tsx src/server/db/copiar.ts",
+    "db:criar-papel": "tsx src/server/db/criar-papel.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

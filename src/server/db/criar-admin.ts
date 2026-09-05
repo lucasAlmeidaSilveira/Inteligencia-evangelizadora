@@ -8,6 +8,12 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 
+import {
+  configuracaoDeConexao,
+  DEFINIR_SEARCH_PATH,
+  urlAdministrativa,
+} from "./conexao";
+
 import { usuarios } from "./schema";
 
 /**
@@ -47,14 +53,14 @@ async function principal() {
     .catch(() => auth.createUser({ email, displayName: nome }));
 
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    ...configuracaoDeConexao(urlAdministrativa()),
     max: 1,
-    options: `-c search_path=${process.env.DB_SCHEMA ?? "ie"},public`,
   });
 
   try {
     await drizzle(pool).transaction(async (tx) => {
+      await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
+        await tx.execute(sql.raw(DEFINIR_SEARCH_PATH));
       await tx.execute(sql`select set_config('app.eh_admin', 'on', true)`);
       await tx
         .insert(usuarios)

@@ -36,7 +36,7 @@ export type UsuarioSessao = {
 export async function criarSessao(idToken: string) {
   const auth = adminAuth();
 
-  // `true` força checar revogação: uma conta desativada há segundos não entra.
+  // No login vale a checagem de revogação: acontece uma vez, não a cada página.
   const token = await auth.verifyIdToken(idToken, true);
 
   const usuario = await carregarPorFirebaseUid(token.uid);
@@ -83,39 +83,39 @@ async function carregarPorFirebaseUid(
   firebaseUid: string,
 ): Promise<UsuarioSessao | null> {
   return comEscopo({ firebaseUid }, async (tx: Transacao) => {
-    const [usuario] = await tx
-      .select()
+    // Usuário e vínculos numa consulta só. Duas consultas custariam uma ida a
+    // mais ao banco — o que, a 200 ms de distância, o usuário sente.
+    const [linha] = await tx
+      .select({
+        id: usuarios.id,
+        firebaseUid: usuarios.firebaseUid,
+        nome: usuarios.nome,
+        email: usuarios.email,
+        papel: usuarios.papel,
+        ativo: usuarios.ativo,
+        missoes: sql<
+          string[]
+        >`coalesce(array_agg(${usuarioMissoes.missaoId}) filter (where ${usuarioMissoes.missaoId} is not null), '{}')`,
+      })
       .from(usuarios)
+      .leftJoin(usuarioMissoes, eq(usuarioMissoes.usuarioId, usuarios.id))
       .where(eq(usuarios.firebaseUid, firebaseUid))
+      .groupBy(usuarios.id)
       .limit(1);
 
-    if (!usuario || !usuario.ativo) return null;
+    if (!linha || !linha.ativo) return null;
 
-    const ehAdmin = usuario.papel === "admin";
-
-    // Agora que sabemos quem é, ampliamos o escopo dentro da mesma transação
-    // para poder ler os vínculos com as missões.
-    await tx.execute(sql`
-      select
-        set_config('app.usuario_id', ${usuario.id}, true),
-        set_config('app.eh_admin', ${ehAdmin ? "on" : "off"}, true)
-    `);
-
-    const vinculos = ehAdmin
-      ? []
-      : await tx
-          .select({ missaoId: usuarioMissoes.missaoId })
-          .from(usuarioMissoes)
-          .where(eq(usuarioMissoes.usuarioId, usuario.id));
+    const ehAdmin = linha.papel === "admin";
 
     return {
-      id: usuario.id,
-      firebaseUid: usuario.firebaseUid,
-      nome: usuario.nome,
-      email: usuario.email,
-      papel: usuario.papel,
+      id: linha.id,
+      firebaseUid: linha.firebaseUid,
+      nome: linha.nome,
+      email: linha.email,
+      papel: linha.papel,
       ehAdmin,
-      missoes: vinculos.map((v) => v.missaoId),
+      // Admin enxerga todas; a lista só importa para os demais.
+      missoes: ehAdmin ? [] : linha.missoes,
     };
   });
 }
@@ -131,7 +131,14 @@ export const usuarioAtual = cache(async (): Promise<UsuarioSessao | null> => {
   if (!cookie) return null;
 
   try {
-    const token = await adminAuth().verifySessionCookie(cookie, true);
+    /*
+     * Sem `checkRevoked`: essa opção faz uma chamada à API do Firebase em
+     * toda requisição (~300 ms medidos), só para saber se o token foi
+     * revogado. A verificação local já confere assinatura e validade, e o
+     * que realmente precisa surtir efeito imediato — desativar alguém — é
+     * lido do nosso banco logo abaixo, pelo campo `ativo`.
+     */
+    const token = await adminAuth().verifySessionCookie(cookie);
     return await carregarPorFirebaseUid(token.uid);
   } catch {
     // Expirado, revogado ou adulterado. Tratar como visitante.

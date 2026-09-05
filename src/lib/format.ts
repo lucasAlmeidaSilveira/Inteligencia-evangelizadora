@@ -68,3 +68,18 @@ export function formatarTamanhoArquivo(bytes: number) {
 }
 
 export { FUSO };
+
+/** Converte para o formato aceito por `<input type="datetime-local">`,
+ *  no fuso local — o input não entende deslocamento de fuso. */
+export function paraDatetimeLocal(data: Date | string) {
+  const d = new Date(data);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Data no formato de `<input type="date">`. */
+export function paraDateInput(data: Date | string = new Date()) {
+  const d = new Date(data);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
