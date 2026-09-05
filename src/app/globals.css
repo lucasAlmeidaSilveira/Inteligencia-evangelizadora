@@ -116,11 +116,15 @@
   --info: oklch(0.55 0.16 250);
   --info-foreground: oklch(0.99 0 0);
 
-  /* Séries de gráfico: matizes bem separados no círculo cromático.
-     Nunca são o único diferenciador — traço e rótulo direto acompanham. */
+  /* Séries de gráfico — ordem fixa, nunca reciclada.
+     Validadas por script (não a olho) contra a superfície clara: faixa de
+     luminosidade, piso de croma, separação para daltonismo (pior par ΔE 12,7)
+     e contraste. Ainda assim nunca são o único diferenciador: traço e rótulo
+     direto acompanham. O terceiro slot precisou de mais croma — em 0.11 lia
+     como cinza e reprovava no piso. */
   --chart-1: oklch(0.541 0.281 293.009);
   --chart-2: oklch(0.62 0.14 66);
-  --chart-3: oklch(0.58 0.11 195);
+  --chart-3: oklch(0.64 0.19 200);
   --chart-4: oklch(0.6 0.19 12);
   --chart-5: oklch(0.52 0.14 250);
 
@@ -173,11 +177,13 @@
   --info: oklch(0.7 0.14 250);
   --info-foreground: oklch(0.16 0.03 250);
 
-  --chart-1: oklch(0.7 0.185 293);
-  --chart-2: oklch(0.76 0.14 70);
-  --chart-3: oklch(0.72 0.11 195);
-  --chart-4: oklch(0.71 0.16 12);
-  --chart-5: oklch(0.68 0.14 250);
+  /* Escolhidas para a superfície escura, não invertidas da clara: as duas
+     paletas foram validadas em separado (pior par ΔE 10,5 aqui). */
+  --chart-1: oklch(0.66 0.19 293.009);
+  --chart-2: oklch(0.64 0.17 66);
+  --chart-3: oklch(0.64 0.17 200);
+  --chart-4: oklch(0.64 0.17 12);
+  --chart-5: oklch(0.64 0.17 250);
 
   --sidebar: oklch(0.2 0.02 285);
   --sidebar-foreground: oklch(0.92 0.008 286);
