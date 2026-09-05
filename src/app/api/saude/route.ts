@@ -37,6 +37,25 @@ const DOCUMENTOS = [
 export async function GET() {
   const verificacoes: Verificacao[] = [];
 
+  /*
+   * A versão do Node é a primeira coisa a saber quando algo funciona no
+   * desenvolvimento e falha na implantação. O `firebase-admin` carrega o
+   * `jose`, que é ESM puro: um require() de ESM só funciona a partir do
+   * Node 22.12 — abaixo disso a autenticação quebra com ERR_REQUIRE_ESM.
+   */
+  const [maior, menor] = process.versions.node.split(".").map(Number);
+  const suportaRequireDeEsm = maior > 22 || (maior === 22 && menor >= 12);
+
+  verificacoes.push({
+    nome: "Versão do Node",
+    ok: suportaRequireDeEsm,
+    detalhe: suportaRequireDeEsm
+      ? `${process.version} — suporta require() de módulo ESM`
+      : `${process.version} — abaixo de 22.12, onde o require() de ESM ainda ` +
+        'não funciona. Defina "engines": { "node": "24.x" } no package.json ' +
+        "(ele sobrepõe o painel) e refaça o deploy.",
+  });
+
   // ─── Variáveis de ambiente ────────────────────────────────────────────────
   const faltamEssenciais = ESSENCIAIS.filter((nome) => !process.env[nome]);
   verificacoes.push({
