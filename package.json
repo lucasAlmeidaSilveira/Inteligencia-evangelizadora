@@ -6,22 +6,69 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/server/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/server/db/seed.ts",
+    "admin:criar": "tsx src/server/db/criar-admin.ts",
+    "r2:testar": "tsx src/server/armazenamento/testar.ts",
+    "firebase:testar": "tsx src/server/firebase/testar.ts",
+    "db:testar": "tsx src/server/db/testar.ts",
+    "firebase:importar": "tsx src/server/firebase/importar.ts",
+    "db:testar-rls": "tsx src/server/db/testar-rls.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.102.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cn": "^0.2.5",
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
+    "firebase": "^12.18.0",
+    "firebase-admin": "^14.3.0",
+    "lucide-react": "^1.41.0",
     "next": "16.3.4",
+    "next-themes": "^0.4.6",
+    "pg": "^8.23.0",
+    "radix-ui": "^1.6.7",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-day-picker": "^10.0.1",
+    "react-dom": "19.2.8",
+    "react-hook-form": "^7.87.0",
+    "recharts": "^3.8.0",
+    "server-only": "^0.0.1",
+    "shadcn": "^4.21.0",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@10.26.2"
+  "packageManager": "pnpm@10.26.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs",
+      "@firebase/util",
+      "sharp"
+    ]
+  }
 }
