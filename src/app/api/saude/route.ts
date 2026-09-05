@@ -179,7 +179,7 @@ export async function GET() {
   // ─── Firebase Admin ───────────────────────────────────────────────────────
   try {
     const { adminAuth } = await import("@/server/firebase/admin");
-    await adminAuth().listUsers(1);
+    await (await adminAuth()).listUsers(1);
     verificacoes.push({ nome: "Credenciais do Firebase Admin", ok: true });
   } catch (erro) {
     const mensagem = (erro as Error)?.message ?? "falhou";

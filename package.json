@@ -82,7 +82,10 @@
       "protobufjs",
       "@firebase/util",
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "jwks-rsa>jose": "^5.10.0"
+    }
   },
   "packageManager": "pnpm@10.26.2"
 }

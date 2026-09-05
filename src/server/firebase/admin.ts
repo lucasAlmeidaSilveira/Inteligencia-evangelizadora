@@ -1,32 +1,42 @@
 import "server-only";
 
-import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import type { Auth } from "firebase-admin/auth";
 
 import { envFirebase } from "@/server/env";
 
-let app: App | undefined;
+let auth: Auth | null = null;
 
-function obterApp() {
-  if (app) return app;
+/**
+ * Acesso ao Firebase Admin, carregado sob demanda.
+ *
+ * O import é dinâmico de propósito. Estático, uma falha ao carregar a
+ * biblioteca — como a que o `jose` ESM provocou em produção — derrubava o
+ * módulo inteiro no carregamento, e toda página respondia 500 antes de
+ * conseguir sequer redirecionar para o login. Dinâmico, a falha vira uma
+ * exceção comum, que quem chama trata: sessão inválida leva ao login, que é
+ * o comportamento seguro.
+ */
+export async function adminAuth(): Promise<Auth> {
+  if (auth) return auth;
 
-  const existente = getApps()[0];
-  if (existente) {
-    app = existente;
-    return app;
-  }
+  const [{ cert, getApps, initializeApp }, { getAuth }] = await Promise.all([
+    import("firebase-admin/app"),
+    import("firebase-admin/auth"),
+  ]);
 
-  const env = envFirebase();
-  app = initializeApp({
-    credential: cert({
-      projectId: env.FIREBASE_PROJECT_ID,
-      clientEmail: env.FIREBASE_CLIENT_EMAIL,
-      privateKey: env.FIREBASE_PRIVATE_KEY,
-    }),
-  });
-  return app;
-}
+  const app =
+    getApps()[0] ??
+    (() => {
+      const env = envFirebase();
+      return initializeApp({
+        credential: cert({
+          projectId: env.FIREBASE_PROJECT_ID,
+          clientEmail: env.FIREBASE_CLIENT_EMAIL,
+          privateKey: env.FIREBASE_PRIVATE_KEY,
+        }),
+      });
+    })();
 
-export function adminAuth() {
-  return getAuth(obterApp());
+  auth = getAuth(app);
+  return auth;
 }

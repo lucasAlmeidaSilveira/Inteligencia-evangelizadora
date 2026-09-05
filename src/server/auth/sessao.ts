@@ -39,7 +39,7 @@ export type UsuarioSessao = {
  * o cookie de sessão dura mais e o navegador nunca o entrega a script algum.
  */
 export async function criarSessao(idToken: string) {
-  const auth = adminAuth();
+  const auth = await (await adminAuth());
 
   // No login vale a checagem de revogação: acontece uma vez, não a cada página.
   const token = await auth.verifyIdToken(idToken, true);
@@ -73,9 +73,9 @@ export async function encerrarSessao() {
 
   if (cookie) {
     try {
-      const token = await adminAuth().verifySessionCookie(cookie);
+      const token = await (await adminAuth()).verifySessionCookie(cookie);
       // Invalida os refresh tokens: encerra a sessão em todos os dispositivos.
-      await adminAuth().revokeRefreshTokens(token.sub);
+      await (await adminAuth()).revokeRefreshTokens(token.sub);
     } catch {
       // Cookie já inválido — apagar basta.
     }
@@ -151,7 +151,7 @@ export const usuarioAtual = cache(async (): Promise<UsuarioSessao | null> => {
      * que realmente precisa surtir efeito imediato — desativar alguém — é
      * lido do nosso banco logo abaixo, pelo campo `ativo`.
      */
-    const token = await adminAuth().verifySessionCookie(cookie);
+    const token = await (await adminAuth()).verifySessionCookie(cookie);
     return await carregarPorFirebaseUid(token.uid);
   } catch {
     // Expirado, revogado ou adulterado. Tratar como visitante.

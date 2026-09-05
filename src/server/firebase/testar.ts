@@ -87,6 +87,51 @@ async function principal() {
     process.exit(1);
   }
 
+  /*
+   * Verificação de token de ponta a ponta.
+   *
+   * Existe porque a checagem de credenciais acima não toca o caminho que
+   * realmente quebrou em produção: verificar um token passa pelo `jwks-rsa`,
+   * que carrega o `jose`. Quando o `jose` virou ESM puro, esse caminho parou
+   * de funcionar em runtimes sem require() de ESM — e nada aqui denunciava,
+   * porque `listUsers` não usa `jwks-rsa`.
+   */
+  console.log("\nVerificação de token (o caminho que usa jwks-rsa → jose)");
+
+  const email = `verificacao.token.${Date.now()}@inteligencia-evangelizadora.test`;
+  const senha = `Verificacao#${Date.now()}`;
+  const conta = await getAuth().createUser({ email, password: senha });
+
+  try {
+    const entrada = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: senha, returnSecureToken: true }),
+      },
+    );
+    const { idToken } = (await entrada.json()) as { idToken?: string };
+    if (!idToken) throw new Error("não foi possível autenticar o usuário de teste");
+    console.log("  ✓ autenticação por e-mail e senha");
+
+    const decodificado = await getAuth().verifyIdToken(idToken, true);
+    console.log(
+      `  ✓ verificação do token de identidade${decodificado.uid === conta.uid ? "" : " (uid divergente!)"}`,
+    );
+
+    const cookie = await getAuth().createSessionCookie(idToken, {
+      expiresIn: 60 * 60 * 1000,
+    });
+    console.log("  ✓ criação do cookie de sessão");
+
+    const sessao = await getAuth().verifySessionCookie(cookie);
+    if (sessao.uid !== conta.uid) throw new Error("uid do cookie não confere");
+    console.log("  ✓ verificação do cookie de sessão");
+  } finally {
+    await getAuth().deleteUser(conta.uid).catch(() => undefined);
+  }
+
   console.log("\n✓ Firebase configurado corretamente.\n");
 }
 

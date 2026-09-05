@@ -193,7 +193,7 @@ export async function convidarUsuario(entrada: unknown) {
   }
 
   try {
-    const auth = adminAuth();
+    const auth = await (await adminAuth());
 
     // Pode já existir no Firebase sem estar liberado aqui — nesse caso é só
     // vincular, não criar de novo.
@@ -292,7 +292,7 @@ export async function gerarLinkDeSenha(usuarioId: string) {
 
     if (!email) return falha("Usuário não encontrado.");
 
-    const link = await adminAuth().generatePasswordResetLink(email);
+    const link = await (await adminAuth()).generatePasswordResetLink(email);
     return sucesso({ link, email });
   } catch (erro) {
     return tratar(erro);

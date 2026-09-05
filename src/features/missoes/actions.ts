@@ -60,15 +60,14 @@ export async function criarMissao(entrada: unknown) {
     // A conta no Firebase nasce antes da transação. Se o banco falhar depois,
     // sobra uma conta sem vínculo — inofensiva, e reaproveitada no próximo
     // convite, que procura por e-mail antes de criar.
-    const conta = convidar
-      ? await adminAuth()
-          .getUserByEmail(responsavelEmail!)
-          .catch(() =>
-            adminAuth().createUser({
-              email: responsavelEmail!,
-              displayName: responsavelNome!,
-            }),
-          )
+    const auth = convidar ? await adminAuth() : null;
+    const conta = auth
+      ? await auth.getUserByEmail(responsavelEmail!).catch(() =>
+          auth.createUser({
+            email: responsavelEmail!,
+            displayName: responsavelNome!,
+          }),
+        )
       : null;
 
     const id = await comUsuario(async (tx, usuario) => {
@@ -107,8 +106,8 @@ export async function criarMissao(entrada: unknown) {
       return criada.id;
     });
 
-    const link = convidar
-      ? await adminAuth().generatePasswordResetLink(responsavelEmail!)
+    const link = auth
+      ? await auth.generatePasswordResetLink(responsavelEmail!)
       : null;
 
     revalidarArvore(id);
