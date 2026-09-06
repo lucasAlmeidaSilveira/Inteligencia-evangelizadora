@@ -31,7 +31,7 @@
     "demo:subir": "./scripts/demo.sh subir",
     "demo:resemear": "./scripts/demo.sh resemear",
     "demo:derrubar": "./scripts/demo.sh derrubar",
-    "dev:demo": "DATABASE_URL=postgresql://ie_app:demo@localhost:5433/ie_demo DATABASE_URL_ADMIN=postgresql://postgres:demo@localhost:5433/ie_demo next dev"
+    "ambiente": "tsx scripts/ambiente.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

@@ -2,14 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { COOKIE_SESSAO } from "@/lib/auth-cookie";
 
-const ROTAS_PUBLICAS = [
-  "/login",
-  "/api/auth",
-  // Diagnóstico de implantação: precisa responder justamente quando ninguém
-  // consegue entrar. Devolve apenas situações — presente/ausente,
-  // alcançável/não —, nunca valores ou credenciais.
-  "/api/saude",
-];
+const ROTAS_PUBLICAS = ["/login", "/api/auth"];
 
 /**
  * O middleware roda no Edge, onde o SDK do Firebase Admin não existe — ele

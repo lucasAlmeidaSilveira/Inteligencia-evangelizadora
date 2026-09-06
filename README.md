@@ -133,6 +133,9 @@ pnpm dev
 | `pnpm db:testar` · `db:testar-rls` · `db:testar-regras` | Conexão, isolamento e regras de domínio |
 | `pnpm testar:schemas` · `testar:consultas` | Validação e consultas, contra números conhecidos |
 | `pnpm firebase:testar` · `firebase:importar` · `r2:testar` | Credenciais dos serviços externos |
+| `pnpm ambiente` | Mostra a qual banco o `.env.local` aponta |
+| `pnpm ambiente demo` · `ambiente producao` | Alterna entre os dois |
+| `pnpm demo:subir` · `demo:resemear` · `demo:derrubar` | Banco local de demonstração |
 
 `politicas.sql` é idempotente de propósito: reaplicado a cada migração, ele
 acompanha mudanças de schema sem exigir uma migration própria por policy.
@@ -178,6 +181,50 @@ A paleta é **provisional** — roxo litúrgico com dourado quente — e vive
 inteiramente em custom properties no topo de `src/app/globals.css`. Trocar a
 identidade quando a marca for definida é editar aquele arquivo, não caçar
 valores hexadecimais pelo código.
+
+## Banco de demonstração
+
+Um Postgres local em Docker, com dados fictícios em volume realista — cinco
+missões, doze meses de competências por missão, dezenas de ações apostólicas
+com lançamentos. Serve para ver o painel, os gráficos e o calendário
+funcionando sem tocar em dado real.
+
+```bash
+pnpm demo:subir          # container, schema, papel da aplicação e dados
+pnpm ambiente demo       # aponta o .env.local para ele
+pnpm dev
+
+pnpm ambiente producao   # volta para o Neon
+```
+
+Trocar de ambiente não descarta credencial: `pnpm ambiente` guarda as do outro
+lado em linhas comentadas no próprio `.env.local`, e `pnpm ambiente` sozinho
+mostra onde você está.
+
+O semeador **recusa rodar** contra qualquer host que não seja `localhost` — ele
+apaga tudo antes de semear, e um esquecimento de variável de ambiente destruiria
+produção.
+
+## Uma armadilha de dependência que vale conhecer
+
+O `firebase-admin` chega ao `jose` pela cadeia `firebase-admin → jwks-rsa →
+jose`. A versão 6 do `jose` abandonou o build CommonJS, e o `jwks-rsa` ainda o
+carrega com `require()` — o que quebra em runtimes sem suporte a `require()` de
+ESM, incluindo o da Vercel. Sintoma: toda a autenticação para, com
+`ERR_REQUIRE_ESM`.
+
+Três defesas estão no repositório:
+
+- **`pnpm.overrides` fixa `jwks-rsa>jose` na versão 5**, que ainda publica
+  CommonJS. O `jwks-rsa` usa só `importJWK`, `exportSPKI` e
+  `decodeProtectedHeader`, idênticas nas duas versões. Remover quando o
+  `jwks-rsa` publicar suporte a CJS.
+- **O `firebase-admin` é importado dinamicamente.** Uma falha ao carregar vira
+  exceção tratável — sessão inválida leva ao login — em vez de derrubar o
+  módulo e responder 500 em toda página.
+- **`pnpm firebase:testar` verifica um token de ponta a ponta.** A checagem
+  antiga só chamava `listUsers`, que não passa pelo `jwks-rsa`: ela dava verde
+  enquanto a autenticação estava quebrada.
 
 ## Desempenho
 

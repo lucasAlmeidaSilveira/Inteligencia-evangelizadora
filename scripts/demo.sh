@@ -68,7 +68,13 @@ case "${1:-}" in
     echo "→ Gerando dados fictícios…"
     pnpm demo:semear
 
-    echo "Agora rode:  pnpm dev:demo"
+    echo
+    echo "Para usar a demonstração:"
+    echo "  pnpm ambiente demo    → aponta o .env.local para o banco local"
+    echo "  pnpm dev"
+    echo
+    echo "Para voltar ao banco real:"
+    echo "  pnpm ambiente producao"
     ;;
 
   resemear)
