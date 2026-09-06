@@ -17,6 +17,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { useMovimentoReduzido } from "@/hooks/use-movimento-reduzido";
 import { formatarNumero } from "@/lib/format";
 
 import type { BarraMissao } from "../queries";
@@ -44,6 +45,9 @@ export function GraficoComparativo({
   /** Missão em foco. Sem ela, todas as barras pesam igual. */
   destaque?: string;
 }) {
+  // Antes do retorno curto abaixo: hook não pode ficar atrás de condicional.
+  const movimentoReduzido = useMovimentoReduzido();
+
   // Comparar uma coisa com nada não é comparação.
   if (missoes.length < 2) return null;
 
@@ -105,7 +109,18 @@ export function GraficoComparativo({
             content={<ChartTooltipContent hideLabel />}
           />
           {/* Extremidade arredondada só na ponta do dado; a base fica ancorada. */}
-          <Bar dataKey="membros" fill="var(--color-membros)" radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="membros"
+            fill="var(--color-membros)"
+            radius={[0, 4, 4, 0]}
+            /* Crescer a partir do eixo é a única animação que diz o que o
+               gráfico mede: magnitude a partir de zero. O padrão do Recharts
+               são 1500ms — tempo demais para uma leitura de relance, e o
+               rótulo numérico na ponta viaja junto com a barra o tempo todo. */
+            isAnimationActive={!movimentoReduzido}
+            animationDuration={350}
+            animationEasing="ease-out"
+          >
             {dados.map((missao) => (
               <Cell
                 key={missao.id}

@@ -284,6 +284,121 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Cascata de entrada: os filhos diretos aparecem em sequência, na ordem de
+     leitura.
+
+     Feita com `nth-child` no pai, e não com um componente envolvendo cada
+     item, porque um `div` a mais tiraria o cartão de participante direto da
+     grade: ele deixaria de esticar até a altura da fileira, e cartões com e
+     sem linha de detalhe parariam de se alinhar.
+
+     O deslocamento é de 4px. Os esqueletos foram construídos com a altura do
+     conteúdo real justamente para a página não saltar; um slide de 20px
+     desfaria esse trabalho em nome do efeito. */
+  .cascata > * {
+    animation: entrada-suave 300ms ease-out both;
+    animation-delay: calc(
+      var(--cascata-inicio, 0ms) + 35ms * var(--cascata-ordem, 0)
+    );
+  }
+
+  .cascata > *:nth-child(2) {
+    --cascata-ordem: 1;
+  }
+  .cascata > *:nth-child(3) {
+    --cascata-ordem: 2;
+  }
+  .cascata > *:nth-child(4) {
+    --cascata-ordem: 3;
+  }
+  .cascata > *:nth-child(5) {
+    --cascata-ordem: 4;
+  }
+  .cascata > *:nth-child(6) {
+    --cascata-ordem: 5;
+  }
+  .cascata > *:nth-child(7) {
+    --cascata-ordem: 6;
+  }
+  /* Teto de oito. Do oitavo item em diante todos entram juntos: sem isso, uma
+     tabela de relatório com 200 linhas levaria sete segundos para terminar de
+     aparecer, e a cascata comunicaria lentidão em vez de chegada. */
+  .cascata > *:nth-child(n + 8) {
+    --cascata-ordem: 7;
+  }
+}
+
+/* Chegada de conteúdo. Mesma cadência da barra de progresso — um sistema em
+   que o botão responde em 150ms e o cartão leva 600ms parece dois sistemas. */
+@keyframes entrada-suave {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* ─── Transição entre rotas ───────────────────────────────────────────────
+   Feita com `<ViewTransition>` do React, que o Next 16 já traz ligado. Custa
+   zero byte de JavaScript e funciona dentro dos Server Components como eles
+   estão — o navegador tira um instantâneo e interpola, sem que o React precise
+   manter a árvore antiga montada. */
+
+/* Durante uma transição o `::view-transition` fica no top layer e come os
+   cliques. Sem esta linha, tocar num link logo depois de navegar não faz
+   nada — e quem está numa rede lenta é justamente quem toca de novo. */
+::view-transition {
+  pointer-events: none;
+}
+
+/* Crossfade, não deslize direcional.
+
+   Deslizar para a esquerda ao avançar e para a direita ao voltar é a convenção
+   certa — mas só funciona se as duas direções existirem. Este sistema não tem
+   link de "voltar" em tela nenhuma: quem retorna usa o botão do navegador ou a
+   barra lateral, e nenhum dos dois carrega direção. Animar só a ida deixaria o
+   movimento dizendo uma coisa na ida e nada na volta, que confunde mais do que
+   o corte seco. Quando houver trilha de navegação, o deslize direcional passa a
+   fazer sentido.
+
+   O crossfade vem do instantâneo da raiz, de graça; aqui só se acerta a
+   duração para a mesma cadência do resto do sistema. */
+::view-transition-group(root) {
+  animation-duration: 220ms;
+  animation-timing-function: ease-out;
+}
+
+/* A casca não viaja junto com o conteúdo.
+
+   Sem ancorar, a barra lateral e o cabeçalho entram no instantâneo da raiz e
+   deslizam com a página: quem navega perde o único ponto fixo que diz que
+   continua no mesmo sistema. O `display: none` no instantâneo antigo evita o
+   piscar de dois cabeçalhos sobrepostos, e o z-index põe a casca acima do
+   conteúdo em trânsito.
+
+   A barra lateral é marcada por `data-slot` e não por classe no componente
+   porque `src/components/ui/` é gerado pelo shadcn e não se edita à mão. */
+[data-slot="sidebar-container"] {
+  view-transition-name: casca-lateral;
+}
+
+::view-transition-group(casca-lateral),
+::view-transition-group(casca-topo),
+::view-transition-group(barra-progresso) {
+  animation: none;
+  z-index: 200;
+}
+
+::view-transition-old(casca-lateral),
+::view-transition-old(casca-topo),
+::view-transition-old(barra-progresso) {
+  display: none;
+}
+
+::view-transition-new(casca-lateral),
+::view-transition-new(casca-topo),
+::view-transition-new(barra-progresso) {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -291,8 +406,23 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* Zerar a duração não basta quando há atraso: com `fill-mode: both` o
+       elemento segura o estado inicial — opacidade 0 — durante todo o delay.
+       Uma cascata de 8 itens deixaria o último invisível por 280ms para quem
+       pediu menos movimento. */
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* O seletor `*` acima não alcança estes: pseudo-elementos de view transition
+     vivem no top layer, fora da árvore do documento. Sem as três linhas, a
+     troca de página continuaria deslizando para quem pediu o contrário. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
   }
 }

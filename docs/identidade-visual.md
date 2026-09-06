@@ -155,9 +155,72 @@ Componentes em `src/components/padroes/` — use-os em vez de recriar:
 | `CartaoMetrica` | Número em destaque. Já traz `data-slot="metric"`, que liga as figuras tabulares. |
 | `EstadoVazio` | Tela vazia útil: diz o que falta e oferece o próximo passo, em vez de deixar o usuário diante de uma área em branco. |
 | `Campo`, esqueletos | Formulários e carregamento. |
+| `Revelar` | Conteúdo que acabou de chegar entra em vez de piscar. |
+| `Presenca`, `ItemPresente` | Entrada e saída de itens de lista. |
+| `AreaFiltrada`, `ResultadosFiltrados` | Filtro que escreve na URL, com a região de resultados esmaecendo enquanto o servidor responde. |
+| `IndicadorAba` | Faixa da aba ativa, que desliza de uma aba para a outra. |
 
 `src/components/ui/` é shadcn sobre Radix, com ícones lucide-react. Não
 reescreva aqueles arquivos à mão além do que o gerador produz.
+
+## Movimento
+
+Movimento aqui comunica estado — nunca decora. Quem usa o sistema é
+coordenador de missão, muitas vezes entrando uma vez por mês: cada animação
+precisa responder a uma pergunta que a pessoa está fazendo ("o sistema ouviu?",
+"o que mudou?", "para onde eu fui?").
+
+| Token | Valor | Onde |
+|---|---|---|
+| Sobreposição | 100ms, fade + zoom 95% | Dialog, Popover, Select, Tooltip — vem do `tw-animate-css` |
+| Micro-retorno | 150ms `ease-out` | Hover, foco, esmaecer enquanto pendente |
+| Chegada de conteúdo | 220ms `ease-out` | Entrada pós-`Suspense`, troca de rota, barra de progresso |
+| Estrutura | 200ms `ease-linear` | Barra lateral |
+| Saída | 160ms `ease-in` | Item excluído — sair é mais rápido que chegar, para o que já foi não disputar atenção |
+| Cascata | 35ms por item, **teto de oito** | Métricas do painel, listas (classe `cascata`) |
+| Pressão | `active:translate-y-px` | Botões e cartões clicáveis |
+
+Os valores em segundos vivem em `src/lib/movimento.ts`; os equivalentes em CSS,
+em `globals.css`. Os dois precisam contar a mesma história.
+
+**Regras duras**
+
+- **Só `opacity` e `transform`.** Nunca `height`, `width` ou `margin` em
+  conteúdo. Os esqueletos foram construídos com a altura real justamente para a
+  página não saltar — animar altura desfaz esse trabalho.
+- **Deslocamento máximo de 8px**, 4px onde o conteúdo substitui esqueleto.
+  Slide de 20px é assinatura de landing page, não de sistema de acompanhamento.
+- **Sem bounce.** Overshoot lê como brinquedo, e aqui se presta conta de
+  dinheiro de missão.
+- **O laranja não se move.** A única exceção é o brilho do login, que o próprio
+  código chama de "a única peça decorativa da tela". Em nenhum outro lugar —
+  ele marca a saída, a ação, o envio, e não é cor decorativa a distribuir.
+- **Número não conta sozinho.** `tabular-nums` fixa a largura do dígito, não a
+  quantidade: contar de 0 a 1.284 passa por 1, 3 e 5 caracteres, e é o "layout
+  que dança" que a seção de tipografia proíbe. Onde um total muda depois de uma
+  ação, ele simplesmente muda — quem manda no número é a soma dos lançamentos.
+- **Movimento nunca é o único sinal.** Com movimento reduzido tudo teleporta; o
+  estado precisa continuar legível parado. Por isso a aba ativa mantém cor e
+  `aria-current`, e a região que esmaece também marca `aria-busy`.
+
+**Onde cada ferramenta entra**
+
+| Camada | Ferramenta | Custo em JS |
+|---|---|---|
+| Entrada de conteúdo, cascata, login | `tw-animate-css` em Server Component | 0 kB |
+| Troca de rota, indicador de aba | `<ViewTransition>` do React | 0 kB |
+| Entrada e saída por estado do cliente | Motion (`m` + `LazyMotion`) | ~6 kB + chunk separado |
+
+A entrada de conteúdo **não** usa Motion de propósito: um `m.div` com
+`initial={{ opacity: 0 }}` escreve `style="opacity:0"` no HTML do servidor, e se
+o JavaScript não chegar o conteúdo fica invisível para sempre. O `animate-in` põe
+o estado inicial no keyframe, não no elemento. Motion nunca decide visibilidade
+de conteúdo primário.
+
+Nada de animação de layout (`layout`/`layoutId`): exigiria o conjunto `domMax` da
+Motion, que somado ao `m` custa mais que importar a biblioteca inteira — e é a
+categoria de movimento mais desconfortável para quem tem sensibilidade
+vestibular. Onde faria falta, `<ViewTransition>` resolve de graça.
 
 ## Acessibilidade
 

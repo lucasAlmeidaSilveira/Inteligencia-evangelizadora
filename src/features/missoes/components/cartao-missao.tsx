@@ -39,7 +39,18 @@ export function CartaoMissao({ missao }: { missao: MissaoListada }) {
   const local = [missao.regiao, missao.cidade].filter(Boolean).join(" · ");
 
   return (
-    <Card className="hover:border-primary/40 focus-within:border-primary/40 relative transition-colors">
+    /* O cartão inteiro é um link (o `after:absolute` do título cobre a área),
+       mas nada dizia isso: a cor de borda no hover que estava aqui pintava uma
+       borda de largura zero — o Card desenha o contorno com um anel, e o
+       preflight do Tailwind deixa `border-width: 0`. Levantar 2px e acender o
+       anel é o que devolve a afordância de clique.
+
+       (Escrito por extenso de propósito: o Tailwind varre o código como texto
+       puro e geraria a regra morta se o nome da classe aparecesse aqui.)
+
+       `focus-within` recebe o mesmo realce, senão quem navega por teclado fica
+       com sinal mais fraco que quem usa mouse. */
+    <Card className="hover:ring-primary/40 focus-within:ring-primary/40 relative transition-[transform,box-shadow] duration-150 ease-out hover:-translate-y-0.5 focus-within:-translate-y-0.5 active:translate-y-0">
       <CardContent className="space-y-5">
         <div className="space-y-1.5">
           <div className="flex items-start justify-between gap-3">

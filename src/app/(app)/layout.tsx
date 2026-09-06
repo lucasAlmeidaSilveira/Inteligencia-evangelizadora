@@ -1,3 +1,5 @@
+import { ViewTransition } from "react";
+
 import { AlternarTema } from "@/components/alternar-tema";
 import { MenuUsuario } from "@/components/navegacao/menu-usuario";
 import { SidebarApp } from "@/components/navegacao/sidebar-app";
@@ -34,7 +36,13 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
       />
 
       <SidebarInset>
-        <header className="bg-background/80 sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-sm">
+        {/* Ancorado na transição de rota: sem nome próprio, o cabeçalho entra
+            no instantâneo da página e desliza junto com o conteúdo — e quem
+            navega perde a referência de que continua no mesmo lugar. */}
+        <header
+          style={{ viewTransitionName: "casca-topo" }}
+          className="bg-background/80 sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-sm"
+        >
           <SidebarTrigger className="cursor-pointer" />
           <Separator orientation="vertical" className="mr-1 !h-5" />
           <div className="flex-1" />
@@ -53,7 +61,14 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
         </header>
 
         <main id="conteudo" className="flex-1 p-4 sm:p-6">
-          {children}
+          {/* É este limite que faz o React iniciar uma view transition a cada
+              navegação — sem ele, só as telas com abas teriam transição, e a
+              troca de página seria animada em umas e seca em outras.
+
+              O conteúdo continua sendo Server Component: `<ViewTransition>` é
+              exportado também no build `react-server` do React, então envolvê-lo
+              aqui não empurra nada para o navegador. */}
+          <ViewTransition>{children}</ViewTransition>
         </main>
       </SidebarInset>
     </SidebarProvider>

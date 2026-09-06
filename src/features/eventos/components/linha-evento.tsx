@@ -19,7 +19,11 @@ export function LinhaEvento({
     evento.financeiro.receitas > 0 || evento.financeiro.despesas > 0;
 
   return (
-    <Card className="hover:border-primary/40 focus-within:border-primary/40 relative gap-0 py-4 transition-colors">
+    /* Mesmo conserto do CartaoMissao: a cor de borda no hover que estava aqui
+       não desenhava nada — o Card faz o contorno com um anel e o preflight do
+       Tailwind zera a largura da borda. O anel aceso mais 2px de elevação é o
+       que diz que a linha inteira é clicável. */
+    <Card className="hover:ring-primary/40 focus-within:ring-primary/40 relative gap-0 py-4 transition-[transform,box-shadow] duration-150 ease-out hover:-translate-y-0.5 focus-within:-translate-y-0.5 active:translate-y-0">
       <CardContent className="space-y-3 px-4">
         <div className="flex items-start gap-3">
           {/* A cor identifica o tipo, mas nunca sozinha: o nome vem ao lado. */}

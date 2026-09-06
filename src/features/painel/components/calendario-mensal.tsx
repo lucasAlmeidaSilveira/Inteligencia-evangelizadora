@@ -15,6 +15,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import * as m from "motion/react-m";
 
 import {
   Dialog,
@@ -24,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatarPeriodo } from "@/lib/format";
+import { CURVA, DURACAO } from "@/lib/movimento";
 import { cn } from "@/lib/utils";
 
 import type { EventoAgenda } from "../queries";
@@ -49,6 +51,30 @@ export function CalendarioMensal({
 }) {
   const [diaAberto, setDiaAberto] = useState<Date | null>(null);
 
+  /*
+   * Direção da viagem entre meses.
+   *
+   * O título muda mas a forma da grade é idêntica, então entrar pelo lado
+   * certo é a única pista de que se avançou ou voltou. A direção sai da
+   * comparação entre o mês novo e o anterior, e não de qual botão foi clicado:
+   * o botão voltar do navegador também troca o mês.
+   *
+   * Estado ajustado durante a renderização, que é o padrão para "valor
+   * anterior" — em efeito, isto seria o antipadrão `set-state-in-effect` que a
+   * barra de progresso também evita.
+   *
+   * `0` é a primeira renderização e vale "sem animação": com `initial={false}`
+   * a Motion não escreve `opacity: 0` no HTML do servidor, e a grade aparece
+   * mesmo que o JavaScript não chegue.
+   */
+  const [mesAnterior, setMesAnterior] = useState(mes.getTime());
+  const [direcao, setDirecao] = useState(0);
+
+  if (mes.getTime() !== mesAnterior) {
+    setDirecao(mes.getTime() > mesAnterior ? 1 : -1);
+    setMesAnterior(mes.getTime());
+  }
+
   // A grade sempre começa no domingo e termina no sábado, para as semanas
   // ficarem completas — dias vizinhos entram esmaecidos.
   const dias = eachDayOfInterval({
@@ -61,7 +87,15 @@ export function CalendarioMensal({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border">
+      {/* A grade inteira entra, nunca célula por célula: 42 células escalonadas
+          viram uma onda atravessando a tela. */}
+      <m.div
+        key={mes.toISOString()}
+        initial={direcao === 0 ? false : { opacity: 0, x: 8 * direcao }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: DURACAO.chegada, ease: CURVA.chegada }}
+        className="overflow-hidden rounded-lg border"
+      >
         <div className="bg-muted/40 grid grid-cols-7 border-b">
           {DIAS.map((dia) => (
             <div
@@ -146,7 +180,7 @@ export function CalendarioMensal({
             );
           })}
         </div>
-      </div>
+      </m.div>
 
       <Dialog
         open={Boolean(diaAberto)}

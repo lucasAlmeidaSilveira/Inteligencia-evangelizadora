@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
+import { useFiltro } from "@/components/padroes/area-filtrada";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -29,14 +30,17 @@ export function FiltrosEventos({
 }: {
   tipos: { id: string; nome: string; cor: string }[];
 }) {
-  const router = useRouter();
+  // `aplicar` é o `router.push` dentro de uma transição: é o que faz a lista
+  // esmaecer enquanto o novo recorte não chega, em vez de ficar parada
+  // mostrando o recorte antigo como se nada tivesse sido pedido.
+  const { aplicar } = useFiltro();
   const parametros = useSearchParams();
 
   function definir(chave: string, valor: string) {
     const novos = new URLSearchParams(parametros.toString());
     if (valor === TODOS) novos.delete(chave);
     else novos.set(chave, valor);
-    router.push(`/eventos${novos.size ? `?${novos}` : ""}`);
+    aplicar(`/eventos${novos.size ? `?${novos}` : ""}`);
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
@@ -87,7 +91,7 @@ export function FiltrosEventos({
           variant="ghost"
           size="sm"
           className="cursor-pointer"
-          onClick={() => router.push("/eventos")}
+          onClick={() => aplicar("/eventos")}
         >
           <X aria-hidden />
           Limpar

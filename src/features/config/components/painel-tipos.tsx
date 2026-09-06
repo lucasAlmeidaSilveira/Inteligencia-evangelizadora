@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Palette, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -207,10 +208,18 @@ export function PainelTipos({ tipos }: { tipos: TipoConfig[] }) {
   const [paraExcluir, setParaExcluir] = useState<TipoConfig | null>(null);
   const [excluindo, iniciar] = useTransition();
 
+  /* O tipo sai da lista antes da resposta do servidor — é essa saída que a
+     `Presenca` anima. Se a exclusão falhar, o `useOptimistic` o devolve
+     sozinho, junto com o toast de erro. */
+  const [visiveis, esconder] = useOptimistic(tipos, (atual, id: string) =>
+    atual.filter((t) => t.id !== id),
+  );
+
   function confirmar() {
     if (!paraExcluir) return;
     const alvo = paraExcluir;
     iniciar(async () => {
+      esconder(alvo.id);
       const resultado = await excluirTipoEvento(alvo.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -249,59 +258,63 @@ export function PainelTipos({ tipos }: { tipos: TipoConfig[] }) {
         </EstadoVazio>
       ) : (
         <div className="space-y-2">
-          {tipos.map((tipo) => (
-            <Card key={tipo.id} className="gap-0 py-3">
-              <CardContent className="flex items-center gap-3 px-4">
-                <span
-                  aria-hidden
-                  className="size-4 shrink-0 rounded-full"
-                  style={{ background: tipo.cor }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">{tipo.nome}</p>
-                    {!tipo.ativo ? (
-                      <Badge variant="secondary">Indisponível</Badge>
-                    ) : null}
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {tipo.descricao ? `${tipo.descricao} · ` : ""}
-                    {tipo.emUso > 0
-                      ? `${formatarNumero(tipo.emUso)} ${tipo.emUso === 1 ? "ação usa" : "ações usam"} este tipo`
-                      : "Nenhuma ação usa este tipo"}
-                  </p>
-                </div>
+          <Presenca>
+            {visiveis.map((tipo) => (
+              <ItemPresente key={tipo.id}>
+                <Card className="gap-0 py-3">
+                  <CardContent className="flex items-center gap-3 px-4">
+                    <span
+                      aria-hidden
+                      className="size-4 shrink-0 rounded-full"
+                      style={{ background: tipo.cor }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{tipo.nome}</p>
+                        {!tipo.ativo ? (
+                          <Badge variant="secondary">Indisponível</Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {tipo.descricao ? `${tipo.descricao} · ` : ""}
+                        {tipo.emUso > 0
+                          ? `${formatarNumero(tipo.emUso)} ${tipo.emUso === 1 ? "ação usa" : "ações usam"} este tipo`
+                          : "Nenhuma ação usa este tipo"}
+                      </p>
+                    </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="cursor-pointer"
-                    aria-label={`Editar ${tipo.nome}`}
-                    onClick={() => setEditando(tipo)}
-                  >
-                    <Pencil className="size-4" aria-hidden />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive cursor-pointer disabled:opacity-30"
-                    aria-label={`Excluir ${tipo.nome}`}
-                    // O banco recusaria de qualquer forma; desabilitar explica antes.
-                    disabled={tipo.emUso > 0}
-                    title={
-                      tipo.emUso > 0
-                        ? "Há ações usando este tipo. Marque como indisponível."
-                        : undefined
-                    }
-                    onClick={() => setParaExcluir(tipo)}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="cursor-pointer"
+                        aria-label={`Editar ${tipo.nome}`}
+                        onClick={() => setEditando(tipo)}
+                      >
+                        <Pencil className="size-4" aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive cursor-pointer disabled:opacity-30"
+                        aria-label={`Excluir ${tipo.nome}`}
+                        // O banco recusaria de qualquer forma; desabilitar explica antes.
+                        disabled={tipo.emUso > 0}
+                        title={
+                          tipo.emUso > 0
+                            ? "Há ações usando este tipo. Marque como indisponível."
+                            : undefined
+                        }
+                        onClick={() => setParaExcluir(tipo)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </ItemPresente>
+            ))}
+          </Presenca>
         </div>
       )}
 

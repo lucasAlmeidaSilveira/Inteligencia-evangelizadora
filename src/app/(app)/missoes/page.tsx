@@ -55,7 +55,7 @@ export default async function PaginaMissoes() {
           ) : null}
         </EstadoVazio>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {missoes.map((missao) => (
             <CartaoMissao key={missao.id} missao={missao} />
           ))}

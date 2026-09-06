@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { z } from "zod";
 
 import { Campo } from "@/components/padroes/campo";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -283,81 +284,92 @@ export function DialogoGrupo({
                 pelo banco de dados.
               </p>
 
-              {pastores.fields.map((campo, indice) => (
-                <div
-                  key={campo.id}
-                  className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_auto]"
-                >
-                  {/* Campos controlados por `Controller`, não por `register`.
-                      Numa lista que cresce e encolhe, o input não controlado
-                      guarda o valor no próprio nó do DOM — e o que o formulário
-                      envia passa a depender de como o React reaproveitou os nós
-                      ao inserir uma linha. Controlado, o que aparece na tela é
-                      exatamente o que está no estado e o que será salvo.
+              {/* O formulário cresce e encolhe dentro de um diálogo centrado
+                  por `-translate-y-1/2`: sem transição, a caixa inteira salta e
+                  o campo em que a pessoa estava digitando muda de lugar sem
+                  aviso. Só opacidade e deslocamento — a altura não é animada,
+                  para não brigar com a recentragem do diálogo.
 
-                      `autoComplete="off"` fecha o outro caminho: o navegador
-                      reconhece dois campos de nome seguidos e oferece preencher
-                      o segundo com o que foi digitado no primeiro. */}
-                  <Campo
-                    rotulo={`Pastor ${indice + 1}`}
-                    obrigatorio
-                    erro={errors.pastores?.[indice]?.nome?.message}
+                  Aqui a `Presenca` funciona no caso mais simples: adicionar e
+                  remover pastor é estado do cliente, sem ida ao servidor. */}
+              <Presenca>
+                {pastores.fields.map((campo, indice) => (
+                  <ItemPresente
+                    key={campo.id}
+                    className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_auto]"
                   >
-                    {(props) => (
-                      <Controller
-                        control={control}
-                        name={`pastores.${indice}.nome`}
-                        render={({ field }) => (
-                          <Input
-                            {...props}
-                            {...field}
-                            value={field.value ?? ""}
-                            autoComplete="off"
-                            placeholder="Nome completo"
-                          />
-                        )}
-                      />
-                    )}
-                  </Campo>
+                    {/* Campos controlados por `Controller`, não por `register`.
+                        Numa lista que cresce e encolhe, o input não controlado
+                        guarda o valor no próprio nó do DOM — e o que o
+                        formulário envia passa a depender de como o React
+                        reaproveitou os nós ao inserir uma linha. Controlado, o
+                        que aparece na tela é exatamente o que está no estado e o
+                        que será salvo.
 
-                  <Campo
-                    rotulo="Telefone"
-                    erro={errors.pastores?.[indice]?.telefone?.message}
-                  >
-                    {(props) => (
-                      <Controller
-                        control={control}
-                        name={`pastores.${indice}.telefone`}
-                        render={({ field }) => (
-                          <Input
-                            {...props}
-                            {...field}
-                            value={field.value ?? ""}
-                            type="tel"
-                            inputMode="tel"
-                            autoComplete="off"
-                            placeholder="(11) 90000-0000"
-                          />
-                        )}
-                      />
-                    )}
-                  </Campo>
-
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive cursor-pointer"
-                      aria-label={`Remover pastor ${indice + 1}`}
-                      disabled={pastores.fields.length === 1}
-                      onClick={() => pastores.remove(indice)}
+                        `autoComplete="off"` fecha o outro caminho: o navegador
+                        reconhece dois campos de nome seguidos e oferece
+                        preencher o segundo com o que foi digitado no primeiro. */}
+                    <Campo
+                      rotulo={`Pastor ${indice + 1}`}
+                      obrigatorio
+                      erro={errors.pastores?.[indice]?.nome?.message}
                     >
-                      <Trash2 className="size-4" aria-hidden />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                      {(props) => (
+                        <Controller
+                          control={control}
+                          name={`pastores.${indice}.nome`}
+                          render={({ field }) => (
+                            <Input
+                              {...props}
+                              {...field}
+                              value={field.value ?? ""}
+                              autoComplete="off"
+                              placeholder="Nome completo"
+                            />
+                          )}
+                        />
+                      )}
+                    </Campo>
+
+                    <Campo
+                      rotulo="Telefone"
+                      erro={errors.pastores?.[indice]?.telefone?.message}
+                    >
+                      {(props) => (
+                        <Controller
+                          control={control}
+                          name={`pastores.${indice}.telefone`}
+                          render={({ field }) => (
+                            <Input
+                              {...props}
+                              {...field}
+                              value={field.value ?? ""}
+                              type="tel"
+                              inputMode="tel"
+                              autoComplete="off"
+                              placeholder="(11) 90000-0000"
+                            />
+                          )}
+                        />
+                      )}
+                    </Campo>
+
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive cursor-pointer"
+                        aria-label={`Remover pastor ${indice + 1}`}
+                        disabled={pastores.fields.length === 1}
+                        onClick={() => pastores.remove(indice)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </ItemPresente>
+                ))}
+              </Presenca>
 
               {errors.pastores?.message ? (
                 <p className="text-destructive text-xs" role="alert">

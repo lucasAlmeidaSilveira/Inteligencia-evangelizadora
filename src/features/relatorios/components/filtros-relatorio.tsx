@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
+import { useFiltro } from "@/components/padroes/area-filtrada";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,10 @@ export function FiltrosRelatorio({
   de: string;
   ate: string;
 }) {
-  const router = useRouter();
+  // Dentro de uma transição, para os números e as tabelas esmaecerem enquanto
+  // o novo período não chega. Aqui vale ainda mais que na lista de ações: uma
+  // data digitada dispara a consulta a cada tecla.
+  const { aplicar } = useFiltro();
   const parametros = useSearchParams();
 
   function definir(alteracoes: Record<string, string | null>) {
@@ -40,7 +44,7 @@ export function FiltrosRelatorio({
       if (valor === null || valor === TODOS) novos.delete(chave);
       else novos.set(chave, valor);
     }
-    router.push(`/relatorios${novos.size ? `?${novos}` : ""}`);
+    aplicar(`/relatorios${novos.size ? `?${novos}` : ""}`);
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
@@ -111,7 +115,7 @@ export function FiltrosRelatorio({
           variant="ghost"
           size="sm"
           className="mb-1 cursor-pointer"
-          onClick={() => router.push("/relatorios")}
+          onClick={() => aplicar("/relatorios")}
         >
           <X aria-hidden />
           Limpar

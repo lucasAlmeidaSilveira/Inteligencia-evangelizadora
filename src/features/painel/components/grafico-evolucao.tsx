@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useMovimentoReduzido } from "@/hooks/use-movimento-reduzido";
 import { formatarNumero } from "@/lib/format";
 
 import type { Evolucao } from "../queries";
@@ -51,6 +52,7 @@ function rotularCompetencia(valor: string) {
 
 export function GraficoEvolucao({ evolucao }: { evolucao: Evolucao }) {
   const [comoTabela, setComoTabela] = useState(false);
+  const movimentoReduzido = useMovimentoReduzido();
 
   /*
    * Menos de três competências não formam tendência — a linha sugeriria um
@@ -166,6 +168,17 @@ export function GraficoEvolucao({ evolucao }: { evolucao: Evolucao }) {
               dot={{ r: 4 }}
               activeDot={{ r: 5 }}
               connectNulls
+              /* O Recharts anima em 1500ms por padrão e ignora
+                 `prefers-reduced-motion`. Um painel aberto uma vez por mês não
+                 pode gastar um segundo e meio desenhando o que o eixo já diz.
+
+                 O desenho é o clip nativo do Recharts. Animar `pathLength`
+                 faria o `strokeDasharray` rastejar — e ele é a segunda
+                 codificação da série, para quem não distingue os matizes. */
+              isAnimationActive={!movimentoReduzido}
+              animationDuration={400}
+              animationEasing="ease-out"
+              animationBegin={i * 80}
             />
           ))}
         </LineChart>

@@ -28,6 +28,30 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
+/*
+ * Movimento dos itens de menu.
+ *
+ * O `SidebarMenuButton` do shadcn transiciona só `width`, `height` e
+ * `padding` — o bastante para o recolhimento da barra, mas o hover troca fundo
+ * e cor num corte seco. Numa barra que a pessoa percorre o dia inteiro, é esse
+ * corte que faz o menu parecer que não respondeu ao ponteiro.
+ *
+ * As três propriedades originais estão repetidas de propósito: isto substitui
+ * a `transition-*` do componente, não se soma a ela — o `tailwind-merge`
+ * mantém apenas a última. Omiti-las quebraria a animação de recolher a barra.
+ *
+ * O que cresce é o ícone, não a linha inteira. Deslocar a linha funcionaria
+ * com a barra aberta e desalinharia o ícone do eixo vertical com ela
+ * recolhida, onde só o ícone aparece; a escala vale igual nos dois estados e
+ * não empurra nada de lugar. A barra lateral é a única superfície presente em
+ * todas as telas — o que se mexe aqui se mexe o tempo todo, então mexe pouco.
+ *
+ * `active:translate-y-px` é o mesmo afundar do `Button` e dos cartões: um
+ * vocabulário de pressão só para o sistema inteiro.
+ */
+const ITEM_MENU =
+  "transition-[width,height,padding,background-color,color,transform] duration-150 ease-out active:translate-y-px [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-out hover:[&_svg]:scale-110";
+
 const ACOMPANHAMENTO = [
   { titulo: "Painel", href: "/", Icone: LayoutDashboard },
   { titulo: "Missões", href: "/missoes", Icone: Church },
@@ -104,6 +128,7 @@ export function SidebarApp({
                     asChild
                     isActive={estaAtivo(href)}
                     tooltip={titulo}
+                    className={ITEM_MENU}
                   >
                     <Link href={href}>
                       <Icone aria-hidden />
@@ -126,6 +151,7 @@ export function SidebarApp({
                     asChild
                     isActive={estaAtivo("/equipe")}
                     tooltip="Equipe"
+                    className={ITEM_MENU}
                   >
                     <Link href="/equipe">
                       <UsersRound aria-hidden />
@@ -142,6 +168,7 @@ export function SidebarApp({
                       asChild
                       isActive={estaAtivo("/config")}
                       tooltip="Configurações"
+                      className={ITEM_MENU}
                     >
                       <Link href="/config">
                         <Settings aria-hidden />

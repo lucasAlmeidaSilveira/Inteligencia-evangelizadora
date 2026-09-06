@@ -147,6 +147,12 @@ export function BarraProgresso() {
       // Decorativa: quem usa leitor de tela é avisado pela mudança de página,
       // não por uma barra que não diz nada.
       aria-hidden
+      /* Nome próprio na transição de rota: sem ele a barra é capturada no
+         instantâneo da página e desliza junto, além de ficar escondida atrás
+         do instantâneo enquanto a transição roda. Ela e a transição dizem a
+         mesma coisa em canais diferentes — a barra cobre a espera, a transição
+         cobre a troca — e só não competem se a barra ficar parada. */
+      style={{ viewTransitionName: "barra-progresso" }}
       className="pointer-events-none fixed inset-x-0 top-0 z-100 h-0.5"
     >
       <div

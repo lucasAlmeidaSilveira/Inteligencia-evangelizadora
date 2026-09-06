@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { IndicadorAba } from "@/components/padroes/indicador-aba";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,13 +38,17 @@ export function NavAbas({ missaoId }: { missaoId: string }) {
             href={aba.href}
             aria-current={ativa ? "page" : undefined}
             className={cn(
-              "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+              /* A borda transparente continua aqui mesmo sem cor: é ela que
+                 reserva os 2px do indicador. Sem isso, a aba ativa ficaria
+                 dois pixels mais alta que as outras. */
+              "relative -mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors",
               ativa
-                ? "border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground border-transparent",
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {aba.rotulo}
+            {ativa ? <IndicadorAba nome="aba-missao" /> : null}
           </Link>
         );
       })}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -230,10 +231,18 @@ export function PainelCategorias({
   const [paraExcluir, setParaExcluir] = useState<CategoriaConfig | null>(null);
   const [excluindo, iniciar] = useTransition();
 
+  /* A categoria sai da lista antes da resposta do servidor — é essa saída que
+     a `Presenca` anima. Se a exclusão falhar, o `useOptimistic` a devolve
+     sozinho, junto com o toast de erro. */
+  const [visiveis, esconder] = useOptimistic(categorias, (atual, id: string) =>
+    atual.filter((c) => c.id !== id),
+  );
+
   function confirmar() {
     if (!paraExcluir) return;
     const alvo = paraExcluir;
     iniciar(async () => {
+      esconder(alvo.id);
       const resultado = await excluirCategoria(alvo.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -272,49 +281,53 @@ export function PainelCategorias({
         </EstadoVazio>
       ) : (
         <div className="space-y-2">
-          {categorias.map((categoria) => (
-            <Card key={categoria.id} className="gap-0 py-3">
-              <CardContent className="flex items-center gap-3 px-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">{categoria.nome}</p>
-                    <Badge variant="outline">
-                      {ROTULO_TIPO[categoria.tipo]}
-                    </Badge>
-                    {!categoria.ativo ? (
-                      <Badge variant="secondary">Indisponível</Badge>
-                    ) : null}
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {categoria.emUso > 0
-                      ? `${formatarNumero(categoria.emUso)} ${categoria.emUso === 1 ? "lançamento usa" : "lançamentos usam"} esta categoria`
-                      : "Nenhum lançamento usa esta categoria"}
-                  </p>
-                </div>
+          <Presenca>
+            {visiveis.map((categoria) => (
+              <ItemPresente key={categoria.id}>
+                <Card className="gap-0 py-3">
+                  <CardContent className="flex items-center gap-3 px-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{categoria.nome}</p>
+                        <Badge variant="outline">
+                          {ROTULO_TIPO[categoria.tipo]}
+                        </Badge>
+                        {!categoria.ativo ? (
+                          <Badge variant="secondary">Indisponível</Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {categoria.emUso > 0
+                          ? `${formatarNumero(categoria.emUso)} ${categoria.emUso === 1 ? "lançamento usa" : "lançamentos usam"} esta categoria`
+                          : "Nenhum lançamento usa esta categoria"}
+                      </p>
+                    </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="cursor-pointer"
-                    aria-label={`Editar ${categoria.nome}`}
-                    onClick={() => setEditando(categoria)}
-                  >
-                    <Pencil className="size-4" aria-hidden />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive cursor-pointer"
-                    aria-label={`Excluir ${categoria.nome}`}
-                    onClick={() => setParaExcluir(categoria)}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="cursor-pointer"
+                        aria-label={`Editar ${categoria.nome}`}
+                        onClick={() => setEditando(categoria)}
+                      >
+                        <Pencil className="size-4" aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive cursor-pointer"
+                        aria-label={`Excluir ${categoria.nome}`}
+                        onClick={() => setParaExcluir(categoria)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </ItemPresente>
+            ))}
+          </Presenca>
         </div>
       )}
 

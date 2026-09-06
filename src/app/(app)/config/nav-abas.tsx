@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { IndicadorAba } from "@/components/padroes/indicador-aba";
 import { cn } from "@/lib/utils";
 
 const ABAS = [
@@ -26,13 +27,16 @@ export function NavAbas() {
             href={aba.href}
             aria-current={ativa ? "page" : undefined}
             className={cn(
-              "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+              /* A borda transparente reserva os 2px do indicador: sem ela a
+                 aba ativa ficaria mais alta que as outras. */
+              "relative -mb-px shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors",
               ativa
-                ? "border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground border-transparent",
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {aba.rotulo}
+            {ativa ? <IndicadorAba nome="aba-config" /> : null}
           </Link>
         );
       })}

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { ChartColumnIncreasing, Download } from "lucide-react";
 
+import {
+  AreaFiltrada,
+  ResultadosFiltrados,
+} from "@/components/padroes/area-filtrada";
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
@@ -164,61 +168,67 @@ export default async function PaginaRelatorios({
         ) : null}
       </CabecalhoPagina>
 
-      <FiltrosRelatorio
-        tipos={tipos}
-        de={paraInput(filtros.de)}
-        ate={paraInput(filtros.ate)}
-      />
+      <AreaFiltrada className="space-y-6">
+        <FiltrosRelatorio
+          tipos={tipos}
+          de={paraInput(filtros.de)}
+          ate={paraInput(filtros.ate)}
+        />
 
-      {vazio ? (
-        <EstadoVazio
-          Icone={ChartColumnIncreasing}
-          titulo="Nenhuma ação no período"
-          descricao="Ajuste as datas ou os filtros. Ações canceladas ficam de fora por padrão — marque a opção acima para incluí-las."
-        >
-          <Button asChild variant="outline">
-            <Link href="/relatorios">Voltar ao período padrão</Link>
-          </Button>
-        </EstadoVazio>
-      ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <CartaoMetrica
-              rotulo="Ações apostólicas"
-              valor={formatarNumero(relatorio.total.acoes)}
-            />
-            <CartaoMetrica
-              rotulo="Participantes"
-              valor={formatarNumero(relatorio.total.participantes)}
-            />
-            <CartaoMetrica
-              rotulo="Servos engajados"
-              valor={formatarNumero(relatorio.total.servos)}
-            />
-            <CartaoMetrica
-              rotulo="Saldo do período"
-              valor={formatarMoeda(relatorio.total.saldo)}
-              detalhe={`${formatarMoeda(relatorio.total.receitas)} em receitas · ${formatarMoeda(relatorio.total.despesas)} em despesas`}
-              className={
-                relatorio.total.saldo < 0 ? "border-destructive/40" : undefined
-              }
-            />
-          </div>
+        <ResultadosFiltrados className="space-y-6">
+          {vazio ? (
+            <EstadoVazio
+              Icone={ChartColumnIncreasing}
+              titulo="Nenhuma ação no período"
+              descricao="Ajuste as datas ou os filtros. Ações canceladas ficam de fora por padrão — marque a opção acima para incluí-las."
+            >
+              <Button asChild variant="outline">
+                <Link href="/relatorios">Voltar ao período padrão</Link>
+              </Button>
+            </EstadoVazio>
+          ) : (
+            <>
+              <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <CartaoMetrica
+                  rotulo="Ações apostólicas"
+                  valor={formatarNumero(relatorio.total.acoes)}
+                />
+                <CartaoMetrica
+                  rotulo="Participantes"
+                  valor={formatarNumero(relatorio.total.participantes)}
+                />
+                <CartaoMetrica
+                  rotulo="Servos engajados"
+                  valor={formatarNumero(relatorio.total.servos)}
+                />
+                <CartaoMetrica
+                  rotulo="Saldo do período"
+                  valor={formatarMoeda(relatorio.total.saldo)}
+                  detalhe={`${formatarMoeda(relatorio.total.receitas)} em receitas · ${formatarMoeda(relatorio.total.despesas)} em despesas`}
+                  className={
+                    relatorio.total.saldo < 0
+                      ? "border-destructive/40"
+                      : undefined
+                  }
+                />
+              </div>
 
-          <Tabela
-            titulo="Por missão"
-            linhas={relatorio.porMissao}
-            total={relatorio.total}
-          />
+              <Tabela
+                titulo="Por missão"
+                linhas={relatorio.porMissao}
+                total={relatorio.total}
+              />
 
-          <Tabela
-            titulo="Por tipo de ação"
-            linhas={relatorio.porTipo}
-            total={relatorio.total}
-            comCor
-          />
-        </>
-      )}
+              <Tabela
+                titulo="Por tipo de ação"
+                linhas={relatorio.porTipo}
+                total={relatorio.total}
+                comCor
+              />
+            </>
+          )}
+        </ResultadosFiltrados>
+      </AreaFiltrada>
     </div>
   );
 }

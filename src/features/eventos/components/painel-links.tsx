@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Link2, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -155,10 +156,23 @@ export function PainelLinks({
 }) {
   const router = useRouter();
   const [novo, setNovo] = useState(false);
-  const [removendo, iniciar] = useTransition();
+  const [, iniciar] = useTransition();
+
+  /* O item sai da lista antes da ida ao servidor — é essa saída que a
+     `Presenca` anima, e é o que faz a lista responder no mesmo quadro do
+     clique. Se a ação falhar, o `useOptimistic` devolve o item sozinho, e ele
+     volta entrando, ao lado do toast de erro.
+
+     Antes, um clique em excluir desabilitava o botão de *todas* as linhas e
+     nada apontava para a que estava saindo: quem clicou não sabia se tinha
+     acertado a linha. */
+  const [visiveis, esconder] = useOptimistic(links, (atual, id: string) =>
+    atual.filter((l) => l.id !== id),
+  );
 
   function remover(link: LinkUtil) {
     iniciar(async () => {
+      esconder(link.id);
       const resultado = await excluirLink(link.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -191,42 +205,49 @@ export function PainelLinks({
           {botaoNovo}
         </EstadoVazio>
       ) : (
+        /* O estado vazio decide por `links`, não por `visiveis`: ao remover o
+           último item, `visiveis` fica vazio antes da resposta do servidor, e
+           trocar já para o estado vazio desmontaria a `Presenca` no meio da
+           animação — a saída do item seria cortada. */
         <div className="space-y-2">
-          {links.map((link) => (
-            <Card key={link.id} className="gap-0 py-3">
-              <CardContent className="flex items-center gap-3 px-4">
-                <Link2
-                  className="text-muted-foreground size-5 shrink-0"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium underline-offset-4 hover:underline"
-                  >
-                    {link.titulo}
-                    <ExternalLink className="size-3" aria-hidden />
-                    <span className="sr-only">(abre em nova aba)</span>
-                  </a>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {link.descricao ?? link.url}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
-                  aria-label={`Remover ${link.titulo}`}
-                  disabled={removendo}
-                  onClick={() => remover(link)}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          <Presenca>
+            {visiveis.map((link) => (
+              <ItemPresente key={link.id}>
+                <Card className="gap-0 py-3">
+                  <CardContent className="flex items-center gap-3 px-4">
+                    <Link2
+                      className="text-muted-foreground size-5 shrink-0"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        {link.titulo}
+                        <ExternalLink className="size-3" aria-hidden />
+                        <span className="sr-only">(abre em nova aba)</span>
+                      </a>
+                      <p className="text-muted-foreground truncate text-xs">
+                        {link.descricao ?? link.url}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                      aria-label={`Remover ${link.titulo}`}
+                      onClick={() => remover(link)}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </Button>
+                  </CardContent>
+                </Card>
+              </ItemPresente>
+            ))}
+          </Presenca>
         </div>
       )}
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileText, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatarDataHora, formatarTamanhoArquivo } from "@/lib/format";
@@ -32,6 +33,13 @@ export function PainelDocumentos({
   const entrada = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
   const [ocupado, iniciar] = useTransition();
+
+  /* O documento sai da lista antes da resposta do servidor — é essa saída que
+     a `Presenca` anima. Se a exclusão falhar, o `useOptimistic` devolve o
+     arquivo sozinho, junto com o toast de erro. */
+  const [visiveis, esconder] = useOptimistic(documentos, (atual, id: string) =>
+    atual.filter((d) => d.id !== id),
+  );
 
   /**
    * O arquivo vai do navegador direto para o R2, usando uma URL assinada que
@@ -104,6 +112,7 @@ export function PainelDocumentos({
 
   function remover(documento: Documento) {
     iniciar(async () => {
+      esconder(documento.id);
       const resultado = await excluirDocumento(documento.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -165,48 +174,56 @@ export function PainelDocumentos({
           {botaoEnviar}
         </EstadoVazio>
       ) : (
+        /* O estado vazio decide por `documentos`, não por `visiveis`: ao
+           remover o último arquivo, trocar já para o estado vazio desmontaria
+           a `Presenca` e cortaria a animação de saída pela metade. */
         <div className="space-y-2">
-          {documentos.map((documento) => (
-            <Card key={documento.id} className="gap-0 py-3">
-              <CardContent className="flex items-center gap-3 px-4">
-                <FileText
-                  className="text-muted-foreground size-5 shrink-0"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {documento.nome}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {formatarTamanhoArquivo(documento.tamanhoBytes)} ·{" "}
-                    {formatarDataHora(documento.criadoEm)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="cursor-pointer"
-                    aria-label={`Baixar ${documento.nome}`}
-                    disabled={ocupado}
-                    onClick={() => baixar(documento)}
-                  >
-                    <Download className="size-4" aria-hidden />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive cursor-pointer"
-                    aria-label={`Remover ${documento.nome}`}
-                    disabled={ocupado}
-                    onClick={() => remover(documento)}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          <Presenca>
+            {visiveis.map((documento) => (
+              <ItemPresente key={documento.id}>
+                <Card className="gap-0 py-3">
+                  <CardContent className="flex items-center gap-3 px-4">
+                    <FileText
+                      className="text-muted-foreground size-5 shrink-0"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {documento.nome}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {formatarTamanhoArquivo(documento.tamanhoBytes)} ·{" "}
+                        {formatarDataHora(documento.criadoEm)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="cursor-pointer"
+                        aria-label={`Baixar ${documento.nome}`}
+                        /* O download continua bloqueando enquanto assina a URL:
+                           aqui a espera é real e não há o que remover da tela. */
+                        disabled={ocupado}
+                        onClick={() => baixar(documento)}
+                      >
+                        <Download className="size-4" aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive cursor-pointer"
+                        aria-label={`Remover ${documento.nome}`}
+                        onClick={() => remover(documento)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </ItemPresente>
+            ))}
+          </Presenca>
         </div>
       )}
     </div>

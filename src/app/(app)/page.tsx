@@ -62,7 +62,11 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* As duas fileiras são uma sequência só: `--cascata-inicio` na segunda
+          continua a contagem da primeira, em vez de reiniciá-la. Oito cartões
+          entrando na ordem de leitura contam que o painel foi montado para ser
+          lido nessa ordem. */}
+      <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* Com uma missão em foco, "Missões ativas" mostraria sempre 1 — um
             cartão gasto para repetir o que o seletor ao lado já diz. */}
         {missaoId ? (
@@ -108,7 +112,7 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="cascata grid gap-4 [--cascata-inicio:140ms] sm:grid-cols-2 xl:grid-cols-4">
         <CartaoMetrica
           Icone={Sparkles}
           rotulo="Ações neste mês"
@@ -174,7 +178,7 @@ async function ProximasAcoes({ missaoId }: { missaoId?: string }) {
   }
 
   return (
-    <ul className="divide-y">
+    <ul className="cascata divide-y">
       {eventos.map((evento) => (
         <li key={evento.id}>
           <Link

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
+import * as m from "motion/react-m";
 import { useRouter } from "next/navigation";
 import {
   LoaderCircle,
@@ -13,6 +14,8 @@ import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { Presenca } from "@/components/padroes/presenca";
+import { CURVA, DURACAO } from "@/lib/movimento";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -46,6 +49,21 @@ import type { Categoria, Lancamento } from "../queries";
 import { somarLancamentos } from "../financeiro";
 
 const SEM_CATEGORIA = "__sem__";
+
+/**
+ * `TableRow` com capacidade de animar entrada e saída.
+ *
+ * Envolver o próprio componente do shadcn, em vez de usar o `ItemPresente`
+ * genérico, evita reproduzir as classes do `TableRow` aqui — cópia que
+ * divergiria em silêncio na próxima atualização do gerador.
+ *
+ * Fora do componente de propósito: criado a cada render, o React o trataria
+ * como um tipo novo e remontaria a tabela inteira a cada atualização.
+ *
+ * Só opacidade: `transform` num `<tr>` é instável entre navegadores — a linha
+ * descola das bordas e das colunas vizinhas no meio da animação.
+ */
+const LinhaAnimada = m.create(TableRow);
 
 function DialogoLancamento({
   eventoId,
@@ -232,12 +250,23 @@ export function PainelFinanceiro({
 }) {
   const router = useRouter();
   const [novo, setNovo] = useState<"receita" | "despesa" | null>(null);
-  const [removendo, iniciar] = useTransition();
+  const [, iniciar] = useTransition();
 
-  const totais = somarLancamentos(lancamentos);
+  /* A linha sai da tabela antes da resposta do servidor. Antes, um clique em
+     excluir desabilitava o botão de *todas* as linhas e nada apontava para a
+     que estava saindo — quem clicou não sabia se tinha acertado a linha. */
+  const [visiveis, esconder] = useOptimistic(lancamentos, (atual, id: string) =>
+    atual.filter((l) => l.id !== id),
+  );
+
+  /* Somados sobre `visiveis`: o saldo é a soma dos lançamentos, e precisa cair
+     no mesmo instante que a linha. Continua passando por `somarLancamentos`,
+     que faz a conta em centavos inteiros — dinheiro nunca vira float. */
+  const totais = somarLancamentos(visiveis);
 
   function remover(id: string) {
     iniciar(async () => {
+      esconder(id);
       const resultado = await excluirLancamento(id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -318,40 +347,58 @@ export function PainelFinanceiro({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lancamentos.map((l) => (
-                  <TableRow key={l.id}>
-                    <TableCell className="whitespace-nowrap">
-                      {formatarData(l.data)}
-                    </TableCell>
-                    <TableCell className="font-medium">{l.descricao}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {l.categoriaNome ?? "—"}
-                    </TableCell>
-                    <TableCell
-                      data-numeric
-                      className={
-                        l.tipo === "receita"
-                          ? "text-success text-right font-medium"
-                          : "text-destructive text-right font-medium"
-                      }
+                <Presenca>
+                  {visiveis.map((l) => (
+                    <LinhaAnimada
+                      key={l.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{
+                        opacity: 0,
+                        transition: {
+                          duration: DURACAO.saida,
+                          ease: CURVA.partida,
+                        },
+                      }}
+                      transition={{
+                        duration: DURACAO.chegada,
+                        ease: CURVA.chegada,
+                      }}
                     >
-                      {l.tipo === "receita" ? "+" : "−"}
-                      {formatarMoeda(l.valor)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-destructive cursor-pointer"
-                        aria-label={`Remover lançamento ${l.descricao}`}
-                        disabled={removendo}
-                        onClick={() => remover(l.id)}
+                      <TableCell className="whitespace-nowrap">
+                        {formatarData(l.data)}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {l.descricao}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {l.categoriaNome ?? "—"}
+                      </TableCell>
+                      <TableCell
+                        data-numeric
+                        className={
+                          l.tipo === "receita"
+                            ? "text-success text-right font-medium"
+                            : "text-destructive text-right font-medium"
+                        }
                       >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        {l.tipo === "receita" ? "+" : "−"}
+                        {formatarMoeda(l.valor)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive cursor-pointer"
+                          aria-label={`Remover lançamento ${l.descricao}`}
+                          onClick={() => remover(l.id)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </TableCell>
+                    </LinhaAnimada>
+                  ))}
+                </Presenca>
               </TableBody>
             </Table>
           </CardContent>

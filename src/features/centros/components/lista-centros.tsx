@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,11 +88,19 @@ export function ListaCentros({
   const [criando, setCriando] = useState(false);
   const [paraExcluir, setParaExcluir] = useState<CentroListado | null>(null);
 
+  /* O centro sai do cartão antes da resposta do servidor — é essa saída que a
+     `Presenca` anima. Se a exclusão falhar, o `useOptimistic` o devolve
+     sozinho, junto com o toast de erro. */
+  const [visiveis, esconder] = useOptimistic(centros, (atual, id: string) =>
+    atual.filter((c) => c.id !== id),
+  );
+
   function confirmarExclusao() {
     if (!paraExcluir) return;
     const alvo = paraExcluir;
 
     iniciarExclusao(async () => {
+      esconder(alvo.id);
       const resultado = await excluirCentro(alvo.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -109,7 +118,9 @@ export function ListaCentros({
     });
   }
 
-  const ativos = centros.filter((c) => c.ativo);
+  // Contados sobre `visiveis`: o resumo acima da lista precisa cair junto com
+  // o cartão, senão o número segue afirmando o que a tela já desmentiu.
+  const ativos = visiveis.filter((c) => c.ativo);
   const irradiacoes = ativos.filter((c) => c.tipo === "irradiacao").length;
 
   return (
@@ -143,89 +154,102 @@ export function ListaCentros({
         </EstadoVazio>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {centros.map((centro) => {
-            const local = [centro.regiao, centro.cidade]
-              .filter(Boolean)
-              .join(" · ");
+          <Presenca>
+            {visiveis.map((centro) => {
+              const local = [centro.regiao, centro.cidade]
+                .filter(Boolean)
+                .join(" · ");
 
-            return (
-              <Card key={centro.id}>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-medium">{centro.nome}</h3>
-                        {!centro.ativo ? (
-                          <Badge variant="secondary">Inativo</Badge>
-                        ) : null}
+              return (
+                /* `h-full` no cartão: quem é item da grade agora é o wrapper da
+                   Presenca, e sem isto o cartão para de esticar até a altura da
+                   fileira. */
+                <ItemPresente key={centro.id}>
+                  <Card className="h-full">
+                    <CardContent className="space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-medium">{centro.nome}</h3>
+                            {!centro.ativo ? (
+                              <Badge variant="secondary">Inativo</Badge>
+                            ) : null}
+                          </div>
+                          <SeloTipoCentro tipo={centro.tipo} />
+                        </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="-mt-1 -mr-1 cursor-pointer"
+                              aria-label={`Ações do centro ${centro.nome}`}
+                            >
+                              <MoreVertical className="size-4" aria-hidden />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => setEmEdicao(centro)}
+                            >
+                              <Pencil className="size-4" aria-hidden />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              className="cursor-pointer"
+                              onClick={() => setParaExcluir(centro)}
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <SeloTipoCentro tipo={centro.tipo} />
-                    </div>
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="-mt-1 -mr-1 cursor-pointer"
-                          aria-label={`Ações do centro ${centro.nome}`}
-                        >
-                          <MoreVertical className="size-4" aria-hidden />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          onClick={() => setEmEdicao(centro)}
-                        >
-                          <Pencil className="size-4" aria-hidden />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          className="cursor-pointer"
-                          onClick={() => setParaExcluir(centro)}
-                        >
-                          <Trash2 className="size-4" aria-hidden />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {local || centro.contatoTelefone ? (
-                    <div className="text-muted-foreground space-y-1.5 text-sm">
-                      {local ? (
-                        <p className="flex items-center gap-1.5">
-                          <MapPin className="size-3.5 shrink-0" aria-hidden />
-                          {local}
-                        </p>
+                      {local || centro.contatoTelefone ? (
+                        <div className="text-muted-foreground space-y-1.5 text-sm">
+                          {local ? (
+                            <p className="flex items-center gap-1.5">
+                              <MapPin className="size-3.5 shrink-0" aria-hidden />
+                              {local}
+                            </p>
+                          ) : null}
+                          {centro.contatoTelefone ? (
+                            <p className="flex items-center gap-1.5">
+                              <Phone className="size-3.5 shrink-0" aria-hidden />
+                              {centro.contatoTelefone}
+                            </p>
+                          ) : null}
+                        </div>
                       ) : null}
-                      {centro.contatoTelefone ? (
-                        <p className="flex items-center gap-1.5">
-                          <Phone className="size-3.5 shrink-0" aria-hidden />
-                          {centro.contatoTelefone}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
 
-                  <div className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1.5 border-t pt-3 text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <UsersRound className="size-3.5 shrink-0" aria-hidden />
-                      {formatarNumero(centro.grupos)}{" "}
-                      {centro.grupos === 1 ? "grupo" : "grupos"}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <CalendarDays className="size-3.5 shrink-0" aria-hidden />
-                      {formatarNumero(centro.eventos)}{" "}
-                      {centro.eventos === 1 ? "ação" : "ações"}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                      <div className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1.5 border-t pt-3 text-sm">
+                        <span className="flex items-center gap-1.5">
+                          <UsersRound
+                            className="size-3.5 shrink-0"
+                            aria-hidden
+                          />
+                          {formatarNumero(centro.grupos)}{" "}
+                          {centro.grupos === 1 ? "grupo" : "grupos"}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <CalendarDays
+                            className="size-3.5 shrink-0"
+                            aria-hidden
+                          />
+                          {formatarNumero(centro.eventos)}{" "}
+                          {centro.eventos === 1 ? "ação" : "ações"}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </ItemPresente>
+              );
+            })}
+          </Presenca>
         </div>
       )}
 

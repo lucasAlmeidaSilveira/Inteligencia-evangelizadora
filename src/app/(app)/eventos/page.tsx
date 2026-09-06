@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Plus, Sparkles } from "lucide-react";
 
+import {
+  AreaFiltrada,
+  ResultadosFiltrados,
+} from "@/components/padroes/area-filtrada";
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import { Button } from "@/components/ui/button";
@@ -77,62 +81,69 @@ export default async function PaginaEventos({
         ) : null}
       </CabecalhoPagina>
 
-      <FiltrosEventos tipos={tipos} />
+      {/* Filtro e resultado ficam sob a mesma área: é o que permite a lista
+          esmaecer enquanto o servidor responde. A lista continua renderizada
+          no servidor — chega aqui como `children`. */}
+      <AreaFiltrada className="space-y-6">
+        <FiltrosEventos tipos={tipos} />
 
-      {eventos.length === 0 ? (
-        temFiltro || foco.missaoNome ? (
-          <EstadoVazio
-            Icone={Sparkles}
-            titulo="Nenhuma ação com esse recorte"
-            descricao={
-              foco.missaoNome
-                ? `Nenhuma ação apostólica da ${foco.missaoNome} corresponde ao que está selecionado. Troque a missão em foco na barra lateral ou ajuste os filtros.`
-                : "Nenhuma ação apostólica corresponde à combinação escolhida. Limpe os filtros para ver todas."
-            }
-          >
-            {temFiltro ? (
-              <Button asChild variant="outline">
-                <Link href="/eventos">Limpar filtros</Link>
-              </Button>
-            ) : null}
-          </EstadoVazio>
-        ) : (
-          <EstadoVazio
-            Icone={Sparkles}
-            titulo="Nenhuma ação apostólica registrada"
-            descricao={
-              podeCriar
-                ? "Cadastre a primeira ação para acompanhar participantes, servos engajados e prestação de contas."
-                : "Cadastre uma missão antes de registrar ações apostólicas."
-            }
-          >
-            {podeCriar ? (
-              <Button asChild>
-                <Link href="/eventos/novo">
-                  <Plus aria-hidden />
-                  Cadastrar ação
-                </Link>
-              </Button>
+        <ResultadosFiltrados>
+          {eventos.length === 0 ? (
+            temFiltro || foco.missaoNome ? (
+              <EstadoVazio
+                Icone={Sparkles}
+                titulo="Nenhuma ação com esse recorte"
+                descricao={
+                  foco.missaoNome
+                    ? `Nenhuma ação apostólica da ${foco.missaoNome} corresponde ao que está selecionado. Troque a missão em foco na barra lateral ou ajuste os filtros.`
+                    : "Nenhuma ação apostólica corresponde à combinação escolhida. Limpe os filtros para ver todas."
+                }
+              >
+                {temFiltro ? (
+                  <Button asChild variant="outline">
+                    <Link href="/eventos">Limpar filtros</Link>
+                  </Button>
+                ) : null}
+              </EstadoVazio>
             ) : (
-              <Button asChild variant="outline">
-                <Link href="/missoes">Ir para missões</Link>
-              </Button>
-            )}
-          </EstadoVazio>
-        )
-      ) : (
-        <div className="space-y-3">
-          {eventos.map((evento) => (
-            <LinhaEvento
-              key={evento.id}
-              evento={evento}
-              // Com uma missão em foco a coluna repetiria a mesma resposta
-              // em todas as linhas.
-              mostrarMissao={!foco.missaoId && missoes.length > 1}
-            />
-          ))}
-        </div>
-      )}
+              <EstadoVazio
+                Icone={Sparkles}
+                titulo="Nenhuma ação apostólica registrada"
+                descricao={
+                  podeCriar
+                    ? "Cadastre a primeira ação para acompanhar participantes, servos engajados e prestação de contas."
+                    : "Cadastre uma missão antes de registrar ações apostólicas."
+                }
+              >
+                {podeCriar ? (
+                  <Button asChild>
+                    <Link href="/eventos/novo">
+                      <Plus aria-hidden />
+                      Cadastrar ação
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline">
+                    <Link href="/missoes">Ir para missões</Link>
+                  </Button>
+                )}
+              </EstadoVazio>
+            )
+          ) : (
+            <div className="cascata space-y-3">
+              {eventos.map((evento) => (
+                <LinhaEvento
+                  key={evento.id}
+                  evento={evento}
+                  // Com uma missão em foco a coluna repetiria a mesma resposta
+                  // em todas as linhas.
+                  mostrarMissao={!foco.missaoId && missoes.length > 1}
+                />
+              ))}
+            </div>
+          )}
+        </ResultadosFiltrados>
+      </AreaFiltrada>
     </div>
   );
 }

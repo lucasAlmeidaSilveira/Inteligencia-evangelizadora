@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -401,11 +402,19 @@ export function PainelUsuarios({
     });
   }
 
+  /* A pessoa sai da lista antes da resposta do servidor — é essa saída que a
+     `Presenca` anima, e é o que liga a confirmação ao efeito. Se a exclusão
+     falhar, o `useOptimistic` a devolve sozinho, com o toast de erro. */
+  const [visiveis, esconder] = useOptimistic(usuarios, (atual, id: string) =>
+    atual.filter((u) => u.id !== id),
+  );
+
   function confirmarExclusao() {
     if (!paraExcluir) return;
     const alvo = paraExcluir;
 
     iniciarExclusao(async () => {
+      esconder(alvo.id);
       const resultado = await excluirUsuario(alvo.id);
       if (!resultado.ok) {
         toast.error(resultado.erro);
@@ -450,97 +459,103 @@ export function PainelUsuarios({
         </EstadoVazio>
       ) : (
         <div className="space-y-2">
-          {usuarios.map((usuario) => {
-            const souEu = usuario.id === quemConvida.id;
-            const editavel = podeMexer(usuario);
+          <Presenca>
+            {visiveis.map((usuario) => {
+              const souEu = usuario.id === quemConvida.id;
+              const editavel = podeMexer(usuario);
 
-            return (
-              <Card key={usuario.id} className="gap-0 py-3">
-                <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{usuario.nome}</p>
-                      <Badge
-                        variant={
-                          usuario.papel === "admin"
-                            ? "default"
-                            : usuario.papel === "responsavel"
-                              ? "outline"
-                              : "secondary"
-                        }
-                      >
-                        {ROTULO_PAPEL[usuario.papel]}
-                      </Badge>
-                      {souEu ? <Badge variant="secondary">Você</Badge> : null}
-                      {!usuario.ativo ? (
-                        <Badge variant="secondary">Sem acesso</Badge>
+              return (
+                <ItemPresente key={usuario.id}>
+                  <Card className="gap-0 py-3">
+                    <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">{usuario.nome}</p>
+                          <Badge
+                            variant={
+                              usuario.papel === "admin"
+                                ? "default"
+                                : usuario.papel === "responsavel"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                          >
+                            {ROTULO_PAPEL[usuario.papel]}
+                          </Badge>
+                          {souEu ? (
+                            <Badge variant="secondary">Você</Badge>
+                          ) : null}
+                          {!usuario.ativo ? (
+                            <Badge variant="secondary">Sem acesso</Badge>
+                          ) : null}
+                        </div>
+
+                        <p className="text-muted-foreground truncate text-xs">
+                          {usuario.email}
+                        </p>
+
+                        <p className="text-muted-foreground text-xs">
+                          {usuario.papel === "admin"
+                            ? "Todas as missões"
+                            : (usuario.missaoNome ?? "Sem missão")}
+                          {usuario.ultimoAcessoEm
+                            ? ` · último acesso ${formatarRelativo(usuario.ultimoAcessoEm)}`
+                            : " · nunca acessou"}
+                        </p>
+                      </div>
+
+                      {editavel ? (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="cursor-pointer"
+                            aria-label={`Gerar link de senha para ${usuario.nome}`}
+                            title="Gerar link para definir senha"
+                            disabled={gerando}
+                            onClick={() => novoLink(usuario)}
+                          >
+                            {gerando ? (
+                              <LoaderCircle
+                                className="size-4 animate-spin"
+                                aria-hidden
+                              />
+                            ) : (
+                              <KeyRound className="size-4" aria-hidden />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="cursor-pointer"
+                            aria-label={`Editar ${usuario.nome}`}
+                            onClick={() => setEditando(usuario)}
+                          >
+                            <Pencil className="size-4" aria-hidden />
+                          </Button>
+                          {/* Excluir a si mesmo é irreversível pela interface; o
+                              servidor recusa de qualquer forma, esconder explica
+                              antes de a pessoa tentar. */}
+                          {!souEu ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive cursor-pointer"
+                              aria-label={`Excluir ${usuario.nome}`}
+                              title="Remover da equipe"
+                              onClick={() => setParaExcluir(usuario)}
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </Button>
+                          ) : null}
+                        </div>
                       ) : null}
-                    </div>
-
-                    <p className="text-muted-foreground truncate text-xs">
-                      {usuario.email}
-                    </p>
-
-                    <p className="text-muted-foreground text-xs">
-                      {usuario.papel === "admin"
-                        ? "Todas as missões"
-                        : (usuario.missaoNome ?? "Sem missão")}
-                      {usuario.ultimoAcessoEm
-                        ? ` · último acesso ${formatarRelativo(usuario.ultimoAcessoEm)}`
-                        : " · nunca acessou"}
-                    </p>
-                  </div>
-
-                  {editavel ? (
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="cursor-pointer"
-                        aria-label={`Gerar link de senha para ${usuario.nome}`}
-                        title="Gerar link para definir senha"
-                        disabled={gerando}
-                        onClick={() => novoLink(usuario)}
-                      >
-                        {gerando ? (
-                          <LoaderCircle
-                            className="size-4 animate-spin"
-                            aria-hidden
-                          />
-                        ) : (
-                          <KeyRound className="size-4" aria-hidden />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="cursor-pointer"
-                        aria-label={`Editar ${usuario.nome}`}
-                        onClick={() => setEditando(usuario)}
-                      >
-                        <Pencil className="size-4" aria-hidden />
-                      </Button>
-                      {/* Excluir a si mesmo é irreversível pela interface; o
-                          servidor recusa de qualquer forma, esconder explica
-                          antes de a pessoa tentar. */}
-                      {!souEu ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive cursor-pointer"
-                          aria-label={`Excluir ${usuario.nome}`}
-                          title="Remover da equipe"
-                          onClick={() => setParaExcluir(usuario)}
-                        >
-                          <Trash2 className="size-4" aria-hidden />
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            );
-          })}
+                    </CardContent>
+                  </Card>
+                </ItemPresente>
+              );
+            })}
+          </Presenca>
         </div>
       )}
 
