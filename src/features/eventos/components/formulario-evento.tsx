@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +26,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+import type { CentroParaSelecao } from "@/features/centros/queries";
+import { SEM_CENTRO } from "@/features/centros/schemas";
+
 import { atualizarEvento, criarEvento } from "../actions";
 import { eventoSchema, STATUS_EVENTO } from "../schemas";
 
@@ -36,11 +39,15 @@ export function FormularioEvento({
   eventoId,
   valores,
   missoes,
+  centros,
   tipos,
 }: {
   eventoId?: string;
   valores: Entrada;
   missoes: { id: string; nome: string }[];
+  /** De todas as missões visíveis: a lista é filtrada aqui conforme a missão
+   *  escolhida, sem uma ida ao servidor a cada troca. */
+  centros: CentroParaSelecao[];
   tipos: { id: string; nome: string; cor: string }[];
 }) {
   const router = useRouter();
@@ -55,8 +62,15 @@ export function FormularioEvento({
     register,
     handleSubmit,
     setError,
+    setValue,
     formState: { errors, isSubmitting },
   } = form;
+
+  /* `useWatch` e não `form.watch`: o segundo devolve uma função, que o React
+     Compiler não consegue memoizar — ele então desiste de otimizar o
+     formulário inteiro, e o ESLint acusa. Este hook devolve o valor. */
+  const missaoEscolhida = useWatch({ control, name: "missaoId" });
+  const centrosDaMissao = centros.filter((c) => c.missaoId === missaoEscolhida);
 
   async function enviar(dados: Saida) {
     const resultado = eventoId
@@ -124,7 +138,16 @@ export function FormularioEvento({
                 control={control}
                 name="missaoId"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value}
+                    onValueChange={(v) => {
+                      field.onChange(v);
+                      // O centro pertence a uma missão só, e o banco recusa a
+                      // combinação errada por FK composta. Zerar aqui evita
+                      // que o erro apareça só no Salvar, longe da causa.
+                      setValue("centroId", "");
+                    }}
+                  >
                     <SelectTrigger {...props} className="w-full">
                       <SelectValue placeholder="Escolha a missão" />
                     </SelectTrigger>
@@ -132,6 +155,48 @@ export function FormularioEvento({
                       {missoes.map((m) => (
                         <SelectItem key={m.id} value={m.id}>
                           {m.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            )}
+          </Campo>
+
+          <Campo
+            rotulo="Centro de evangelização"
+            ajuda={
+              !missaoEscolhida
+                ? "Escolha a missão primeiro."
+                : centrosDaMissao.length === 0
+                  ? "Esta missão ainda não tem centros cadastrados."
+                  : undefined
+            }
+            erro={errors.centroId?.message}
+          >
+            {(props) => (
+              <Controller
+                control={control}
+                name="centroId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ? String(field.value) : SEM_CENTRO}
+                    onValueChange={(v) =>
+                      field.onChange(v === SEM_CENTRO ? "" : v)
+                    }
+                    disabled={centrosDaMissao.length === 0}
+                  >
+                    <SelectTrigger {...props} className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SEM_CENTRO}>
+                        Diretamente na missão
+                      </SelectItem>
+                      {centrosDaMissao.map((centro) => (
+                        <SelectItem key={centro.id} value={centro.id}>
+                          {centro.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  Waypoints,
 } from "lucide-react";
 
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
@@ -101,6 +102,21 @@ export default async function PaginaVisaoGeralEvento({
                 </p>
               </div>
             </div>
+
+            {evento.centroNome ? (
+              <div className="flex gap-3">
+                <Waypoints
+                  className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                  aria-hidden
+                />
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-muted-foreground text-xs">
+                    Centro de evangelização
+                  </p>
+                  <p className="text-sm break-words">{evento.centroNome}</p>
+                </div>
+              </div>
+            ) : null}
 
             {evento.local || evento.endereco ? (
               <div className="flex gap-3">

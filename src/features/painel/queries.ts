@@ -4,6 +4,7 @@ import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { comUsuario } from "@/server/dados";
 import {
+  centrosEvangelizacao,
   eventoLancamentos,
   eventos,
   gruposOracao,
@@ -42,6 +43,7 @@ export type Resumo = {
   missoesAtivas: number;
   membros: number;
   membrosEstimados: boolean;
+  centrosAtivos: number;
   gruposAtivos: number;
   pessoasEmGrupos: number;
   acoesNoMes: number;
@@ -85,6 +87,7 @@ export async function obterResumo(missaoId?: string): Promise<Resumo> {
         missoesAtivas: 0,
         membros: 0,
         membrosEstimados: false,
+        centrosAtivos: 0,
         gruposAtivos: 0,
         pessoasEmGrupos: 0,
         acoesNoMes: 0,
@@ -96,6 +99,16 @@ export async function obterResumo(missaoId?: string): Promise<Resumo> {
         saldoNoAno: 0,
       };
     }
+
+    const [centros] = await tx
+      .select({ total: sql<number>`count(*)`.mapWith(Number) })
+      .from(centrosEvangelizacao)
+      .where(
+        and(
+          inArray(centrosEvangelizacao.missaoId, ids),
+          eq(centrosEvangelizacao.ativo, true),
+        ),
+      );
 
     const [grupos] = await tx
       .select({
@@ -188,6 +201,7 @@ export async function obterResumo(missaoId?: string): Promise<Resumo> {
       missoesAtivas: lista.length,
       membros,
       membrosEstimados: algumEstimado,
+      centrosAtivos: centros.total,
       gruposAtivos: grupos.total,
       pessoasEmGrupos: grupos.pessoas,
       acoesNoMes: doMes.total,

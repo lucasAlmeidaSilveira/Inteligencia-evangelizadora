@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -10,6 +11,7 @@ import {
   text,
   time,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -34,6 +36,18 @@ export const papelEnum = ie.enum("papel", [
   "admin",
   "responsavel",
   "auxiliar",
+]);
+
+/**
+ * Duas formas da mesma coisa: uma frente de evangelização dentro da missão.
+ *
+ * A irradiação nasce de um centro e ainda não se sustenta sozinha. Guardar a
+ * distinção — em vez de chamar as duas de "centro" — é o que deixa o
+ * coordenador ver quantas frentes já andam com as próprias pernas.
+ */
+export const tipoCentroEnum = ie.enum("tipo_centro", [
+  "centro_evangelizacao",
+  "irradiacao",
 ]);
 
 export const statusEventoEnum = ie.enum("status_evento", [
@@ -167,6 +181,59 @@ export const missaoIndicadores = ie.table(
   ],
 );
 
+/* ═══════════════════ Centros de evangelização e irradiações ═══════════════ */
+
+/**
+ * Uma frente de evangelização dentro da missão — uma "missão pequena", com os
+ * próprios grupos de oração e as próprias ações apostólicas.
+ *
+ * O vínculo dos grupos e das ações com o centro é opcional: antes desta tabela
+ * tudo pendia direto da missão, e continuar aceitando esse estado evita
+ * inventar um centro "Sede" para dado antigo que ninguém decidiu criar.
+ */
+export const centrosEvangelizacao = ie.table(
+  "centros_evangelizacao",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    missaoId: uuid("missao_id")
+      .notNull()
+      .references(() => missoes.id, { onDelete: "cascade" }),
+    nome: text("nome").notNull(),
+    tipo: tipoCentroEnum("tipo").notNull().default("centro_evangelizacao"),
+    /** Sem o default "São Paulo" que `missoes` tem: em branco aqui significa
+     *  "a mesma da missão", e um default esconderia essa diferença. */
+    cidade: text("cidade"),
+    regiao: text("regiao"),
+    endereco: text("endereco"),
+    dataFundacao: date("data_fundacao"),
+    contatoTelefone: text("contato_telefone"),
+    observacoes: text("observacoes"),
+    ativo: boolean("ativo").notNull().default(true),
+    ...auditoria,
+  },
+  (t) => [
+    index("idx_centros_missao").on(t.missaoId),
+    // Dois centros de mesmo nome na mesma missão transformam o select de
+    // grupos e ações em adivinhação. `lower()` porque "Santo Amaro" e
+    // "santo amaro" são o mesmo lugar para quem digita.
+    uniqueIndex("uq_centro_nome_por_missao").on(
+      t.missaoId,
+      sql`lower(${t.nome})`,
+    ),
+    /*
+     * Alvo do FK composto de `grupos_oracao` e `eventos`. Redundante como
+     * unicidade — a chave primária já garante —, mas o Postgres exige
+     * unicidade declarada sobre exatamente o par referenciado.
+     *
+     * `unique()` e não `uniqueIndex()`: a constraint nasce dentro do CREATE
+     * TABLE, enquanto o índice viria num CREATE INDEX que o drizzle-kit emite
+     * depois dos ALTER TABLE ADD FOREIGN KEY — e a migration falharia com
+     * "there is no unique constraint matching given keys".
+     */
+    unique("uq_centro_id_missao").on(t.id, t.missaoId),
+  ],
+);
+
 /* ═══════════════════════════ Grupos de oração ═════════════════════════════ */
 
 export const gruposOracao = ie.table(
@@ -176,6 +243,8 @@ export const gruposOracao = ie.table(
     missaoId: uuid("missao_id")
       .notNull()
       .references(() => missoes.id, { onDelete: "cascade" }),
+    /** Nulo = o grupo pende direto da missão, sem passar por centro algum. */
+    centroId: uuid("centro_id"),
     nome: text("nome").notNull(),
     quantidadePessoas: integer("quantidade_pessoas").notNull().default(0),
     /** 0 = domingo … 6 = sábado. */
@@ -190,6 +259,25 @@ export const gruposOracao = ie.table(
     check("quantidade_pessoas_nao_negativa", sql`${t.quantidadePessoas} >= 0`),
     check("dia_semana_valido", sql`${t.diaSemana} is null or ${t.diaSemana} between 0 and 6`),
     index("idx_grupos_missao").on(t.missaoId),
+    index("idx_grupos_centro").on(t.centroId),
+    /*
+     * Pelo par (centro, missão), não só pelo centro.
+     *
+     * Um FK simples deixaria um grupo da Zona Leste apontar para um centro da
+     * Zona Sul — dado de outra missão entrando por uma porta que o RLS não
+     * vigia, e sem erro nenhum. Com `missao_id` notNull e `centro_id` nulável,
+     * o MATCH SIMPLE do Postgres simplesmente não checa nada quando o centro é
+     * nulo, que é justamente o caso "diretamente na missão".
+     *
+     * Sem `onDelete`: o `no action` obriga `excluirCentro` a desvincular à
+     * vista, com o usuário sabendo quantos registros isso afeta. Um
+     * `set null` composto tentaria zerar também `missao_id`, que é notNull.
+     */
+    foreignKey({
+      columns: [t.centroId, t.missaoId],
+      foreignColumns: [centrosEvangelizacao.id, centrosEvangelizacao.missaoId],
+      name: "fk_grupos_centro_da_missao",
+    }),
   ],
 );
 
@@ -262,6 +350,8 @@ export const eventos = ie.table(
     missaoId: uuid("missao_id")
       .notNull()
       .references(() => missoes.id, { onDelete: "cascade" }),
+    /** Nulo = a ação é da missão inteira, não de um centro específico. */
+    centroId: uuid("centro_id"),
     tipoEventoId: uuid("tipo_evento_id")
       .notNull()
       // `restrict`: apagar um tipo em uso apagaria silenciosamente o histórico.
@@ -286,9 +376,17 @@ export const eventos = ie.table(
     check("participantes_nao_negativo", sql`${t.participantesTotal} >= 0`),
     check("servos_nao_negativo", sql`${t.servosEngajados} >= 0`),
     index("idx_eventos_missao").on(t.missaoId),
+    index("idx_eventos_centro").on(t.centroId),
     index("idx_eventos_tipo").on(t.tipoEventoId),
     // Consulta mais frequente do sistema: eventos de um mês no calendário.
     index("idx_eventos_periodo").on(t.dataInicio, t.dataFim),
+    // Mesmo raciocínio do FK de `grupos_oracao`: o par impede que a ação de
+    // uma missão aponte para o centro de outra.
+    foreignKey({
+      columns: [t.centroId, t.missaoId],
+      foreignColumns: [centrosEvangelizacao.id, centrosEvangelizacao.missaoId],
+      name: "fk_eventos_centro_da_missao",
+    }),
   ],
 );
 
@@ -382,10 +480,23 @@ export const usuariosRelations = relations(usuarios, ({ one }) => ({
 
 export const missoesRelations = relations(missoes, ({ many }) => ({
   usuarios: many(usuarios),
+  centros: many(centrosEvangelizacao),
   grupos: many(gruposOracao),
   eventos: many(eventos),
   indicadores: many(missaoIndicadores),
 }));
+
+export const centrosEvangelizacaoRelations = relations(
+  centrosEvangelizacao,
+  ({ one, many }) => ({
+    missao: one(missoes, {
+      fields: [centrosEvangelizacao.missaoId],
+      references: [missoes.id],
+    }),
+    grupos: many(gruposOracao),
+    eventos: many(eventos),
+  }),
+);
 
 export const missaoIndicadoresRelations = relations(
   missaoIndicadores,
@@ -404,6 +515,10 @@ export const gruposOracaoRelations = relations(
       fields: [gruposOracao.missaoId],
       references: [missoes.id],
     }),
+    centro: one(centrosEvangelizacao, {
+      fields: [gruposOracao.centroId],
+      references: [centrosEvangelizacao.id],
+    }),
     pastores: many(grupoPastores),
   }),
 );
@@ -419,6 +534,10 @@ export const eventosRelations = relations(eventos, ({ one, many }) => ({
   missao: one(missoes, {
     fields: [eventos.missaoId],
     references: [missoes.id],
+  }),
+  centro: one(centrosEvangelizacao, {
+    fields: [eventos.centroId],
+    references: [centrosEvangelizacao.id],
   }),
   tipo: one(tiposEvento, {
     fields: [eventos.tipoEventoId],
@@ -465,6 +584,7 @@ export const eventoLinksRelations = relations(eventoLinks, ({ one }) => ({
 export type Usuario = typeof usuarios.$inferSelect;
 export type Missao = typeof missoes.$inferSelect;
 export type MissaoIndicador = typeof missaoIndicadores.$inferSelect;
+export type CentroEvangelizacao = typeof centrosEvangelizacao.$inferSelect;
 export type GrupoOracao = typeof gruposOracao.$inferSelect;
 export type GrupoPastor = typeof grupoPastores.$inferSelect;
 export type TipoEvento = typeof tiposEvento.$inferSelect;
@@ -475,3 +595,4 @@ export type EventoDocumento = typeof eventoDocumentos.$inferSelect;
 export type EventoLink = typeof eventoLinks.$inferSelect;
 export type Papel = (typeof papelEnum.enumValues)[number];
 export type StatusEvento = (typeof statusEventoEnum.enumValues)[number];
+export type TipoCentro = (typeof tipoCentroEnum.enumValues)[number];

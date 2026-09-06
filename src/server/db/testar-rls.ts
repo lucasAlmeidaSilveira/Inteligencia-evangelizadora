@@ -119,6 +119,15 @@ async function principal() {
       [norte, tipos[0].id, sul],
     );
 
+    const { rows: centros } = await c.query<{ id: string }>(
+      `insert into centros_evangelizacao (missao_id, nome, tipo) values
+         ($1, 'Centro do Norte', 'centro_evangelizacao'),
+         ($2, 'Centro do Sul',   'irradiacao')
+       returning id`,
+      [norte, sul],
+    );
+    const [, centroSul] = centros.map((x) => x.id);
+
     // ─── Estrutura: um responsável por missão ───────────────────────────────
     console.log("\nEstrutura de papéis");
     conferir(
@@ -160,6 +169,52 @@ async function principal() {
 
     const eventos = await c.query("select titulo from eventos");
     conferir("enxerga só os eventos da sua missão", eventos.rowCount === 1);
+
+    const centrosVistos = await c.query("select nome from centros_evangelizacao");
+    conferir(
+      "enxerga só os centros da sua missão",
+      centrosVistos.rowCount === 1 &&
+        centrosVistos.rows[0].nome === "Centro do Norte",
+    );
+
+    /*
+     * A prova da chave composta (centro_id, missao_id).
+     *
+     * O RLS sozinho não pegaria isto: a linha inserida é da missão da Ana, e
+     * passa nas policies. O que barra é o par não existir em
+     * `centros_evangelizacao` — sem ele, um grupo do Norte passaria a apontar
+     * para um centro do Sul, e dado de outra missão entraria pela porta dos
+     * fundos, sem erro nenhum.
+     */
+    conferir(
+      "não vincula grupo da sua missão a centro de outra",
+      await deveRejeitar(
+        c,
+        `insert into grupos_oracao (missao_id, centro_id, nome)
+         values ($1, $2, 'Grupo com Centro Alheio')`,
+        [norte, centroSul],
+      ),
+    );
+
+    conferir(
+      "não vincula ação da sua missão a centro de outra",
+      await deveRejeitar(
+        c,
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
+         values ($1, $2, $3, 'Ação com Centro Alheio', now(), now() + interval '1 hour')`,
+        [norte, centroSul, tipos[0].id],
+      ),
+    );
+
+    conferir(
+      "não cadastra centro na missão alheia",
+      await deveRejeitar(
+        c,
+        `insert into centros_evangelizacao (missao_id, nome, tipo)
+         values ($1, 'Centro Invasor', 'irradiacao')`,
+        [sul],
+      ),
+    );
 
     conferir(
       "edita o cadastro da própria missão",
@@ -265,6 +320,19 @@ async function principal() {
       )),
     );
 
+    // Abrir uma frente nova é trabalho de quem está na missão, como cadastrar
+    // grupo. O que o auxiliar não faz é alterar o cadastro da missão — logo
+    // abaixo.
+    conferir(
+      "abre irradiação na própria missão",
+      !(await deveRejeitar(
+        c,
+        `insert into centros_evangelizacao (missao_id, nome, tipo)
+         values ($1, 'Irradiação do Bruno', 'irradiacao')`,
+        [norte],
+      )),
+    );
+
     conferir(
       "NÃO altera o cadastro da missão",
       (await c.query("update missoes set nome = 'Renomeada' where id = $1", [norte]))
@@ -310,6 +378,10 @@ async function principal() {
     conferir(
       "não enxerga missão alguma",
       (await c.query("select id from missoes")).rowCount === 0,
+    );
+    conferir(
+      "não enxerga centro de evangelização algum",
+      (await c.query("select id from centros_evangelizacao")).rowCount === 0,
     );
     conferir(
       "não enxerga nem as tabelas de configuração",

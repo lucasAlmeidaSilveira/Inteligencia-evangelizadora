@@ -10,11 +10,17 @@ Uma **missão** da Comunidade Católica Shalom acompanha três eixos: quantos
 apostólicas** realiza. As ações têm prestação de contas, documentos e links; os
 indicadores da missão podem ser fotografados mês a mês para gerar tendência.
 
+A missão não é um bloco só: ela se organiza em **centros de evangelização** e
+**irradiações**, frentes que funcionam como missões pequenas e sob as quais os
+grupos e as ações podem ser registrados.
+
 Vocabulário que a interface usa e o código deve seguir:
 
 | Termo | Significa | Tabela |
 |---|---|---|
 | Missão | Unidade local da Comunidade | `missoes` |
+| Centro de evangelização | Frente da missão, com grupos e ações próprios | `centros_evangelizacao` |
+| Irradiação | Frente menor, nascida de um centro — o outro valor de `tipo` | `centros_evangelizacao` |
 | Ação apostólica | O que a interface chama de evento | `eventos` |
 | Grupo de oração | Célula de oração da missão | `grupos_oracao` |
 | Pastor | Quem responde por um grupo de oração | `grupo_responsaveis` |
@@ -24,6 +30,11 @@ Vocabulário que a interface usa e o código deve seguir:
 "Pastor" e "responsável" são coisas diferentes e não devem ser trocados. A
 tabela física `grupo_responsaveis` guarda pastores: o nome ficou de quando o
 domínio dizia "responsável", e renomeá-la seria migração destrutiva sem ganho.
+
+"Centro de evangelização" nomeia ao mesmo tempo a entidade e um dos dois tipos
+dela — é assim que as missões falam, e a interface segue. O selo do tipo aparece
+sempre, nos dois valores: sem ele, "não tem selo" precisaria significar alguma
+coisa, e ninguém adivinha o quê.
 
 ## Papéis e permissões
 
@@ -36,7 +47,7 @@ Três níveis, do mais amplo ao mais restrito:
 | Editar cadastro da missão | ✓ | ✓ (a sua) | |
 | Convidar pessoas | ✓ (qualquer papel) | ✓ (auxiliares da sua missão) | |
 | Editar e excluir pessoas | ✓ (qualquer uma, menos ele mesmo) | ✓ (auxiliares da sua missão) | |
-| Grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
+| Centros, grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
 | Painel, calendário e relatórios | todas as missões (ou uma, em foco) | a sua | a sua |
 | Trocar a própria senha | ✓ | ✓ | ✓ |
 
@@ -52,7 +63,44 @@ Regras estruturais por trás disso, todas impostas pelo banco:
   convida, nunca algo herdado por omissão.
 
 O auxiliar **registra** os dados da missão; ele não altera o cadastro dela nem
-convida ninguém. É a única diferença entre ele e o responsável.
+convida ninguém. É a única diferença entre ele e o responsável. Abrir uma
+irradiação é registro, não cadastro da missão — por isso o auxiliar também faz.
+
+## Centros de evangelização
+
+Cada missão tem zero ou mais **centros de evangelização**, e cada centro tem um
+tipo: centro de evangelização ou **irradiação** — a frente menor, que nasceu de
+um centro e ainda não se sustenta sozinha. A contagem de centros ativos aparece
+no cartão da missão, na visão geral dela e no painel: é o número que diz quantas
+frentes a missão sustenta.
+
+- **O vínculo de grupos e ações com o centro é opcional.** Um grupo pode pender
+  do centro ou diretamente da missão. Antes desta divisão tudo pendia da missão,
+  e continuar aceitando esse estado evitou inventar um centro "Sede" para dado
+  antigo que ninguém decidiu criar. É também o estado real de quem ainda não
+  organizou as frentes.
+- **Um grupo ou ação nunca aponta para o centro de outra missão.** A chave
+  estrangeira é o par `(centro_id, missao_id)`, não só o centro — imposto pelo
+  banco. Com um FK simples, um grupo da Zona Leste poderia apontar para um
+  centro da Zona Sul: dado de outra missão entrando por uma porta que o RLS não
+  vigia, sem erro nenhum.
+- **Dois centros de mesmo nome na mesma missão são recusados**, sem diferenciar
+  maiúsculas (`uq_centro_nome_por_missao`, sobre `lower(nome)`). Homônimos
+  tornariam o select de grupos e ações uma adivinhação.
+- **Excluir um centro não apaga nada do que pertencia a ele.** Os grupos e as
+  ações são desvinculados e voltam a pender diretamente da missão; o diálogo de
+  confirmação diz quantos são, antes de confirmar. Para só tirar o centro das
+  contagens, o caminho é marcá-lo como inativo.
+- **Centro inativo não recebe vínculo novo**, mas quem já aponta para ele
+  continua apontando — e o formulário de edição mostra o centro atual mesmo
+  arquivado, para que salvar não o desvincule sem ninguém pedir.
+- **A lista de grupos de oração filtra por centro**, pela query string, como os
+  demais filtros. São três recortes, não dois: todos, um centro, e **os que
+  pendem diretamente da missão** — este último é onde se acha o que ainda não
+  foi organizado em frentes. Os totais do cabeçalho acompanham o recorte, e é
+  isso que responde "quantas pessoas os grupos deste centro reúnem". O filtro
+  lista também os centros arquivados: o nome deles aparece no cartão dos
+  grupos, e não poder filtrar por um nome visível seria um beco.
 
 ### Missão em foco
 

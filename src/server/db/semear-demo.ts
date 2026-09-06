@@ -82,6 +82,13 @@ const LOCAIS = [
   "Quadra da comunidade", "Capela São Pedro", "Sede da missão",
 ];
 
+/* Nomes de bairro: é assim que as missões chamam suas frentes — pelo lugar
+   onde estão, não por um santo, que já é o nome dos grupos de oração. */
+const CENTROS = [
+  "Santo Amaro", "Guaianases", "Jardim Ângela", "Cidade Tiradentes",
+  "Brasilândia", "Capão Redondo", "Itaim Paulista", "Grajaú",
+];
+
 const TITULOS = [
   "Retiro de Carnaval", "Cerco de Jericó", "Missão de Rua no centro",
   "Encontro de Casais", "Vigília de Pentecostes", "Formação de líderes",
@@ -123,8 +130,8 @@ async function principal() {
     // Limpa antes: a demonstração precisa ser reproduzível, não acumulativa.
     for (const t of [
       "evento_links", "evento_documentos", "evento_lancamentos", "eventos",
-      "grupo_responsaveis", "grupos_oracao", "missao_indicadores",
-      "usuarios", "missoes",
+      "grupo_responsaveis", "grupos_oracao", "centros_evangelizacao",
+      "missao_indicadores", "usuarios", "missoes",
     ]) {
       await c.query(`delete from ie.${t}`);
     }
@@ -156,7 +163,7 @@ async function principal() {
     const proximoNome = () => NOMES[nomeAtual++ % NOMES.length];
 
     const hoje = new Date();
-    const totais = { grupos: 0, pastores: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
+    const totais = { centros: 0, grupos: 0, pastores: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
 
     for (const [indice, missao] of MISSOES.entries()) {
       const slug = missao.nome.toLowerCase().normalize("NFD")
@@ -195,6 +202,32 @@ async function principal() {
         totais.usuarios++;
       }
 
+      // ─── Centros de evangelização ───────────────────────────────────────
+      // A primeira missão fica sem centro nenhum, de propósito: é o estado de
+      // quem ainda não organizou as frentes, e a tela precisa ficar boa nele.
+      const centros: string[] = [];
+      if (indice > 0) {
+        for (let ce = 0; ce < inteiro(1, 3); ce++) {
+          const { rows: [centro] } = await c.query<{ id: string }>(
+            `insert into centros_evangelizacao (missao_id, nome, tipo, cidade,
+                                                regiao, contato_telefone, ativo)
+             values ($1,$2,$3,$4,$5,$6,true) returning id`,
+            [criada.id, `${escolher(CENTROS)} ${ce + 1}`,
+             // Uma irradiação a cada dois centros: a mistura é o normal em
+             // campo, e é o que exercita os dois selos na tela.
+             ce % 2 === 1 ? "irradiacao" : "centro_evangelizacao",
+             missao.cidade, missao.regiao,
+             `(11) 9${inteiro(1000, 9999)}-${inteiro(1000, 9999)}`],
+          );
+          centros.push(centro.id);
+          totais.centros++;
+        }
+      }
+
+      /** Metade dos grupos e ações pendura num centro; a outra, na missão. */
+      const centroSorteado = () =>
+        centros.length > 0 && Math.random() < 0.6 ? escolher(centros) : null;
+
       // ─── Grupos de oração ───────────────────────────────────────────────
       const quantosGrupos = inteiro(3, 5);
       let pessoasEmGrupos = 0;
@@ -204,10 +237,11 @@ async function principal() {
         pessoasEmGrupos += pessoas;
 
         const { rows: [grupo] } = await c.query<{ id: string }>(
-          `insert into grupos_oracao (missao_id, nome, quantidade_pessoas, dia_semana,
-                                      horario, local, ativo)
-           values ($1,$2,$3,$4,$5,$6,true) returning id`,
-          [criada.id, `${escolher(GRUPOS)} ${g + 1}`, pessoas, inteiro(0, 6),
+          `insert into grupos_oracao (missao_id, centro_id, nome, quantidade_pessoas,
+                                      dia_semana, horario, local, ativo)
+           values ($1,$2,$3,$4,$5,$6,$7,true) returning id`,
+          [criada.id, centroSorteado(), `${escolher(GRUPOS)} ${g + 1}`, pessoas,
+           inteiro(0, 6),
            `${String(inteiro(15, 20)).padStart(2, "0")}:${escolher(["00", "30"])}`,
            escolher(LOCAIS)],
         );
@@ -265,11 +299,12 @@ async function principal() {
         const servos = participantes === 0 ? 0 : Math.max(4, Math.round(participantes / inteiro(6, 14)));
 
         const { rows: [evento] } = await c.query<{ id: string }>(
-          `insert into eventos (missao_id, tipo_evento_id, titulo, descricao, data_inicio,
-                                data_fim, local, endereco, participantes_total,
-                                servos_engajados, status)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-          [criada.id, escolher(tipos).id, `${escolher(TITULOS)} ${inicio.getFullYear()}`,
+          `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, descricao,
+                                data_inicio, data_fim, local, endereco,
+                                participantes_total, servos_engajados, status)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+          [criada.id, centroSorteado(), escolher(tipos).id,
+           `${escolher(TITULOS)} ${inicio.getFullYear()}`,
            aleatorio() > 0.5 ? "Ação voltada à evangelização e ao acolhimento da comunidade." : null,
            inicio.toISOString(), fim.toISOString(), escolher(LOCAIS),
            aleatorio() > 0.6 ? `Av. Central, ${inteiro(100, 2000)}` : null,
@@ -319,6 +354,7 @@ async function principal() {
     console.log("\n✓ Dados fictícios criados:\n");
     console.log(`  ${MISSOES.length} missões`);
     console.log(`  ${totais.usuarios} usuários (1 admin, ${MISSOES.length} responsáveis, ${totais.usuarios - MISSOES.length - 1} auxiliares)`);
+    console.log(`  ${totais.centros} centros de evangelização e irradiações`);
     console.log(`  ${totais.grupos} grupos de oração com ${totais.pastores} pastores`);
     console.log(`  ${totais.competencias} competências registradas (12 meses por missão)`);
     console.log(`  ${totais.eventos} ações apostólicas`);

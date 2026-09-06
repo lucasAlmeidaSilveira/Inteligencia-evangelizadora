@@ -9,6 +9,7 @@ import {
   Users,
   UsersRound,
   Wallet,
+  Waypoints,
 } from "lucide-react";
 
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
@@ -88,14 +89,22 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
           }
         />
         <CartaoMetrica
+          Icone={Waypoints}
+          rotulo="Centros de evangelização"
+          valor={formatarNumero(r.centrosAtivos)}
+        />
+        {/* "Pessoas em grupos" era um cartão inteiro para um número que só faz
+            sentido ao lado da contagem de grupos — como detalhe ele fica junto
+            do que qualifica, e a fileira continua com quatro. */}
+        <CartaoMetrica
           Icone={UsersRound}
           rotulo="Grupos de oração"
           valor={formatarNumero(r.gruposAtivos)}
-        />
-        <CartaoMetrica
-          Icone={UsersRound}
-          rotulo="Pessoas em grupos"
-          valor={formatarNumero(r.pessoasEmGrupos)}
+          detalhe={
+            r.pessoasEmGrupos > 0
+              ? `${formatarNumero(r.pessoasEmGrupos)} pessoas reunidas`
+              : undefined
+          }
         />
       </div>
 

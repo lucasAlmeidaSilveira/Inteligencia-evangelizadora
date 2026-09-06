@@ -30,6 +30,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
+import type { CentroParaSelecao } from "@/features/centros/queries";
+import { SEM_CENTRO } from "@/features/centros/schemas";
+
 import { atualizarGrupo, criarGrupo } from "../actions";
 import { DIAS_SEMANA, grupoSchema } from "../schemas";
 
@@ -38,6 +41,7 @@ type Saida = z.output<typeof grupoSchema>;
 
 const NOVO: Entrada = {
   nome: "",
+  centroId: "",
   quantidadePessoas: "",
   diaSemana: "",
   horario: "",
@@ -55,12 +59,14 @@ const NOVO: Entrada = {
  */
 export function DialogoGrupo({
   missaoId,
+  centros,
   grupoId,
   valores,
   aberto,
   aoFechar,
 }: {
   missaoId: string;
+  centros: CentroParaSelecao[];
   /** Ausente = novo grupo. */
   grupoId?: string;
   valores?: Entrada;
@@ -147,6 +153,47 @@ export function DialogoGrupo({
                     {...props}
                     {...register("nome")}
                     placeholder="Grupo Sagrado Coração"
+                  />
+                )}
+              </Campo>
+
+              <Campo
+                rotulo="Centro de evangelização"
+                ajuda={
+                  centros.length === 0
+                    ? "Nenhum centro cadastrado nesta missão ainda."
+                    : undefined
+                }
+                erro={errors.centroId?.message}
+                className="sm:col-span-2"
+              >
+                {(props) => (
+                  <Controller
+                    control={control}
+                    name="centroId"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : SEM_CENTRO}
+                        onValueChange={(v) =>
+                          field.onChange(v === SEM_CENTRO ? "" : v)
+                        }
+                        disabled={centros.length === 0}
+                      >
+                        <SelectTrigger {...props} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SEM_CENTRO}>
+                            Diretamente na missão
+                          </SelectItem>
+                          {centros.map((centro) => (
+                            <SelectItem key={centro.id} value={centro.id}>
+                              {centro.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   />
                 )}
               </Campo>

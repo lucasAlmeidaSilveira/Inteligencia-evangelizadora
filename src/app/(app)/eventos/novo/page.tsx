@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
+import { centrosDasMissoesVisiveis } from "@/features/centros/queries";
 import { FormularioEvento } from "@/features/eventos/components/formulario-evento";
 import {
   listarTiposEvento,
@@ -13,10 +14,11 @@ export const metadata = { title: "Nova ação apostólica" };
 export default async function PaginaNovoEvento({
   searchParams,
 }: PageProps<"/eventos/novo">) {
-  const [parametros, missoes, tipos] = await Promise.all([
+  const [parametros, missoes, tipos, centros] = await Promise.all([
     searchParams,
     missoesDisponiveis(),
     listarTiposEvento(),
+    centrosDasMissoesVisiveis(),
   ]);
 
   // Sem missão cadastrada não há o que vincular; sem tipo, nada a escolher.
@@ -43,9 +45,11 @@ export default async function PaginaNovoEvento({
       />
       <FormularioEvento
         missoes={missoes}
+        centros={centros}
         tipos={tipos}
         valores={{
           missaoId: missaoSugerida,
+          centroId: "",
           tipoEventoId: tipos[0]?.id ?? "",
           titulo: "",
           descricao: "",

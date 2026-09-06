@@ -4,6 +4,11 @@ config({ path: ".env.local" });
 
 import type { z } from "zod";
 
+import {
+  centroSchema,
+  lerFiltroDeCentro,
+  SEM_CENTRO,
+} from "@/features/centros/schemas";
 import { grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
@@ -140,10 +145,58 @@ recusar(
 );
 
 verificar(
+  "Centro de evangelização — apenas nome e tipo",
+  centroSchema,
+  {
+    nome: "Centro Santo Amaro",
+    tipo: "centro_evangelizacao",
+    cidade: "",
+    regiao: "",
+    endereco: "",
+    dataFundacao: "",
+    contatoTelefone: "",
+    observacoes: "",
+    ativo: true,
+  },
+  "só os campos obrigatórios",
+);
+
+verificar(
+  "Centro de evangelização — irradiação completa",
+  centroSchema,
+  {
+    nome: "Irradiação Guaianases",
+    tipo: "irradiacao",
+    cidade: "São Paulo",
+    regiao: "Zona Leste",
+    endereco: "Rua das Palmeiras, 45",
+    dataFundacao: "2019-08-04",
+    contatoTelefone: "(11) 90000-0000",
+    observacoes: "Nasceu do Centro Santo Amaro.",
+    ativo: true,
+  },
+  "formulário completo",
+);
+
+recusar(
+  "Centro de evangelização — tipo inventado",
+  centroSchema,
+  {
+    nome: "Centro Estranho",
+    // Nem "centro" nem "irradiação": o enum do banco recusaria de qualquer
+    // forma, mas com a mensagem crua do Postgres.
+    tipo: "paroquia",
+    ativo: true,
+  },
+  "tipo",
+);
+
+verificar(
   "Grupo de oração — mínimo",
   grupoSchema,
   {
     nome: "Grupo Teste",
+    centroId: "",
     quantidadePessoas: "",
     diaSemana: "",
     horario: "",
@@ -160,6 +213,8 @@ verificar(
   grupoSchema,
   {
     nome: "Grupo Cheio",
+    // Vínculo com centro: o uuid precisa atravessar as duas passagens intacto.
+    centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
     quantidadePessoas: "18",
     diaSemana: "3",
     horario: "19:30",
@@ -239,6 +294,25 @@ ok(
   csv.includes('"Missão ""Aparecida""; Zona Leste"'),
 );
 ok("quebra de linha CRLF", csv.split("\r\n").length > 4);
+
+/* O `?centro=` da lista de grupos vem da URL, que qualquer um edita. Um valor
+   que não é uuid nem o sentinela chegaria ao banco como comparação com coluna
+   `uuid` e derrubaria a página com "invalid input syntax for type uuid" — daí
+   estes casos serem teste, e não confiança. */
+console.log("\nFiltro de centro na URL");
+const UUID = "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21";
+ok("uuid passa", lerFiltroDeCentro(UUID) === UUID);
+ok(
+  "o sentinela de 'sem centro' passa",
+  lerFiltroDeCentro(SEM_CENTRO) === SEM_CENTRO,
+);
+ok("texto qualquer vira ausência de filtro", lerFiltroDeCentro("lixo") === undefined);
+ok("vazio vira ausência de filtro", lerFiltroDeCentro("") === undefined);
+ok("ausente vira ausência de filtro", lerFiltroDeCentro(undefined) === undefined);
+ok(
+  "lista de valores repetidos vira ausência de filtro",
+  lerFiltroDeCentro([UUID, UUID]) === undefined,
+);
 
 if (falhas) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam.\n`);

@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   UsersRound,
+  Waypoints,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,7 +36,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatarNumero } from "@/lib/format";
 
+import type { CentroParaSelecao } from "@/features/centros/queries";
+
 import { excluirGrupo } from "../actions";
+import { FiltrosGrupos } from "./filtros-grupos";
 import type { GrupoListado } from "../queries";
 import { nomeDoDia } from "../schemas";
 import { DialogoGrupo } from "./dialogo-grupo";
@@ -44,6 +48,7 @@ import { DialogoGrupo } from "./dialogo-grupo";
 function paraFormulario(grupo: GrupoListado) {
   return {
     nome: grupo.nome,
+    centroId: grupo.centroId ?? "",
     quantidadePessoas: grupo.quantidadePessoas,
     diaSemana: grupo.diaSemana === null ? "" : String(grupo.diaSemana),
     // O Postgres devolve `time` como "19:30:00"; o input espera "19:30".
@@ -60,13 +65,33 @@ function paraFormulario(grupo: GrupoListado) {
 
 export function ListaGrupos({
   missaoId,
+  centros,
   grupos,
+  filtrado = false,
 }: {
   missaoId: string;
+  /** Todos os centros da missão, inclusive os arquivados — o filtro precisa
+   *  deles. O diálogo recebe só os ativos. */
+  centros: CentroParaSelecao[];
   grupos: GrupoListado[];
+  /** Há recorte por centro na URL: muda o que dizer quando a lista vem vazia. */
+  filtrado?: boolean;
 }) {
   const router = useRouter();
   const [excluindo, iniciarExclusao] = useTransition();
+
+  // Centro arquivado não recebe vínculo novo, mas continua filtrável.
+  const centrosAtivos = centros.filter((c) => c.ativo);
+
+  /** Os ativos, mais o centro do próprio grupo quando ele já está arquivado. */
+  function centrosParaEditar(grupo: GrupoListado) {
+    const proprio = centros.find(
+      (c) => c.id === grupo.centroId && !c.ativo,
+    );
+    return proprio
+      ? [...centrosAtivos, { ...proprio, nome: `${proprio.nome} (inativo)` }]
+      : centrosAtivos;
+  }
 
   const [emEdicao, setEmEdicao] = useState<GrupoListado | null>(null);
   const [criando, setCriando] = useState(false);
@@ -96,7 +121,9 @@ export function ListaGrupos({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground text-sm">
           {grupos.length === 0
-            ? "Nenhum grupo cadastrado."
+            ? filtrado
+              ? "Nenhum grupo neste recorte."
+              : "Nenhum grupo cadastrado."
             : `${formatarNumero(ativos.length)} grupo(s) ativo(s) reunindo ${formatarNumero(pessoas)} pessoas.`}
         </p>
         <Button className="cursor-pointer" onClick={() => setCriando(true)}>
@@ -105,17 +132,38 @@ export function ListaGrupos({
         </Button>
       </div>
 
+      {/* Só aparece quando há o que escolher: com a missão sem centro algum, o
+          select traria "todos" e "diretamente na missão" — duas maneiras de
+          dizer a mesma coisa. */}
+      {centros.length > 0 ? <FiltrosGrupos centros={centros} /> : null}
+
       {grupos.length === 0 ? (
-        <EstadoVazio
-          Icone={UsersRound}
-          titulo="Nenhum grupo de oração"
-          descricao="Cadastre os grupos da missão com seus pastores. O total de pessoas reunidas passa a aparecer nos indicadores."
-        >
-          <Button className="cursor-pointer" onClick={() => setCriando(true)}>
-            <Plus aria-hidden />
-            Cadastrar grupo
-          </Button>
-        </EstadoVazio>
+        filtrado ? (
+          <EstadoVazio
+            Icone={UsersRound}
+            titulo="Nenhum grupo neste centro"
+            descricao="Nenhum grupo de oração corresponde ao centro escolhido. Limpe o filtro para ver todos os grupos da missão, ou cadastre um grupo já vinculado a ele."
+          >
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => router.push(`/missoes/${missaoId}/grupos`)}
+            >
+              Limpar filtro
+            </Button>
+          </EstadoVazio>
+        ) : (
+          <EstadoVazio
+            Icone={UsersRound}
+            titulo="Nenhum grupo de oração"
+            descricao="Cadastre os grupos da missão com seus pastores. O total de pessoas reunidas passa a aparecer nos indicadores."
+          >
+            <Button className="cursor-pointer" onClick={() => setCriando(true)}>
+              <Plus aria-hidden />
+              Cadastrar grupo
+            </Button>
+          </EstadoVazio>
+        )
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {grupos.map((grupo) => {
@@ -138,6 +186,12 @@ export function ListaGrupos({
                       <p className="text-muted-foreground text-sm">
                         {formatarNumero(grupo.quantidadePessoas)} pessoas
                       </p>
+                      {grupo.centroNome ? (
+                        <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                          <Waypoints className="size-3.5 shrink-0" aria-hidden />
+                          {grupo.centroNome}
+                        </p>
+                      ) : null}
                     </div>
 
                     <DropdownMenu>
@@ -215,6 +269,7 @@ export function ListaGrupos({
       {criando ? (
         <DialogoGrupo
           missaoId={missaoId}
+          centros={centrosAtivos}
           aberto
           aoFechar={() => setCriando(false)}
         />
@@ -226,6 +281,11 @@ export function ListaGrupos({
           // valores certos — sem efeito de reset.
           key={emEdicao.id}
           missaoId={missaoId}
+          // O centro do grupo pode estar arquivado, e arquivado não entra na
+          // lista de escolha. Sem devolvê-lo aqui, o select abriria em
+          // "Diretamente na missão" e salvar desvincularia o grupo sem
+          // ninguém pedir.
+          centros={centrosParaEditar(emEdicao)}
           grupoId={emEdicao.id}
           valores={paraFormulario(emEdicao)}
           aberto

@@ -81,7 +81,17 @@ plantados por quem a invoca.
 
 `politicas.sql` é **idempotente de propósito**: reaplicado a cada
 `pnpm db:migrate`, acompanha mudanças de schema sem exigir uma migration por
-policy.
+policy. **Tabela nova exige três edições nele**: os dois arrays do topo — o do
+trigger de `atualizado_em` e o do `enable/force row level security` — e a
+policy em si. Esquecer o segundo array deixa a tabela sem RLS nenhum, e nada
+na tela denuncia.
+
+**Nem toda regra de isolamento cabe numa policy.** `centros_evangelizacao` tem
+a policy de escopo como as demais, mas o que impede um grupo de apontar para o
+centro de outra missão é uma chave estrangeira sobre o par
+`(centro_id, missao_id)`: a linha inserida seria da missão de quem escreve, e
+passaria em qualquer policy. Quando a regra é sobre a *combinação* de duas
+colunas, o lugar dela é uma constraint.
 
 ## Organização do código
 
@@ -90,7 +100,7 @@ src/
 ├─ app/
 │  ├─ (auth)/login/          entrada
 │  ├─ (app)/                 área autenticada (shell + páginas)
-│  │  ├─ missoes/            missões, grupos de oração, indicadores
+│  │  ├─ missoes/            missões, centros, grupos de oração, indicadores
 │  │  ├─ eventos/            ações apostólicas: geral, financeiro, documentos, links
 │  │  ├─ calendario/         grade mensal
 │  │  ├─ relatorios/         consolidações + exportação CSV

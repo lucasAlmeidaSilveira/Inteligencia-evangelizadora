@@ -43,6 +43,11 @@ export function traduzirErroDeBanco(erro: unknown): string {
   const restricao = (erro as { constraint?: string })?.constraint ?? "";
 
   if (codigo === "23505") {
+    // Antes do ramo genérico de "nome": aqui o conflito é dentro de uma missão,
+    // e dizer isso poupa o usuário de procurar o homônimo nas outras.
+    if (restricao.includes("centro_nome_por_missao")) {
+      return "Esta missão já tem um centro com esse nome.";
+    }
     if (restricao.includes("slug") || restricao.includes("nome")) {
       return "Já existe um registro com esse nome.";
     }
@@ -80,6 +85,11 @@ export function traduzirErroDeBanco(erro: unknown): string {
   if (codigo === "23503") {
     if (restricao.includes("usuarios_missao_id")) {
       return "Esta missão ainda tem usuários vinculados. Transfira ou desative essas pessoas antes de excluí-la.";
+    }
+    // A chave composta (centro, missão) barrou a combinação: o centro
+    // escolhido pertence a outra missão.
+    if (restricao.includes("centro_da_missao")) {
+      return "Esse centro não é desta missão. Escolha outro ou deixe em branco.";
     }
     return "Este registro está vinculado a outros e não pode ser removido.";
   }

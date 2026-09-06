@@ -7,6 +7,7 @@ import { comUsuario } from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
 import {
   categoriasFinanceiras,
+  centrosEvangelizacao,
   eventoDocumentos,
   eventoLancamentos,
   eventoLinks,
@@ -62,6 +63,12 @@ const colunas = {
   id: eventos.id,
   missaoId: eventos.missaoId,
   missaoNome: missoes.nome,
+  centroId: eventos.centroId,
+  /* Nome pelo JOIN, não copiado: renomear o centro renomeia aqui junto.
+     `leftJoin` porque o vínculo é opcional — com `inner` sumiriam da lista
+     todas as ações que pendem direto da missão. */
+  centroNome: centrosEvangelizacao.nome,
+  centroTipo: centrosEvangelizacao.tipo,
   tipoEventoId: eventos.tipoEventoId,
   tipoNome: tiposEvento.nome,
   tipoCor: tiposEvento.cor,
@@ -92,6 +99,10 @@ export async function listarEventos(filtros: FiltrosEvento = {}) {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+      .leftJoin(
+        centrosEvangelizacao,
+        eq(centrosEvangelizacao.id, eventos.centroId),
+      )
       .where(condicoes.length ? and(...condicoes) : undefined)
       .orderBy(desc(eventos.dataInicio));
 
@@ -121,6 +132,10 @@ export const obterEvento = cache(async (id: string) => {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+      .leftJoin(
+        centrosEvangelizacao,
+        eq(centrosEvangelizacao.id, eventos.centroId),
+      )
       .where(eq(eventos.id, id))
       .limit(1);
 
@@ -247,6 +262,10 @@ export const obterEventoCompleto = cache(async (id: string) => {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+      .leftJoin(
+        centrosEvangelizacao,
+        eq(centrosEvangelizacao.id, eventos.centroId),
+      )
       .where(eq(eventos.id, id))
       .limit(1);
 

@@ -13,8 +13,13 @@ export function NavAbas({ missaoId }: { missaoId: string }) {
   const caminho = usePathname();
   const base = `/missoes/${missaoId}`;
 
+  /* "Centros" vem antes de "Grupos de oração" porque é o centro que contém os
+     grupos. O rótulo é curto de propósito: escrito por extenso, ele empurra
+     "Indicadores" para fora da tela no celular — e o termo completo aparece no
+     título da aba e no estado vazio, que é onde ele ensina. */
   const abas = [
     { rotulo: "Visão geral", href: base },
+    { rotulo: "Centros", href: `${base}/centros` },
     { rotulo: "Grupos de oração", href: `${base}/grupos` },
     { rotulo: "Indicadores", href: `${base}/indicadores` },
   ];

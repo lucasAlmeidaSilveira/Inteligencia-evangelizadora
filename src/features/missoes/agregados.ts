@@ -1,9 +1,14 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { Transacao } from "@/server/db/index";
-import { eventos, gruposOracao } from "@/server/db/schema";
+import {
+  centrosEvangelizacao,
+  eventos,
+  gruposOracao,
+} from "@/server/db/schema";
 
 export type Agregados = {
+  centrosAtivos: number;
   gruposAtivos: number;
   pessoasEmGrupos: number;
   eventosTotal: number;
@@ -29,6 +34,7 @@ export function membrosDaMissao(
 }
 
 export const ZERADO: Agregados = {
+  centrosAtivos: 0,
   gruposAtivos: 0,
   pessoasEmGrupos: 0,
   eventosTotal: 0,
@@ -36,7 +42,7 @@ export const ZERADO: Agregados = {
 };
 
 /**
- * Números derivados de cada missão, em duas consultas agregadas.
+ * Números derivados de cada missão, em três consultas agregadas.
  *
  * Cada consulta tem uma única tabela no FROM — de propósito. Uma subconsulta
  * correlacionada escrita em `sql` bruto referencia a tabela externa sem
@@ -57,6 +63,24 @@ export async function agregadosPorMissao(tx: Transacao, missaoIds: string[]) {
     mapa.set(id, novo);
     return novo;
   };
+
+  const centros = await tx
+    .select({
+      missaoId: centrosEvangelizacao.missaoId,
+      total: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(centrosEvangelizacao)
+    .where(
+      and(
+        inArray(centrosEvangelizacao.missaoId, missaoIds),
+        eq(centrosEvangelizacao.ativo, true),
+      ),
+    )
+    .groupBy(centrosEvangelizacao.missaoId);
+
+  for (const linha of centros) {
+    obter(linha.missaoId).centrosAtivos = linha.total;
+  }
 
   const grupos = await tx
     .select({

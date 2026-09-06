@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { centroIdOpcional } from "@/features/centros/schemas";
+
 /** Idempotente: aceita "" do formulário e null da revalidação no servidor. */
 const opcional = (max: number) =>
   z
@@ -33,6 +35,9 @@ export const STATUS_EVENTO = [
 export const eventoSchema = z
   .object({
     missaoId: z.uuid("Escolha a missão."),
+    /** Opcional: sem centro, a ação é da missão inteira. O banco ainda impõe,
+     *  por FK composta, que o centro escolhido seja da missão escolhida. */
+    centroId: centroIdOpcional,
     tipoEventoId: z.uuid("Escolha o tipo da ação."),
     titulo: z
       .string()

@@ -52,8 +52,10 @@ export function EsqueletoCartoes({
               <Skeleton className="h-5 w-40" />
               <Skeleton className="h-4 w-28" />
             </div>
-            <div className="grid grid-cols-3 gap-4 border-t pt-4">
-              {Array.from({ length: 3 }, (_, j) => (
+            {/* Espelha a grade 2×2 do CartaoMissao: quatro métricas em duas
+                colunas. Mudar uma das duas faz a página saltar. */}
+            <div className="grid grid-cols-2 gap-4 border-t pt-4">
+              {Array.from({ length: 4 }, (_, j) => (
                 <div key={j} className="space-y-1.5">
                   <Skeleton className="h-3 w-14" />
                   <Skeleton className="h-6 w-10" />

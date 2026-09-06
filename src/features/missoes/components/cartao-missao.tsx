@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { CalendarDays, MapPin, Users, UsersRound } from "lucide-react";
+import {
+  CalendarDays,
+  MapPin,
+  Users,
+  UsersRound,
+  Waypoints,
+} from "lucide-react";
 
 import { formatarNumero } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -63,11 +69,19 @@ export function CartaoMissao({ missao }: { missao: MissaoListada }) {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-3 gap-4 border-t pt-4">
+        {/* Duas colunas, não quatro: no cartão mais estreito da lista (três por
+            fileira em telas largas) quatro colunas espremem "Membros ~" a
+            ponto de truncar o rótulo. */}
+        <div className="grid grid-cols-2 gap-4 border-t pt-4">
           <Metrica
             Icone={Users}
             rotulo={missao.membrosEstimados ? "Membros ~" : "Membros"}
             valor={formatarNumero(missao.membrosExibidos)}
+          />
+          <Metrica
+            Icone={Waypoints}
+            rotulo="Centros"
+            valor={formatarNumero(missao.centrosAtivos)}
           />
           <Metrica
             Icone={UsersRound}

@@ -9,6 +9,7 @@ import {
   User,
   Users,
   UsersRound,
+  Waypoints,
 } from "lucide-react";
 
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
@@ -57,7 +58,11 @@ export default async function PaginaVisaoGeral({
     missao.responsavel ||
     missao.contatoTelefone ||
     missao.endereco ||
-    missao.dataFundacao;
+    missao.dataFundacao ||
+    // A próxima ação mora neste card desde que "Centros" tomou o lugar dela
+    // entre as métricas. Sem esta condição, numa missão sem nenhum dado de
+    // cadastro o card não renderiza e a próxima ação some da tela.
+    missao.proximoEvento;
 
   return (
     <div className="space-y-6">
@@ -87,6 +92,14 @@ export default async function PaginaVisaoGeral({
               : undefined
           }
         />
+        {/* Centros toma o lugar de "Próxima ação", que desceu para o card de
+            dados: é uma data, não uma contagem, e ali fica entre iguais. Um
+            quinto cartão abriria uma fileira com um item só. */}
+        <CartaoMetrica
+          Icone={Waypoints}
+          rotulo="Centros de evangelização"
+          valor={formatarNumero(missao.centrosAtivos)}
+        />
         <CartaoMetrica
           Icone={UsersRound}
           rotulo="Grupos de oração"
@@ -101,20 +114,6 @@ export default async function PaginaVisaoGeral({
           Icone={Sparkles}
           rotulo="Ações apostólicas"
           valor={formatarNumero(missao.eventosTotal)}
-        />
-        <CartaoMetrica
-          Icone={CalendarDays}
-          rotulo="Próxima ação"
-          valor={
-            missao.proximoEvento
-              ? formatarData(missao.proximoEvento)
-              : "Nenhuma"
-          }
-          detalhe={
-            missao.proximoEvento
-              ? formatarRelativo(missao.proximoEvento)
-              : "Sem eventos futuros agendados"
-          }
         />
       </div>
 
@@ -151,6 +150,15 @@ export default async function PaginaVisaoGeral({
                 Icone={MapPin}
                 rotulo="Endereço"
                 valor={missao.endereco}
+              />
+              <Linha
+                Icone={Sparkles}
+                rotulo="Próxima ação"
+                valor={
+                  missao.proximoEvento
+                    ? `${formatarData(missao.proximoEvento)} — ${formatarRelativo(missao.proximoEvento)}`
+                    : null
+                }
               />
             </CardContent>
           </Card>

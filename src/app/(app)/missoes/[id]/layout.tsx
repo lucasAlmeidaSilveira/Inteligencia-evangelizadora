@@ -91,7 +91,7 @@ function CabecalhoCarregando() {
         </div>
         <Skeleton className="h-9 w-24 shrink-0" />
       </div>
-      <EsqueletoAbas quantidade={3} />
+      <EsqueletoAbas quantidade={4} />
     </>
   );
 }

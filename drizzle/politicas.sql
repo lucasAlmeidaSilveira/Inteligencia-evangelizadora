@@ -112,8 +112,9 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'usuarios', 'missoes', 'missao_indicadores', 'grupos_oracao',
-    'tipos_evento', 'categorias_financeiras', 'eventos', 'evento_lancamentos'
+    'usuarios', 'missoes', 'missao_indicadores', 'centros_evangelizacao',
+    'grupos_oracao', 'tipos_evento', 'categorias_financeiras', 'eventos',
+    'evento_lancamentos'
   ] loop
     execute format('drop trigger if exists trg_%1$s_atualizado_em on ie.%1$I', t);
     execute format(
@@ -131,7 +132,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'usuarios', 'missoes', 'missao_indicadores',
+    'usuarios', 'missoes', 'missao_indicadores', 'centros_evangelizacao',
     'grupos_oracao', 'grupo_responsaveis', 'tipos_evento',
     'categorias_financeiras', 'eventos', 'evento_lancamentos',
     'evento_documentos', 'evento_links'
@@ -210,6 +211,17 @@ create policy missao_indicadores_escopo on ie.missao_indicadores for all
   using (ie.tem_acesso_missao(missao_id))
   with check (ie.tem_acesso_missao(missao_id));
 
+/* O centro é estrutura da missão, mas quem a monta é quem está lá dentro: o
+   auxiliar abre uma irradiação nova como abre um grupo de oração. O que ele
+   não faz — alterar o cadastro da própria missão — continua fora. */
+drop policy if exists centros_evangelizacao_escopo on ie.centros_evangelizacao;
+create policy centros_evangelizacao_escopo on ie.centros_evangelizacao for all
+  using (ie.tem_acesso_missao(missao_id))
+  with check (ie.tem_acesso_missao(missao_id));
+
+/* Grupos e ações não ganham policy por causa do centro: continuam filtrados
+   por `missao_id`, e o FK composto (centro_id, missao_id) impede que apontem
+   para um centro de outra missão. */
 drop policy if exists grupos_oracao_escopo on ie.grupos_oracao;
 create policy grupos_oracao_escopo on ie.grupos_oracao for all
   using (ie.tem_acesso_missao(missao_id))

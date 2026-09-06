@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
+import { centrosDasMissoesVisiveis } from "@/features/centros/queries";
 import { FormularioEvento } from "@/features/eventos/components/formulario-evento";
 import {
   listarTiposEvento,
@@ -15,10 +16,11 @@ export default async function PaginaEditarEvento({
   params,
 }: PageProps<"/eventos/[id]/editar">) {
   const { id } = await params;
-  const [evento, missoes, tipos] = await Promise.all([
+  const [evento, missoes, tipos, centros] = await Promise.all([
     obterEvento(id),
     missoesDisponiveis(),
     listarTiposEvento(),
+    centrosDasMissoesVisiveis(),
   ]);
 
   if (!evento) notFound();
@@ -29,9 +31,30 @@ export default async function PaginaEditarEvento({
       <FormularioEvento
         eventoId={evento.id}
         missoes={missoes}
+        // O centro da ação pode estar arquivado e fora da lista; sem
+        // acrescentá-lo, o select abriria em "Diretamente na missão" e
+        // salvaria a ação desvinculada sem ninguém pedir.
+        centros={
+          evento.centroId &&
+          evento.centroNome &&
+          evento.centroTipo &&
+          !centros.some((c) => c.id === evento.centroId)
+            ? [
+                ...centros,
+                {
+                  id: evento.centroId,
+                  missaoId: evento.missaoId,
+                  nome: `${evento.centroNome} (inativo)`,
+                  tipo: evento.centroTipo,
+                  ativo: false,
+                },
+              ]
+            : centros
+        }
         tipos={tipos}
         valores={{
           missaoId: evento.missaoId,
+          centroId: evento.centroId ?? "",
           tipoEventoId: evento.tipoEventoId,
           titulo: evento.titulo,
           descricao: evento.descricao ?? "",
