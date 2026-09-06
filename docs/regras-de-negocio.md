@@ -35,6 +35,7 @@ Três níveis, do mais amplo ao mais restrito:
 | Tipos de ação e categorias financeiras | ✓ | | |
 | Editar cadastro da missão | ✓ | ✓ (a sua) | |
 | Convidar pessoas | ✓ (qualquer papel) | ✓ (auxiliares da sua missão) | |
+| Editar e excluir pessoas | ✓ (qualquer uma, menos ele mesmo) | ✓ (auxiliares da sua missão) | |
 | Grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
 | Painel, calendário e relatórios | todas as missões | a sua | a sua |
 | Trocar a própria senha | ✓ | ✓ | ✓ |
@@ -70,13 +71,19 @@ Detalhes que sustentam esse fluxo:
   o convite apenas vincula, não cria de novo.
 - **Papel e missão vindos do formulário só valem para o admin master.** Para o
   responsável, os dois são impostos no servidor: auxiliar, na missão dele.
-- **Ninguém altera o próprio papel nem remove o próprio acesso.** Trancar-se
-  para fora seria irreversível pela interface — sem admin ativo, ninguém
-  devolve acesso a ninguém.
+- **Ninguém altera o próprio papel, remove o próprio acesso nem se exclui.**
+  Trancar-se para fora seria irreversível pela interface — sem admin ativo,
+  ninguém devolve acesso a ninguém.
 - **`pnpm admin:criar` existe só para o primeiro acesso**, o problema do ovo e
   da galinha. Não há cadastro público em lugar nenhum.
 - **Desativar alguém (`ativo = false`) surte efeito na requisição seguinte**,
   porque `ativo` é lido do banco a cada carregamento de sessão.
+- **Excluir apaga a linha em `usuarios` e a conta no Firebase, e é
+  definitivo.** O que a pessoa registrou permanece — as colunas de autoria são
+  `on delete set null` —, só perde o nome de quem registrou. Por isso a
+  interface oferece desativar como alternativa: excluir é para quem foi
+  cadastrado por engano; desativar, para quem saiu da missão e cujo trabalho
+  deve continuar identificado.
 - **Missão arquivada tranca quem depende dela.** Sem isso, desativar uma
   missão deixaria seus responsáveis navegando num sistema vazio sem entender
   por quê.

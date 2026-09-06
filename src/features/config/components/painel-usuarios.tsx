@@ -8,6 +8,7 @@ import {
   KeyRound,
   LoaderCircle,
   Pencil,
+  Trash2,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -15,6 +16,16 @@ import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,7 +49,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { formatarRelativo } from "@/lib/format";
 
-import { atualizarUsuario, convidarUsuario, gerarLinkDeSenha } from "../actions";
+import {
+  atualizarUsuario,
+  convidarUsuario,
+  excluirUsuario,
+  gerarLinkDeSenha,
+} from "../actions";
 import type { MissaoVinculo, UsuarioConfig } from "../queries";
 import { papeisDisponiveis, ROTULO_PAPEL } from "../schemas";
 
@@ -366,10 +382,13 @@ export function PainelUsuarios({
   missoes: MissaoVinculo[];
   quemConvida: QuemConvida;
 }) {
+  const router = useRouter();
   const [editando, setEditando] = useState<UsuarioConfig | null>(null);
   const [convidando, setConvidando] = useState(false);
+  const [paraExcluir, setParaExcluir] = useState<UsuarioConfig | null>(null);
   const [link, setLink] = useState<{ link: string; email: string } | null>(null);
   const [gerando, iniciar] = useTransition();
+  const [excluindo, iniciarExclusao] = useTransition();
 
   function novoLink(usuario: UsuarioConfig) {
     iniciar(async () => {
@@ -379,6 +398,22 @@ export function PainelUsuarios({
         return;
       }
       setLink(resultado.dados as { link: string; email: string });
+    });
+  }
+
+  function confirmarExclusao() {
+    if (!paraExcluir) return;
+    const alvo = paraExcluir;
+
+    iniciarExclusao(async () => {
+      const resultado = await excluirUsuario(alvo.id);
+      if (!resultado.ok) {
+        toast.error(resultado.erro);
+        return;
+      }
+      toast.success(`${alvo.nome} foi removido da equipe`);
+      setParaExcluir(null);
+      router.refresh();
     });
   }
 
@@ -485,6 +520,21 @@ export function PainelUsuarios({
                       >
                         <Pencil className="size-4" aria-hidden />
                       </Button>
+                      {/* Excluir a si mesmo é irreversível pela interface; o
+                          servidor recusa de qualquer forma, esconder explica
+                          antes de a pessoa tentar. */}
+                      {!souEu ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive cursor-pointer"
+                          aria-label={`Excluir ${usuario.nome}`}
+                          title="Remover da equipe"
+                          onClick={() => setParaExcluir(usuario)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                 </CardContent>
@@ -522,6 +572,40 @@ export function PainelUsuarios({
           aoFechar={() => setLink(null)}
         />
       ) : null}
+
+      <AlertDialog
+        open={Boolean(paraExcluir)}
+        onOpenChange={(v) => !v && setParaExcluir(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remover {paraExcluir?.nome} da equipe?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              O acesso é apagado definitivamente, junto com a conta de login. O
+              que a pessoa registrou continua no sistema, mas sem o nome de quem
+              registrou. Para só tirar o acesso e preservar essa autoria,
+              prefira editar e desligar &ldquo;Acesso liberado&rdquo;.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer" disabled={excluindo}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmarExclusao();
+              }}
+              disabled={excluindo}
+              className="bg-destructive hover:bg-destructive/90 cursor-pointer text-white"
+            >
+              {excluindo ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

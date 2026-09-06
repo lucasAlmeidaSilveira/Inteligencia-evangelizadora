@@ -18,6 +18,7 @@ const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
 
 function revalidar() {
   revalidatePath("/config", "layout");
+  revalidatePath("/equipe");
   revalidatePath("/eventos", "layout");
   revalidatePath("/calendario");
   revalidatePath("/");
@@ -265,6 +266,59 @@ export async function atualizarUsuario(id: string, entrada: unknown) {
       );
     }
     if (resultado === "ausente") return falha("Usuário não encontrado.");
+
+    revalidar();
+    return sucesso();
+  } catch (erro) {
+    return tratar(erro);
+  }
+}
+
+/**
+ * Remove alguém da equipe: apaga a linha em `usuarios` e a conta no Firebase.
+ *
+ * O histórico permanece. As colunas de autoria — quem registrou o indicador,
+ * quem criou a ação, quem enviou o documento — são `on delete set null`, então
+ * os registros continuam existindo sem o nome de quem os fez. Quem quiser
+ * preservar a autoria deve desativar a pessoa (`ativo = false`), que bloqueia
+ * a entrada do mesmo jeito.
+ */
+export async function excluirUsuario(id: string) {
+  try {
+    const resultado = await comUsuario(async (tx, usuario) => {
+      if (!usuario.podeConvidar) throw new Error(SO_QUEM_CONVIDA);
+
+      // Trancar-se para fora é irreversível pela interface: sem nenhum admin
+      // ativo, ninguém consegue devolver acesso a ninguém.
+      if (id === usuario.id) return "propria-conta" as const;
+
+      // Nada de filtrar por papel ou missão aqui: o RLS já recorta o alcance
+      // do responsável aos auxiliares da própria missão, e a linha de outra
+      // missão simplesmente não existe para esta consulta.
+      const [removido] = await tx
+        .delete(usuarios)
+        .where(eq(usuarios.id, id))
+        .returning({ firebaseUid: usuarios.firebaseUid });
+
+      return removido ? { firebaseUid: removido.firebaseUid } : null;
+    });
+
+    if (resultado === "propria-conta") {
+      return falha(
+        "Você não pode excluir o próprio acesso. Peça a outro administrador.",
+      );
+    }
+    if (!resultado) return falha("Usuário não encontrado.");
+
+    // Fora da transação: a exclusão no banco já é definitiva, e uma falha do
+    // Firebase não deve desfazê-la. A conta órfã que sobra é inofensiva —
+    // entrar depende da linha em `usuarios`, que não existe mais — e um novo
+    // convite para o mesmo e-mail a reaproveita.
+    await (await adminAuth())
+      .deleteUser(resultado.firebaseUid)
+      .catch((erro) =>
+        console.error("Conta órfã no Firebase:", resultado.firebaseUid, erro),
+      );
 
     revalidar();
     return sucesso();

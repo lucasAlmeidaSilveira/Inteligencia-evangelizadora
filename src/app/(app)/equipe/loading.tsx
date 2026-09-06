@@ -17,6 +17,7 @@ export default function Carregando() {
               </div>
               <Skeleton className="size-9 shrink-0" />
               <Skeleton className="size-9 shrink-0" />
+              <Skeleton className="size-9 shrink-0" />
             </CardContent>
           </Card>
         ))}

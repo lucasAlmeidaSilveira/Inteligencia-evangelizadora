@@ -51,10 +51,14 @@ export function SidebarApp({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="h-16 justify-center px-4">
+      {/* Recolhida, a barra tem 3rem: o px-4 não deixaria os 2rem do bloco
+          caberem. O px-2 é a mesma margem dos itens de menu, então o
+          monograma cai no eixo vertical dos ícones de baixo. */}
+      <SidebarHeader className="h-16 justify-center px-4 group-data-[collapsible=icon]:px-2">
         <Link
           href="/"
-          className="flex items-center gap-2.5 overflow-hidden rounded-md"
+          aria-label="Inteligência Evangelizadora — ir para o painel"
+          className="flex items-center gap-2.5 overflow-hidden rounded-md group-data-[collapsible=icon]:justify-center"
         >
           <SimboloBloco />
           <span className="font-brand truncate text-base leading-none tracking-tight group-data-[collapsible=icon]:hidden">
