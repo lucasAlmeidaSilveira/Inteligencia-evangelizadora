@@ -29,13 +29,26 @@ function conferir(descricao: string, condicao: boolean) {
 
 async function escopo(
   c: PoolClient,
-  valores: { usuarioId?: string; papel?: string; missaoId?: string },
+  valores: {
+    usuarioId?: string;
+    papel?: string;
+    missaoId?: string;
+    /* Só o bloco do último acesso precisa: `ie.registrar_acesso()` encontra a
+       pessoa por aqui, não pelo usuario_id. */
+    firebaseUid?: string;
+  },
 ) {
   await c.query(
     `select set_config('app.usuario_id', $1, true),
             set_config('app.papel', $2, true),
-            set_config('app.missao_id', $3, true)`,
-    [valores.usuarioId ?? "", valores.papel ?? "", valores.missaoId ?? ""],
+            set_config('app.missao_id', $3, true),
+            set_config('app.firebase_uid', $4, true)`,
+    [
+      valores.usuarioId ?? "",
+      valores.papel ?? "",
+      valores.missaoId ?? "",
+      valores.firebaseUid ?? "",
+    ],
   );
 }
 
@@ -293,6 +306,124 @@ async function principal() {
     conferir(
       "não enxerga usuários de outra missão",
       (await c.query("select 1 from usuarios where id = $1", [carla])).rowCount === 0,
+    );
+
+    // ─── Último acesso ──────────────────────────────────────────────────────
+    /*
+     * `ultimo_acesso_em` é escrito por `ie.registrar_acesso()`, e não por um
+     * UPDATE da aplicação, porque não existe — nem deve existir — policy que
+     * deixe alguém alterar a própria linha de `usuarios`: policy autoriza a
+     * linha inteira, e liberaria junto o `set papel = 'admin'`.
+     *
+     * As verificações seguram as duas pontas: o caminho direto continua
+     * fechado, e o caminho pela função só alcança a linha de quem está no
+     * escopo.
+     */
+    console.log("\nÚltimo acesso");
+    const comoAna = () =>
+      escopo(c, {
+        usuarioId: ana,
+        papel: "responsavel",
+        missaoId: norte,
+        firebaseUid: "teste-ana",
+      });
+
+    const carimboDaAna = async () =>
+      (
+        await c.query<{ ultimo_acesso_em: Date | null }>(
+          "select ultimo_acesso_em from usuarios where id = $1",
+          [ana],
+        )
+      ).rows[0].ultimo_acesso_em;
+
+    await comoAna();
+
+    conferir(
+      "UPDATE direto de ultimo_acesso_em na própria linha não afeta nada",
+      (
+        await c.query(
+          "update usuarios set ultimo_acesso_em = now() where id = $1",
+          [ana],
+        )
+      ).rowCount === 0,
+    );
+
+    conferir(
+      "nem na linha de quem é de outra missão",
+      (
+        await c.query(
+          "update usuarios set ultimo_acesso_em = now() where id = $1",
+          [carla],
+        )
+      ).rowCount === 0,
+    );
+
+    await c.query("select ie.registrar_acesso()");
+
+    conferir(
+      "a função carimba a linha de quem está no escopo",
+      (await carimboDaAna()) !== null,
+    );
+
+    conferir(
+      "e não encosta na de mais ninguém",
+      (
+        await c.query(
+          `select 1 from usuarios
+            where ultimo_acesso_em is not null and id in ($1, $2)`,
+          [bruno, carla],
+        )
+      ).rowCount === 0,
+    );
+
+    /*
+     * A janela de 15 minutos. `now()` é o instante de início da transação e
+     * não avança durante o teste, então quem envelhece o carimbo é o admin —
+     * que tem policy para isso — e a função decide escrever a partir dele.
+     */
+    await escopo(c, { papel: "admin" });
+    await c.query(
+      "update usuarios set ultimo_acesso_em = now() - interval '1 hour' where id = $1",
+      [ana],
+    );
+    const antigo = await carimboDaAna();
+    await comoAna();
+    await c.query("select ie.registrar_acesso()");
+
+    conferir(
+      "fora da janela, atualiza o carimbo",
+      (await carimboDaAna())!.getTime() > antigo!.getTime(),
+    );
+
+    await escopo(c, { papel: "admin" });
+    await c.query(
+      "update usuarios set ultimo_acesso_em = now() - interval '1 minute' where id = $1",
+      [ana],
+    );
+    const recente = await carimboDaAna();
+    await comoAna();
+    await c.query("select ie.registrar_acesso()");
+
+    conferir(
+      "dentro da janela, não escreve de novo",
+      (await carimboDaAna())!.getTime() === recente!.getTime(),
+    );
+
+    // Sem firebase_uid no escopo o UPDATE não encontra linha alguma: nenhum
+    // carimbo cai numa pessoa arbitrária.
+    await escopo(c, {});
+    await c.query("select ie.registrar_acesso()");
+    await escopo(c, { papel: "admin" });
+
+    conferir(
+      "escopo vazio não carimba ninguém",
+      (
+        await c.query(
+          `select 1 from usuarios
+            where ultimo_acesso_em is not null and id in ($1, $2)`,
+          [bruno, carla],
+        )
+      ).rowCount === 0,
     );
 
     // ─── Bruno: auxiliar do Norte ───────────────────────────────────────────

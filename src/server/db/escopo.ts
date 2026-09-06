@@ -25,6 +25,17 @@ export type Escopo = {
   missaoId?: string | null;
 };
 
+export type OpcoesEscopo = {
+  /**
+   * Carimba `ultimo_acesso_em` de quem está no escopo, junto do COMMIT.
+   *
+   * Só o carregamento da sessão liga isto, e a transação precisa ser somente
+   * leitura: em caso de falha o carimbo é descartado junto com ela — ver o
+   * tratamento de erro abaixo.
+   */
+  registrarAcesso?: boolean;
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID_FIREBASE = /^[A-Za-z0-9_-]{1,128}$/;
 const PAPEIS = new Set<Papel>(["admin", "responsavel", "auxiliar"]);
@@ -45,6 +56,7 @@ function literal(valor: string | null | undefined, formato: RegExp) {
 export async function comEscopo<T>(
   escopo: Escopo,
   executar: (tx: Transacao) => Promise<T>,
+  opcoes: OpcoesEscopo = {},
 ): Promise<T> {
   const firebaseUid = literal(escopo.firebaseUid, UID_FIREBASE);
   const usuarioId = literal(escopo.usuarioId, UUID);
@@ -69,6 +81,28 @@ export async function comEscopo<T>(
 
     const tx = drizzle(cliente, { schema }) as Transacao;
     const resultado = await executar(tx);
+
+    if (opcoes.registrarAcesso) {
+      /*
+       * O carimbo pega carona no COMMIT — nenhuma ida a mais ao banco, pela
+       * mesma razão que o escopo viaja junto do BEGIN. E vai no fim, não no
+       * começo: assim o lock da linha do usuário dura o fecho da transação, e
+       * não a requisição inteira.
+       *
+       * Dentro de `try` porque registrar acesso jamais pode derrubar um login.
+       * Se a função não existir — código no ar antes de `pnpm db:migrate` — o
+       * Postgres aborta a transação e o COMMIT vira ROLLBACK; como só o
+       * caminho de sessão liga esta opção, e ele apenas lê, o resultado já
+       * está aqui na memória e nada se perde.
+       */
+      try {
+        await cliente.query("select ie.registrar_acesso(); commit");
+      } catch (erro) {
+        console.error("Não foi possível registrar o último acesso:", erro);
+        await cliente.query("rollback").catch(() => undefined);
+      }
+      return resultado;
+    }
 
     await cliente.query("commit");
     return resultado;

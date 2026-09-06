@@ -38,6 +38,11 @@ navegador → middleware (só confere cookie)
 - Guardas prontos: `requerUsuario()`, `requerAdmin()`, `requerQuemConvida()`.
   Eles redirecionam em vez de lançar erro.
 - Sair revoga os refresh tokens — encerra a sessão em todos os dispositivos.
+- **O "último acesso" é carimbado no COMMIT do carregamento da sessão**, por
+  `ie.registrar_acesso()`, com janela de 15 minutos dentro do próprio SQL: pega
+  carona numa ida ao banco que já acontece, e dentro da janela não escreve
+  nada. Fica aqui, e não no login, porque o cookie dura 5 dias — marcar só na
+  entrada mostraria uma data velha para quem está com o sistema aberto.
 
 **O middleware é conveniência, não segurança.** Ele roda no Edge, onde o SDK
 do Firebase Admin não existe; só verifica se o cookie está presente, para
@@ -71,13 +76,22 @@ Cinco detalhes que sustentam o isolamento e não devem ser mexidos sem entender:
 
 **As funções das policies** (`ie.eh_admin()`, `ie.tem_acesso_missao()`,
 `ie.pode_editar_missao()`…) são a tradução SQL da tabela de permissões em
-`regras-de-negocio.md`. Uma delas é `SECURITY DEFINER`, e é a única:
-`ie.missao_pelo_token()`. Sem isso há recursão — a policy de `usuarios`
-chamaria uma função que consulta `usuarios`, disparando a policy de novo até
-estourar a pilha. A superfície é mínima: não aceita parâmetro, só devolve a
-missão de quem o escopo já identificou, e tem `search_path` fixo — uma função
-`SECURITY DEFINER` com `search_path` aberto pode ser induzida a chamar objetos
-plantados por quem a invoca.
+`regras-de-negocio.md`. Duas são `SECURITY DEFINER`, e só duas.
+
+`ie.missao_pelo_token()` existe porque sem ela há recursão — a policy de
+`usuarios` chamaria uma função que consulta `usuarios`, disparando a policy de
+novo até estourar a pilha.
+
+`ie.registrar_acesso()` existe por outro motivo: **não há policy de UPDATE da
+própria linha em `usuarios`, e não deve haver.** Policy autoriza a *linha*, não
+a coluna — a mesma regra que liberasse carimbar `ultimo_acesso_em` liberaria
+`set papel = 'admin'` a qualquer caminho de código que surgisse depois. Dentro
+da função, a coluna que pode mudar está escrita no corpo, e é só ela.
+
+A superfície das duas é mínima: nenhuma aceita parâmetro — agem sempre sobre a
+linha do `firebase_uid` que o escopo já identificou — e ambas têm `search_path`
+fixo, porque uma função `SECURITY DEFINER` com `search_path` aberto pode ser
+induzida a chamar objetos plantados por quem a invoca.
 
 `politicas.sql` é **idempotente de propósito**: reaplicado a cada
 `pnpm db:migrate`, acompanha mudanças de schema sem exigir uma migration por

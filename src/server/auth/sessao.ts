@@ -87,50 +87,68 @@ export async function encerrarSessao() {
 async function carregarPorFirebaseUid(
   firebaseUid: string,
 ): Promise<UsuarioSessao | null> {
-  return comEscopo({ firebaseUid }, async (tx: Transacao) => {
-    // Uma consulta só. A missão vem por junção, não por consulta separada:
-    // cada ida a menos ao banco aparece no tempo de resposta de toda página.
-    const [linha] = await tx
-      .select({
-        id: usuarios.id,
-        firebaseUid: usuarios.firebaseUid,
-        nome: usuarios.nome,
-        email: usuarios.email,
-        papel: usuarios.papel,
-        ativo: usuarios.ativo,
-        missaoId: usuarios.missaoId,
-        missaoNome: missoes.nome,
-        missaoAtiva: missoes.ativo,
-      })
-      .from(usuarios)
-      .leftJoin(missoes, eq(missoes.id, usuarios.missaoId))
-      .where(eq(usuarios.firebaseUid, firebaseUid))
-      .limit(1);
+  return comEscopo(
+    { firebaseUid },
+    async (tx: Transacao) => {
+      // Uma consulta só. A missão vem por junção, não por consulta separada:
+      // cada ida a menos ao banco aparece no tempo de resposta de toda página.
+      const [linha] = await tx
+        .select({
+          id: usuarios.id,
+          firebaseUid: usuarios.firebaseUid,
+          nome: usuarios.nome,
+          email: usuarios.email,
+          papel: usuarios.papel,
+          ativo: usuarios.ativo,
+          missaoId: usuarios.missaoId,
+          missaoNome: missoes.nome,
+          missaoAtiva: missoes.ativo,
+        })
+        .from(usuarios)
+        .leftJoin(missoes, eq(missoes.id, usuarios.missaoId))
+        .where(eq(usuarios.firebaseUid, firebaseUid))
+        .limit(1);
 
-    if (!linha || !linha.ativo) return null;
+      if (!linha || !linha.ativo) return null;
 
-    // Missão arquivada tranca quem depende dela: sem isso, desativar uma
-    // missão deixaria seus responsáveis navegando num sistema vazio, sem
-    // entender por quê.
-    if (linha.papel !== "admin" && !linha.missaoAtiva) return null;
+      // Missão arquivada tranca quem depende dela: sem isso, desativar uma
+      // missão deixaria seus responsáveis navegando num sistema vazio, sem
+      // entender por quê.
+      if (linha.papel !== "admin" && !linha.missaoAtiva) return null;
 
-    const ehAdmin = linha.papel === "admin";
-    const ehResponsavel = linha.papel === "responsavel";
+      const ehAdmin = linha.papel === "admin";
+      const ehResponsavel = linha.papel === "responsavel";
 
-    return {
-      id: linha.id,
-      firebaseUid: linha.firebaseUid,
-      nome: linha.nome,
-      email: linha.email,
-      papel: linha.papel,
-      missaoId: linha.missaoId,
-      missaoNome: linha.missaoNome,
-      ehAdmin,
-      ehResponsavel,
-      podeConvidar: ehAdmin || ehResponsavel,
-      podeEditarMissao: ehAdmin || ehResponsavel,
-    };
-  });
+      return {
+        id: linha.id,
+        firebaseUid: linha.firebaseUid,
+        nome: linha.nome,
+        email: linha.email,
+        papel: linha.papel,
+        missaoId: linha.missaoId,
+        missaoNome: linha.missaoNome,
+        ehAdmin,
+        ehResponsavel,
+        podeConvidar: ehAdmin || ehResponsavel,
+        podeEditarMissao: ehAdmin || ehResponsavel,
+      };
+    },
+    /*
+     * O "último acesso" é carimbado aqui, e não em `criarSessao`: o cookie
+     * dura cinco dias, então marcar só no login mostraria uma data velha para
+     * quem está com o sistema aberto agora — e o login continua coberto,
+     * porque `criarSessao` passa por esta função.
+     *
+     * Roda uma vez por requisição, pelo `cache` do React em `usuarioAtual`, e
+     * a janela de 15 minutos dentro de `ie.registrar_acesso()` faz a maioria
+     * dessas vezes não escrever nada.
+     *
+     * Efeito colateral aceito: o prefetch de link do Next também renderiza no
+     * servidor e conta como acesso. "Último acesso" aqui quer dizer a última
+     * vez que o sistema esteve aberto, que é o que a tela de equipe promete.
+     */
+    { registrarAcesso: true },
+  );
 }
 
 /**

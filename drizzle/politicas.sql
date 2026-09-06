@@ -40,7 +40,8 @@ create or replace function ie.papel() returns text
  * zero no caminho normal, em que o escopo já está definido.
  */
 /*
- * SECURITY DEFINER de propósito, e é a única do arquivo.
+ * SECURITY DEFINER de propósito. É uma das duas do arquivo — a outra é
+ * ie.registrar_acesso(), logo abaixo, e existe por um motivo diferente.
  *
  * Sem isso há recursão: a policy de `usuarios` chama `missao_do_usuario()`,
  * que consultaria `usuarios`, disparando a policy de novo — o Postgres estoura
@@ -95,6 +96,44 @@ create or replace function ie.pode_editar_missao(alvo uuid) returns boolean
   as $$
     select ie.eh_admin()
         or (ie.eh_responsavel() and alvo is not null and alvo = ie.missao_do_usuario())
+  $$;
+
+-- ─── Último acesso ─────────────────────────────────────────────────────────
+
+/*
+ * Carimba `ultimo_acesso_em` na linha de quem está na requisição.
+ *
+ * SECURITY DEFINER, e a alternativa descartada explica por quê: uma policy
+ * `for update using (firebase_uid = ie.firebase_uid())` resolveria a escrita,
+ * mas policy de UPDATE autoriza a *linha*, não a coluna — a mesma regra que
+ * libera o carimbo liberaria `set papel = 'admin'` a qualquer caminho de
+ * código que surgisse depois. Aqui a única coluna que muda está escrita dentro
+ * da função, e nada mais sai daqui.
+ *
+ * Sem parâmetro, como ie.missao_pelo_token(): o alvo é sempre a linha do
+ * firebase_uid que a aplicação pôs no escopo, que por sua vez veio de um
+ * cookie de sessão verificado no servidor — não há como carimbar a linha de
+ * outra pessoa. O `search_path` é fixado pelo mesmo motivo de lá.
+ *
+ * A janela de 15 minutos existe porque isto roda em toda navegação: sem ela,
+ * cada página seria um UPDATE e um registro de WAL para mexer num "há 2 horas"
+ * que não muda. Dentro da janela o comando casa zero linhas e não escreve.
+ * O trigger de `atualizado_em` dispara junto — `usuarios.atualizado_em` não é
+ * lido em tela alguma, então não vale abrir exceção no loop logo abaixo.
+ *
+ * `and ativo` mantém a coluna honesta: quem foi desativado tem a sessão
+ * recusada em `carregarPorFirebaseUid` e não acessou coisa alguma.
+ */
+create or replace function ie.registrar_acesso() returns void
+  language sql security definer
+  set search_path = ie, pg_temp
+  as $$
+    update ie.usuarios
+       set ultimo_acesso_em = now()
+     where firebase_uid = nullif(current_setting('app.firebase_uid', true), '')
+       and ativo
+       and (ultimo_acesso_em is null
+            or ultimo_acesso_em < now() - interval '15 minutes')
   $$;
 
 -- ─── atualizado_em automático ──────────────────────────────────────────────
