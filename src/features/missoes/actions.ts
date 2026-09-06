@@ -9,7 +9,12 @@ import { gerarSlug } from "@/lib/slug";
 import { requerUsuario } from "@/server/auth/sessao";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
-import { gruposOracao, missaoIndicadores, missoes } from "@/server/db/schema";
+import {
+  centrosEvangelizacao,
+  gruposOracao,
+  missaoIndicadores,
+  missoes,
+} from "@/server/db/schema";
 
 import { COOKIE_FOCO, DURACAO_FOCO_S } from "./foco";
 import { competenciaSchema, missaoSchema } from "./schemas";
@@ -60,6 +65,11 @@ async function slugLivre(tx: Transacao, base: string) {
  *
  * A missão recém-criada fica sem responsável até isso ser feito, e a tela dela
  * avisa disso com um caminho direto para Equipe.
+ *
+ * O que nasce junto é o **centro principal**, na mesma transação. Ele é o que
+ * torna possível `grupos_oracao.centro_id` e `eventos.centro_id` serem
+ * obrigatórios: sempre existe um centro para onde apontar. Criá-lo aqui, e não
+ * depois, é o que impede uma missão de existir sem ele nem por um instante.
  */
 export async function criarMissao(entrada: unknown) {
   const validado = missaoSchema.safeParse(entrada);
@@ -80,6 +90,17 @@ export async function criarMissao(entrada: unknown) {
           slug: await slugLivre(tx, gerarSlug(dadosMissao.nome)),
         })
         .returning({ id: missoes.id });
+
+      // Com o nome da própria missão: é como as missões chamam a sede, e
+      // poupa o coordenador de aprender um rótulo novo. `cidade` e `regiao`
+      // ficam em branco de propósito — nesta tabela, em branco significa "as
+      // mesmas da missão", e copiá-las criaria uma cópia para divergir.
+      await tx.insert(centrosEvangelizacao).values({
+        missaoId: criada.id,
+        nome: dadosMissao.nome,
+        tipo: "centro_evangelizacao",
+        principal: true,
+      });
 
       return criada.id;
     });

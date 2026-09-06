@@ -65,8 +65,8 @@ const colunas = {
   missaoNome: missoes.nome,
   centroId: eventos.centroId,
   /* Nome pelo JOIN, não copiado: renomear o centro renomeia aqui junto.
-     `leftJoin` porque o vínculo é opcional — com `inner` sumiriam da lista
-     todas as ações que pendem direto da missão. */
+     `innerJoin` porque `centro_id` é obrigatório — o tipo sai `string` em vez
+     de `string | null`, e a tela não precisa tratar um nulo impossível. */
   centroNome: centrosEvangelizacao.nome,
   centroTipo: centrosEvangelizacao.tipo,
   tipoEventoId: eventos.tipoEventoId,
@@ -99,7 +99,7 @@ export async function listarEventos(filtros: FiltrosEvento = {}) {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .leftJoin(
+      .innerJoin(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, eventos.centroId),
       )
@@ -132,7 +132,7 @@ export const obterEvento = cache(async (id: string) => {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .leftJoin(
+      .innerJoin(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, eventos.centroId),
       )
@@ -262,7 +262,7 @@ export const obterEventoCompleto = cache(async (id: string) => {
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .leftJoin(
+      .innerJoin(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, eventos.centroId),
       )

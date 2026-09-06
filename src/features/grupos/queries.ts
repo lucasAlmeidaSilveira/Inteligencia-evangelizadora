@@ -1,9 +1,9 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
-import { lerFiltroDeCentro, SEM_CENTRO } from "@/features/centros/schemas";
+import { lerFiltroDeCentro } from "@/features/centros/schemas";
 import { comUsuario } from "@/server/dados";
 import { centrosEvangelizacao, gruposOracao } from "@/server/db/schema";
 
@@ -16,8 +16,9 @@ const colunas = {
   missaoId: gruposOracao.missaoId,
   centroId: gruposOracao.centroId,
   /* Nome do centro pelo JOIN, não guardado aqui: o nome muda quando o centro é
-     renomeado, e uma cópia ficaria desatualizada em silêncio. `leftJoin`
-     porque o vínculo é opcional — sem ele o grupo sumiria da lista. */
+     renomeado, e uma cópia ficaria desatualizada em silêncio. `innerJoin`
+     porque `centro_id` é obrigatório — o tipo sai `string`, e a tela não
+     precisa tratar um nulo impossível. */
   centroNome: centrosEvangelizacao.nome,
   centroTipo: centrosEvangelizacao.tipo,
   nome: gruposOracao.nome,
@@ -29,23 +30,13 @@ const colunas = {
   ativo: gruposOracao.ativo,
 };
 
-/**
- * Recorte do centro de evangelização.
- *
- * `SEM_CENTRO` não é "sem filtro": é o filtro dos grupos que pendem direto da
- * missão. Distinguir os dois importa porque, com o vínculo opcional, "nenhum
- * centro" é um conjunto de verdade — e é onde o coordenador vai procurar o que
- * ainda não organizou.
- */
+/** Recorte por centro de evangelização. Ausente = todos os centros. */
 export type FiltroGrupos = { centroId?: string };
 
 /** Revalida aqui também: a consulta não confia em quem a chama ter validado. */
 function condicaoDoCentro(centroId: string | undefined) {
   const valido = lerFiltroDeCentro(centroId);
-  if (!valido) return undefined;
-  return valido === SEM_CENTRO
-    ? isNull(gruposOracao.centroId)
-    : eq(gruposOracao.centroId, valido);
+  return valido ? eq(gruposOracao.centroId, valido) : undefined;
 }
 
 export async function listarGrupos(
@@ -56,7 +47,7 @@ export async function listarGrupos(
     const grupos = await tx
       .select(colunas)
       .from(gruposOracao)
-      .leftJoin(
+      .innerJoin(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, gruposOracao.centroId),
       )
@@ -86,7 +77,7 @@ export const obterGrupo = cache(async (id: string) => {
     const [grupo] = await tx
       .select(colunas)
       .from(gruposOracao)
-      .leftJoin(
+      .innerJoin(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, gruposOracao.centroId),
       )

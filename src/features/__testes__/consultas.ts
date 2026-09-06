@@ -81,22 +81,33 @@ async function principal() {
           )
         ).rows[0].id;
 
+        /* O principal entra primeiro: é para ele que apontam os grupos e as
+           ações que não foram separados em outra frente — o mesmo papel que
+           a migration deu aos dados que já existiam. */
         const c = (
           await tx.execute<{ id: string }>(
-            sql`insert into centros_evangelizacao (missao_id, nome, tipo, ativo) values
-                  (${missao}, 'Centro Ativo',      'centro_evangelizacao', true),
-                  (${missao}, 'Irradiação Ativa',  'irradiacao',           true),
-                  (${missao}, 'Centro Encerrado',  'centro_evangelizacao', false)
+            sql`insert into centros_evangelizacao (missao_id, nome, tipo, principal, ativo) values
+                  (${missao}, 'Principal',         'centro_evangelizacao', true,  true),
+                  (${missao}, 'Centro Ativo',      'centro_evangelizacao', false, true),
+                  (${missao}, 'Irradiação Ativa',  'irradiacao',           false, true),
+                  (${missao}, 'Centro Encerrado',  'centro_evangelizacao', false, false)
                 returning id`,
           )
         ).rows.map((r) => r.id);
 
+        // A outra missão fica só com o principal: é o estado de uma missão
+        // recém-criada, e o agregado precisa contá-lo.
+        await tx.execute(
+          sql`insert into centros_evangelizacao (missao_id, nome, tipo, principal)
+              values (${outra}, 'Principal da Outra', 'centro_evangelizacao', true)`,
+        );
+
         const g = (
           await tx.execute<{ id: string }>(
             sql`insert into grupos_oracao (missao_id, centro_id, nome, quantidade_pessoas, ativo) values
-                  (${missao}, ${c[0]}, 'Grupo A', 12, true),
-                  (${missao}, null,    'Grupo B', 8,  true),
-                  (${missao}, ${c[0]}, 'Grupo Encerrado', 500, false)
+                  (${missao}, ${c[1]}, 'Grupo A', 12, true),
+                  (${missao}, ${c[0]}, 'Grupo B', 8,  true),
+                  (${missao}, ${c[1]}, 'Grupo Encerrado', 500, false)
                 returning id`,
           )
         ).rows.map((r) => r.id);
@@ -115,10 +126,10 @@ async function principal() {
 
         await tx.execute(sql`
           insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim, status) values
-            (${missao}, ${c[0]}, ${tipo}, 'Já aconteceu', now() - interval '30 days', now() - interval '29 days', 'realizado'),
-            (${missao}, null,    ${tipo}, 'Daqui a 10 dias', now() + interval '10 days', now() + interval '11 days', 'planejado'),
-            (${missao}, null,    ${tipo}, 'Daqui a 3 dias',  now() + interval '3 days',  now() + interval '4 days',  'planejado'),
-            (${missao}, null,    ${tipo}, 'Cancelado amanhã', now() + interval '1 day',  now() + interval '2 days',  'cancelado')
+            (${missao}, ${c[1]}, ${tipo}, 'Já aconteceu', now() - interval '30 days', now() - interval '29 days', 'realizado'),
+            (${missao}, ${c[0]}, ${tipo}, 'Daqui a 10 dias', now() + interval '10 days', now() + interval '11 days', 'planejado'),
+            (${missao}, ${c[0]}, ${tipo}, 'Daqui a 3 dias',  now() + interval '3 days',  now() + interval '4 days',  'planejado'),
+            (${missao}, ${c[0]}, ${tipo}, 'Cancelado amanhã', now() + interval '1 day',  now() + interval '2 days',  'cancelado')
         `);
 
         // ─── Agregados ──────────────────────────────────────────────────────
@@ -126,7 +137,7 @@ async function principal() {
         const agregados = await agregadosPorMissao(tx, [missao, outra]);
         const a = agregados.get(missao);
 
-        ok("conta só os centros ativos (2 de 3)", a?.centrosAtivos, 2);
+        ok("conta só os centros ativos (3 de 4)", a?.centrosAtivos, 3);
         ok("conta só os grupos ativos (2 de 3)", a?.gruposAtivos, 2);
         ok("soma pessoas só dos grupos ativos (12 + 8)", a?.pessoasEmGrupos, 20);
         ok("conta todas as ações apostólicas (4)", a?.eventosTotal, 4);
@@ -140,22 +151,26 @@ async function principal() {
           3,
         );
 
-        console.log("\nMissão sem nada cadastrado");
+        console.log("\nMissão só com o principal");
         const b = agregados.get(outra);
-        ok("não aparece no mapa, e o chamador usa o zerado", b, undefined);
+        ok("conta o principal e nada mais", b?.centrosAtivos, 1);
+        ok("sem grupos", b?.gruposAtivos, 0);
+        ok("sem ações", b?.eventosTotal, 0);
 
         // ─── Vínculos por centro ────────────────────────────────────────────
         console.log("\nGrupos e ações por centro");
         const vinculados = await vinculadosPorCentro(tx, c);
 
         // Inclui o grupo inativo de propósito: o cartão do centro conta o que
-        // está pendurado nele, não o que está ativo — excluir o centro
-        // desvincula os dois igualmente.
-        ok("Centro Ativo tem 2 grupos", vinculados.get(c[0])?.grupos, 2);
-        ok("Centro Ativo tem 1 ação", vinculados.get(c[0])?.eventos, 1);
+        // está pendurado nele, não o que está ativo — excluir o centro move os
+        // dois igualmente para o principal.
+        ok("Centro Ativo tem 2 grupos", vinculados.get(c[1])?.grupos, 2);
+        ok("Centro Ativo tem 1 ação", vinculados.get(c[1])?.eventos, 1);
+        ok("o principal recebeu o resto", vinculados.get(c[0])?.grupos, 1);
+        ok("e as ações que sobraram", vinculados.get(c[0])?.eventos, 3);
         ok(
           "centro sem nada pendurado não entra no mapa",
-          vinculados.get(c[1]),
+          vinculados.get(c[2]),
           undefined,
         );
         ok(

@@ -27,7 +27,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import type { CentroParaSelecao } from "@/features/centros/queries";
-import { SEM_CENTRO } from "@/features/centros/schemas";
 
 import { atualizarEvento, criarEvento } from "../actions";
 import { eventoSchema, STATUS_EVENTO } from "../schemas";
@@ -71,6 +70,12 @@ export function FormularioEvento({
      formulário inteiro, e o ESLint acusa. Este hook devolve o valor. */
   const missaoEscolhida = useWatch({ control, name: "missaoId" });
   const centrosDaMissao = centros.filter((c) => c.missaoId === missaoEscolhida);
+
+  /** O centro que a missão sempre tem — o padrão ao trocar de missão. */
+  function principalDaMissao(missaoId: string) {
+    const daMissao = centros.filter((c) => c.missaoId === missaoId);
+    return daMissao.find((c) => c.principal)?.id ?? daMissao[0]?.id ?? "";
+  }
 
   async function enviar(dados: Saida) {
     const resultado = eventoId
@@ -143,9 +148,10 @@ export function FormularioEvento({
                     onValueChange={(v) => {
                       field.onChange(v);
                       // O centro pertence a uma missão só, e o banco recusa a
-                      // combinação errada por FK composta. Zerar aqui evita
-                      // que o erro apareça só no Salvar, longe da causa.
-                      setValue("centroId", "");
+                      // combinação errada por FK composta. Trocar a missão
+                      // recoloca o principal dela, em vez de esvaziar um campo
+                      // obrigatório e devolver o erro só no Salvar.
+                      setValue("centroId", principalDaMissao(v));
                     }}
                   >
                     <SelectTrigger {...props} className="w-full">
@@ -166,12 +172,11 @@ export function FormularioEvento({
 
           <Campo
             rotulo="Centro de evangelização"
+            obrigatorio
             ajuda={
-              !missaoEscolhida
-                ? "Escolha a missão primeiro."
-                : centrosDaMissao.length === 0
-                  ? "Esta missão ainda não tem centros cadastrados."
-                  : undefined
+              missaoEscolhida
+                ? undefined
+                : "Escolha a missão primeiro."
             }
             erro={errors.centroId?.message}
           >
@@ -181,22 +186,18 @@ export function FormularioEvento({
                 name="centroId"
                 render={({ field }) => (
                   <Select
-                    value={field.value ? String(field.value) : SEM_CENTRO}
-                    onValueChange={(v) =>
-                      field.onChange(v === SEM_CENTRO ? "" : v)
-                    }
+                    value={field.value ? String(field.value) : ""}
+                    onValueChange={field.onChange}
                     disabled={centrosDaMissao.length === 0}
                   >
                     <SelectTrigger {...props} className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder="Escolha o centro" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={SEM_CENTRO}>
-                        Diretamente na missão
-                      </SelectItem>
                       {centrosDaMissao.map((centro) => (
                         <SelectItem key={centro.id} value={centro.id}>
                           {centro.nome}
+                          {centro.principal ? " · principal" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>

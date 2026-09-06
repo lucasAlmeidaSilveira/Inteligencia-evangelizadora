@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { centroIdOpcional } from "@/features/centros/schemas";
+import { centroIdObrigatorio } from "@/features/centros/schemas";
 
 /** Idempotente: aceita "" do formulário e null da revalidação no servidor. */
 const opcional = (max: number) =>
@@ -29,8 +29,9 @@ export const grupoSchema = z.object({
     .trim()
     .min(3, "Informe ao menos 3 caracteres.")
     .max(120, "No máximo 120 caracteres."),
-  /** Opcional: sem centro, o grupo pende diretamente da missão. */
-  centroId: centroIdOpcional,
+  /** Obrigatório: sem escolha explícita, o formulário já vem com o centro
+   *  principal da missão marcado. */
+  centroId: centroIdObrigatorio,
   quantidadePessoas: z
     .preprocess(
       (v) => (v === "" || v === null || v === undefined ? 0 : v),

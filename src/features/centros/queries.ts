@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 
 import { comUsuario } from "@/server/dados";
 import { centrosEvangelizacao } from "@/server/db/schema";
@@ -15,6 +15,7 @@ const colunas = {
   missaoId: centrosEvangelizacao.missaoId,
   nome: centrosEvangelizacao.nome,
   tipo: centrosEvangelizacao.tipo,
+  principal: centrosEvangelizacao.principal,
   cidade: centrosEvangelizacao.cidade,
   regiao: centrosEvangelizacao.regiao,
   endereco: centrosEvangelizacao.endereco,
@@ -30,7 +31,9 @@ export async function listarCentros(missaoId: string) {
       .select(colunas)
       .from(centrosEvangelizacao)
       .where(eq(centrosEvangelizacao.missaoId, missaoId))
-      .orderBy(asc(centrosEvangelizacao.nome));
+      // O principal encabeça a lista: é o centro que a missão sempre tem, e o
+      // destino de tudo que não foi separado em outra frente.
+      .orderBy(desc(centrosEvangelizacao.principal), asc(centrosEvangelizacao.nome));
 
     const vinculados = await vinculadosPorCentro(
       tx,
@@ -58,13 +61,40 @@ export const obterCentro = cache(async (id: string) => {
   });
 });
 
+const colunasSelecao = {
+  id: centrosEvangelizacao.id,
+  missaoId: centrosEvangelizacao.missaoId,
+  nome: centrosEvangelizacao.nome,
+  tipo: centrosEvangelizacao.tipo,
+  principal: centrosEvangelizacao.principal,
+  ativo: centrosEvangelizacao.ativo,
+};
+
+/**
+ * Quem pode receber vínculo novo: os ativos, **mais o principal sempre**.
+ *
+ * O principal entra mesmo arquivado porque `centro_id` é obrigatório — uma
+ * lista vazia deixaria o formulário sem nada a escolher e sem como salvar. Ele
+ * é o centro que a missão sempre tem; arquivá-lo tira das contagens, não da
+ * estrutura.
+ */
+const podeReceberVinculo = or(
+  eq(centrosEvangelizacao.ativo, true),
+  eq(centrosEvangelizacao.principal, true),
+);
+
+/** O principal primeiro: é o padrão do formulário e a primeira opção da lista. */
+const ordemDeSelecao = [
+  desc(centrosEvangelizacao.principal),
+  asc(centrosEvangelizacao.nome),
+];
+
 /**
  * Centros de uma missão, para os selects de grupos e ações.
  *
- * Por padrão só os ativos: um centro arquivado não deve receber vínculo novo.
- * Quem já aponta para ele continua apontando — daí o `incluirInativos`, que o
- * filtro da lista de grupos usa. Sem ele, o nome do centro apareceria no
- * cartão do grupo sem haver como filtrar por ele.
+ * Por padrão só quem pode receber vínculo novo. O `incluirInativos` é do
+ * filtro da lista de grupos: sem ele, o nome de um centro arquivado apareceria
+ * no cartão do grupo sem haver como filtrar por ele.
  */
 export async function centrosParaSelecao(
   missaoId: string,
@@ -72,28 +102,20 @@ export async function centrosParaSelecao(
 ) {
   return comUsuario(async (tx) => {
     return tx
-      .select({
-        id: centrosEvangelizacao.id,
-        missaoId: centrosEvangelizacao.missaoId,
-        nome: centrosEvangelizacao.nome,
-        tipo: centrosEvangelizacao.tipo,
-        ativo: centrosEvangelizacao.ativo,
-      })
+      .select(colunasSelecao)
       .from(centrosEvangelizacao)
       .where(
         and(
           eq(centrosEvangelizacao.missaoId, missaoId),
-          opcoes.incluirInativos
-            ? undefined
-            : eq(centrosEvangelizacao.ativo, true),
+          opcoes.incluirInativos ? undefined : podeReceberVinculo,
         ),
       )
-      .orderBy(asc(centrosEvangelizacao.nome));
+      .orderBy(...ordemDeSelecao);
   });
 }
 
 /**
- * Todos os centros ativos que o usuário enxerga, com a missão de cada um.
+ * Centros de todas as missões visíveis, com a missão de cada um.
  *
  * O formulário de ação apostólica tem select de missão: precisa da lista
  * inteira em mãos para trocar as opções de centro sem uma ida ao servidor a
@@ -102,16 +124,10 @@ export async function centrosParaSelecao(
 export async function centrosDasMissoesVisiveis() {
   return comUsuario(async (tx) => {
     return tx
-      .select({
-        id: centrosEvangelizacao.id,
-        missaoId: centrosEvangelizacao.missaoId,
-        nome: centrosEvangelizacao.nome,
-        tipo: centrosEvangelizacao.tipo,
-        ativo: centrosEvangelizacao.ativo,
-      })
+      .select(colunasSelecao)
       .from(centrosEvangelizacao)
-      .where(eq(centrosEvangelizacao.ativo, true))
-      .orderBy(asc(centrosEvangelizacao.nome));
+      .where(podeReceberVinculo)
+      .orderBy(...ordemDeSelecao);
   });
 }
 

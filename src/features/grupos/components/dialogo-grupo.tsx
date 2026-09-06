@@ -32,7 +32,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { CentroParaSelecao } from "@/features/centros/queries";
-import { SEM_CENTRO } from "@/features/centros/schemas";
 
 import { atualizarGrupo, criarGrupo } from "../actions";
 import { DIAS_SEMANA, grupoSchema } from "../schemas";
@@ -79,7 +78,14 @@ export function DialogoGrupo({
 
   const form = useForm<Entrada, unknown, Saida>({
     resolver: zodResolver(grupoSchema),
-    defaultValues: valores ?? NOVO,
+    // O grupo novo já abre no centro principal: é onde a maioria dos grupos
+    // fica, e obrigar a escolher a única resposta óbvia é atrito à toa.
+    defaultValues:
+      valores ??
+      ({
+        ...NOVO,
+        centroId: centros.find((c) => c.principal)?.id ?? centros[0]?.id ?? "",
+      } satisfies Entrada),
   });
 
   const {
@@ -160,11 +166,8 @@ export function DialogoGrupo({
 
               <Campo
                 rotulo="Centro de evangelização"
-                ajuda={
-                  centros.length === 0
-                    ? "Nenhum centro cadastrado nesta missão ainda."
-                    : undefined
-                }
+                obrigatorio
+                ajuda="O principal da missão é o lugar do que não foi separado em outra frente."
                 erro={errors.centroId?.message}
                 className="sm:col-span-2"
               >
@@ -174,22 +177,17 @@ export function DialogoGrupo({
                     name="centroId"
                     render={({ field }) => (
                       <Select
-                        value={field.value ? String(field.value) : SEM_CENTRO}
-                        onValueChange={(v) =>
-                          field.onChange(v === SEM_CENTRO ? "" : v)
-                        }
-                        disabled={centros.length === 0}
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={field.onChange}
                       >
                         <SelectTrigger {...props} className="w-full">
-                          <SelectValue />
+                          <SelectValue placeholder="Escolha o centro" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={SEM_CENTRO}>
-                            Diretamente na missão
-                          </SelectItem>
                           {centros.map((centro) => (
                             <SelectItem key={centro.id} value={centro.id}>
                               {centro.nome}
+                              {centro.principal ? " · principal" : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>

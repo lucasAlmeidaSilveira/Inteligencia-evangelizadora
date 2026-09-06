@@ -112,21 +112,24 @@ async function principal() {
       "select id from tipos_evento limit 1",
     );
 
-    await c.query(
-      `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
-       values ($1, $2, 'Evento do Norte', now(), now() + interval '2 hours'),
-              ($3, $2, 'Evento do Sul',   now(), now() + interval '2 hours')`,
-      [norte, tipos[0].id, sul],
-    );
-
+    /* Toda missão nasce com um centro principal — no sistema é `criarMissao`
+       que o cria; aqui, que insere direto no banco, é este bloco. Sem ele os
+       inserts de grupo e ação abaixo não teriam centro para apontar. */
     const { rows: centros } = await c.query<{ id: string }>(
-      `insert into centros_evangelizacao (missao_id, nome, tipo) values
-         ($1, 'Centro do Norte', 'centro_evangelizacao'),
-         ($2, 'Centro do Sul',   'irradiacao')
+      `insert into centros_evangelizacao (missao_id, nome, tipo, principal) values
+         ($1, 'Centro do Norte', 'centro_evangelizacao', true),
+         ($2, 'Centro do Sul',   'centro_evangelizacao', true)
        returning id`,
       [norte, sul],
     );
-    const [, centroSul] = centros.map((x) => x.id);
+    const [centroNorte, centroSul] = centros.map((x) => x.id);
+
+    await c.query(
+      `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
+       values ($1, $4, $2, 'Evento do Norte', now(), now() + interval '2 hours'),
+              ($3, $5, $2, 'Evento do Sul',   now(), now() + interval '2 hours')`,
+      [norte, tipos[0].id, sul, centroNorte, centroSul],
+    );
 
     // ─── Estrutura: um responsável por missão ───────────────────────────────
     console.log("\nEstrutura de papéis");
@@ -305,8 +308,9 @@ async function principal() {
       "registra grupo de oração",
       !(await deveRejeitar(
         c,
-        "insert into grupos_oracao (missao_id, nome) values ($1, 'Grupo do Bruno')",
-        [norte],
+        `insert into grupos_oracao (missao_id, centro_id, nome)
+         values ($1, $2, 'Grupo do Bruno')`,
+        [norte, centroNorte],
       )),
     );
 
@@ -314,9 +318,9 @@ async function principal() {
       "registra ação apostólica",
       !(await deveRejeitar(
         c,
-        `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
-         values ($1, $2, 'Ação do Bruno', now(), now() + interval '1 hour')`,
-        [norte, tipos[0].id],
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
+         values ($1, $3, $2, 'Ação do Bruno', now(), now() + interval '1 hour')`,
+        [norte, tipos[0].id, centroNorte],
       )),
     );
 
@@ -371,6 +375,22 @@ async function principal() {
       (await c.query("select 1 from usuarios where id in ($1,$2,$3)", [ana, bruno, carla]))
         .rowCount === 3,
     );
+
+    /*
+     * Apagar missão com as duas cascatas ativas — centros e grupos — depende
+     * de o FK composto ser `no action`, conferido no fim do comando. Com
+     * `restrict` ele dispararia no meio da cascata e recusaria a exclusão da
+     * missão inteira, o que só apareceria em produção.
+     *
+     * Roda num savepoint: o cenário acima continua de pé para o resto.
+     */
+    await c.query("savepoint apagar_missao");
+    await c.query("delete from usuarios where missao_id = $1", [sul]);
+    conferir(
+      "apaga missão com centros e grupos, sem travar no FK composto",
+      !(await deveRejeitar(c, "delete from missoes where id = $1", [sul])),
+    );
+    await c.query("rollback to savepoint apagar_missao");
 
     // ─── Sem sessão ─────────────────────────────────────────────────────────
     console.log("\nSem sessão (escopo vazio)");

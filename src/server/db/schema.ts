@@ -200,6 +200,15 @@ export const centrosEvangelizacao = ie.table(
       .references(() => missoes.id, { onDelete: "cascade" }),
     nome: text("nome").notNull(),
     tipo: tipoCentroEnum("tipo").notNull().default("centro_evangelizacao"),
+    /**
+     * O centro principal da missão — o que nasce junto com ela e recebe tudo
+     * que não foi separado em outra frente.
+     *
+     * Existe para que `grupos_oracao.centro_id` e `eventos.centro_id` possam
+     * ser `not null`: sempre há um centro para onde apontar, sem inventar um
+     * estado "sem centro" que ninguém sabe interpretar.
+     */
+    principal: boolean("principal").notNull().default(false),
     /** Sem o default "São Paulo" que `missoes` tem: em branco aqui significa
      *  "a mesma da missão", e um default esconderia essa diferença. */
     cidade: text("cidade"),
@@ -220,6 +229,12 @@ export const centrosEvangelizacao = ie.table(
       t.missaoId,
       sql`lower(${t.nome})`,
     ),
+    // Exatamente um principal por missão — índice único parcial, como o de
+    // responsável. Dois principais significaria dois destinos padrão para o
+    // que não foi separado, e nenhuma regra para escolher entre eles.
+    uniqueIndex("uq_centro_principal_por_missao")
+      .on(t.missaoId)
+      .where(sql`${t.principal}`),
     /*
      * Alvo do FK composto de `grupos_oracao` e `eventos`. Redundante como
      * unicidade — a chave primária já garante —, mas o Postgres exige
@@ -243,8 +258,10 @@ export const gruposOracao = ie.table(
     missaoId: uuid("missao_id")
       .notNull()
       .references(() => missoes.id, { onDelete: "cascade" }),
-    /** Nulo = o grupo pende direto da missão, sem passar por centro algum. */
-    centroId: uuid("centro_id"),
+    /** Todo grupo pertence a um centro. Sem escolha explícita, ao principal —
+     *  que é justamente o centro criado junto com a missão para receber o que
+     *  não foi separado em outra frente. */
+    centroId: uuid("centro_id").notNull(),
     nome: text("nome").notNull(),
     quantidadePessoas: integer("quantidade_pessoas").notNull().default(0),
     /** 0 = domingo … 6 = sábado. */
@@ -265,13 +282,16 @@ export const gruposOracao = ie.table(
      *
      * Um FK simples deixaria um grupo da Zona Leste apontar para um centro da
      * Zona Sul — dado de outra missão entrando por uma porta que o RLS não
-     * vigia, e sem erro nenhum. Com `missao_id` notNull e `centro_id` nulável,
-     * o MATCH SIMPLE do Postgres simplesmente não checa nada quando o centro é
-     * nulo, que é justamente o caso "diretamente na missão".
+     * vigia, e sem erro nenhum. Com as duas colunas `not null`, a checagem
+     * vale sempre.
      *
-     * Sem `onDelete`: o `no action` obriga `excluirCentro` a desvincular à
-     * vista, com o usuário sabendo quantos registros isso afeta. Um
-     * `set null` composto tentaria zerar também `missao_id`, que é notNull.
+     * `no action` e não `restrict`, e a diferença importa: o `no action` é
+     * conferido no fim do comando, então apagar a missão funciona mesmo com o
+     * cascade removendo centros e grupos na mesma instrução. `restrict`
+     * dispararia na hora e recusaria.
+     *
+     * Apagar um centro, esse sim, obriga `excluirCentro` a remanejar os
+     * vínculos à vista — com o usuário sabendo quantos registros mudam.
      */
     foreignKey({
       columns: [t.centroId, t.missaoId],
@@ -350,8 +370,9 @@ export const eventos = ie.table(
     missaoId: uuid("missao_id")
       .notNull()
       .references(() => missoes.id, { onDelete: "cascade" }),
-    /** Nulo = a ação é da missão inteira, não de um centro específico. */
-    centroId: uuid("centro_id"),
+    /** Toda ação pertence a um centro — ao principal, quando não se escolhe
+     *  outro. Ver a nota em `gruposOracao.centroId`. */
+    centroId: uuid("centro_id").notNull(),
     tipoEventoId: uuid("tipo_evento_id")
       .notNull()
       // `restrict`: apagar um tipo em uso apagaria silenciosamente o histórico.

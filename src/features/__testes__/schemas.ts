@@ -4,11 +4,7 @@ config({ path: ".env.local" });
 
 import type { z } from "zod";
 
-import {
-  centroSchema,
-  lerFiltroDeCentro,
-  SEM_CENTRO,
-} from "@/features/centros/schemas";
+import { centroSchema, lerFiltroDeCentro } from "@/features/centros/schemas";
 import { grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
@@ -196,7 +192,7 @@ verificar(
   grupoSchema,
   {
     nome: "Grupo Teste",
-    centroId: "",
+    centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
     quantidadePessoas: "",
     diaSemana: "",
     horario: "",
@@ -213,7 +209,7 @@ verificar(
   grupoSchema,
   {
     nome: "Grupo Cheio",
-    // Vínculo com centro: o uuid precisa atravessar as duas passagens intacto.
+    // O uuid do centro precisa atravessar as duas passagens intacto.
     centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
     quantidadePessoas: "18",
     diaSemana: "3",
@@ -229,6 +225,21 @@ verificar(
     ],
   },
   "grupo completo",
+);
+
+recusar(
+  "Grupo de oração — sem centro",
+  grupoSchema,
+  {
+    nome: "Grupo Órfão",
+    // Toda missão tem um centro principal, então o formulário nunca envia
+    // vazio. Este é o caminho da requisição forjada.
+    centroId: "",
+    quantidadePessoas: "",
+    ativo: true,
+    pastores: [{ nome: "Maria Silva", telefone: "" }],
+  },
+  "centroId",
 );
 
 verificar(
@@ -302,10 +313,6 @@ ok("quebra de linha CRLF", csv.split("\r\n").length > 4);
 console.log("\nFiltro de centro na URL");
 const UUID = "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21";
 ok("uuid passa", lerFiltroDeCentro(UUID) === UUID);
-ok(
-  "o sentinela de 'sem centro' passa",
-  lerFiltroDeCentro(SEM_CENTRO) === SEM_CENTRO,
-);
 ok("texto qualquer vira ausência de filtro", lerFiltroDeCentro("lixo") === undefined);
 ok("vazio vira ausência de filtro", lerFiltroDeCentro("") === undefined);
 ok("ausente vira ausência de filtro", lerFiltroDeCentro(undefined) === undefined);

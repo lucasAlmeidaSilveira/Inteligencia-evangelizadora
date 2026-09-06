@@ -203,8 +203,17 @@ async function principal() {
       }
 
       // ─── Centros de evangelização ───────────────────────────────────────
-      // A primeira missão fica sem centro nenhum, de propósito: é o estado de
-      // quem ainda não organizou as frentes, e a tela precisa ficar boa nele.
+      // O principal nasce com a missão, como faz `criarMissao`: é ele que
+      // recebe tudo que não foi separado em outra frente.
+      const { rows: [principal] } = await c.query<{ id: string }>(
+        `insert into centros_evangelizacao (missao_id, nome, tipo, principal, ativo)
+         values ($1, $2, 'centro_evangelizacao', true, true) returning id`,
+        [criada.id, missao.nome],
+      );
+      totais.centros++;
+
+      // A primeira missão fica só com o principal, de propósito: é o estado de
+      // quem ainda não abriu outras frentes, e a tela precisa ficar boa nele.
       const centros: string[] = [];
       if (indice > 0) {
         for (let ce = 0; ce < inteiro(1, 3); ce++) {
@@ -224,9 +233,12 @@ async function principal() {
         }
       }
 
-      /** Metade dos grupos e ações pendura num centro; a outra, na missão. */
+      /** Parte dos grupos e ações vai para uma frente própria; o resto fica no
+       *  principal, que é onde eles estariam sem essa separação. */
       const centroSorteado = () =>
-        centros.length > 0 && Math.random() < 0.6 ? escolher(centros) : null;
+        centros.length > 0 && Math.random() < 0.6
+          ? escolher(centros)
+          : principal.id;
 
       // ─── Grupos de oração ───────────────────────────────────────────────
       const quantosGrupos = inteiro(3, 5);

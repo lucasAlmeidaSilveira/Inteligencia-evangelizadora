@@ -93,6 +93,11 @@ centro de outra missão é uma chave estrangeira sobre o par
 passaria em qualquer policy. Quando a regra é sobre a *combinação* de duas
 colunas, o lugar dela é uma constraint.
 
+Essa chave é `no action`, e a diferença para `restrict` importa: `no action` é
+conferido no fim do comando, então apagar uma missão funciona mesmo com as
+cascatas removendo centros e grupos na mesma instrução. `restrict` dispararia
+no meio da cascata e recusaria — o `db:testar-rls` cobre isso.
+
 ## Organização do código
 
 ```

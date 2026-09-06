@@ -107,10 +107,10 @@ export function ListaCentros({
         return;
       }
 
-      const soltos = descreverVinculos(resultado.dados);
+      const movidos = descreverVinculos(resultado.dados);
       toast.success(
-        soltos
-          ? `Centro excluído — ${soltos} agora ${resultado.dados.grupos + resultado.dados.eventos === 1 ? "pende" : "pendem"} diretamente da missão.`
+        movidos
+          ? `Centro excluído — ${movidos} ${resultado.dados.grupos + resultado.dados.eventos === 1 ? "passou" : "passaram"} para o centro principal.`
           : "Centro excluído",
       );
       setParaExcluir(null);
@@ -171,6 +171,12 @@ export function ListaCentros({
                         <div className="min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-medium">{centro.nome}</h3>
+                            {/* O principal é o destino do que não foi separado
+                                em outra frente — dizer isso no cartão explica
+                                por que ele não tem "Excluir". */}
+                            {centro.principal ? (
+                              <Badge variant="outline">Principal</Badge>
+                            ) : null}
                             {!centro.ativo ? (
                               <Badge variant="secondary">Inativo</Badge>
                             ) : null}
@@ -197,14 +203,19 @@ export function ListaCentros({
                               <Pencil className="size-4" aria-hidden />
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              className="cursor-pointer"
-                              onClick={() => setParaExcluir(centro)}
-                            >
-                              <Trash2 className="size-4" aria-hidden />
-                              Excluir
-                            </DropdownMenuItem>
+                            {/* Esconder não é permissão — `excluirCentro`
+                                recusa o principal de novo no servidor. Aqui é
+                                só para não oferecer o que não vai funcionar. */}
+                            {centro.principal ? null : (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                className="cursor-pointer"
+                                onClick={() => setParaExcluir(centro)}
+                              >
+                                <Trash2 className="size-4" aria-hidden />
+                                Excluir
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -283,7 +294,7 @@ export function ListaCentros({
             <AlertDialogTitle>Excluir “{paraExcluir?.nome}”?</AlertDialogTitle>
             <AlertDialogDescription>
               {paraExcluir && descreverVinculos(paraExcluir)
-                ? `${descreverVinculos(paraExcluir)} deixam de pertencer a este centro e voltam a ficar diretamente na missão — nada disso é apagado. Para apenas tirá-lo das contagens, prefira marcá-lo como inativo.`
+                ? `${descreverVinculos(paraExcluir)} passam para o centro principal da missão — nada disso é apagado. Para apenas tirá-lo das contagens, prefira marcá-lo como inativo.`
                 : "O centro será removido definitivamente e deixará de contar nos indicadores da missão. Para apenas tirá-lo das contagens, prefira marcá-lo como inativo."}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import {
@@ -83,38 +83,72 @@ export async function atualizarCentro(id: string, entrada: unknown) {
   }
 }
 
+/** O principal é o destino de tudo que não foi separado — apagá-lo deixaria a
+ *  missão sem para onde apontar. A mensagem diz a saída que existe. */
+const PRINCIPAL_NAO_SE_APAGA =
+  "O centro principal da missão não pode ser excluído. Se ele não é mais uma frente ativa, marque-o como inativo.";
+
+const SEM_PRINCIPAL =
+  "Esta missão está sem centro principal, e por isso não há para onde mover os grupos e as ações deste centro. Avise o administrador geral.";
+
 /**
- * Apaga o centro e devolve o que ficou solto.
+ * Apaga o centro e devolve o que foi remanejado.
  *
- * O FK de grupos e ações é `no action` de propósito: desvincular aqui, à
- * vista, é melhor que um `set null` silencioso no banco. Nada se perde — os
- * grupos e as ações voltam a pender diretamente da missão, que é exatamente o
- * estado de antes desta feature.
+ * Os grupos e as ações não somem nem ficam soltos: passam para o **centro
+ * principal** da missão, que é o destino do que não está separado em outra
+ * frente. Fazer isso aqui, à vista e com o número aparecendo no aviso, é
+ * melhor que uma regra no banco que mexesse nos vínculos em silêncio.
  */
 export async function excluirCentro(id: string) {
   try {
     const resultado = await comUsuario(async (tx) => {
+      const [alvo] = await tx
+        .select({
+          missaoId: centrosEvangelizacao.missaoId,
+          principal: centrosEvangelizacao.principal,
+        })
+        .from(centrosEvangelizacao)
+        .where(eq(centrosEvangelizacao.id, id))
+        .limit(1);
+
+      // RLS já filtrou: não veio nada significa que não existe ou não é dele.
+      if (!alvo) return null;
+      if (alvo.principal) throw new Error(PRINCIPAL_NAO_SE_APAGA);
+
+      const [principal] = await tx
+        .select({ id: centrosEvangelizacao.id })
+        .from(centrosEvangelizacao)
+        .where(
+          and(
+            eq(centrosEvangelizacao.missaoId, alvo.missaoId),
+            eq(centrosEvangelizacao.principal, true),
+          ),
+        )
+        .limit(1);
+
+      // Toda missão tem principal desde a migration que criou a coluna, e
+      // `criarMissao` mantém isso. Se faltar, é dado quebrado: parar aqui é
+      // melhor que apagar o centro e derrubar a página no `not null`.
+      if (!principal) throw new Error(SEM_PRINCIPAL);
+
       const grupos = await tx
         .update(gruposOracao)
-        .set({ centroId: null })
+        .set({ centroId: principal.id })
         .where(eq(gruposOracao.centroId, id))
         .returning({ id: gruposOracao.id });
 
       const acoes = await tx
         .update(eventos)
-        .set({ centroId: null })
+        .set({ centroId: principal.id })
         .where(eq(eventos.centroId, id))
         .returning({ id: eventos.id });
 
-      const [removido] = await tx
+      await tx
         .delete(centrosEvangelizacao)
-        .where(eq(centrosEvangelizacao.id, id))
-        .returning({ missaoId: centrosEvangelizacao.missaoId });
-
-      if (!removido) return null;
+        .where(eq(centrosEvangelizacao.id, id));
 
       return {
-        missaoId: removido.missaoId,
+        missaoId: alvo.missaoId,
         grupos: grupos.length,
         eventos: acoes.length,
       };
@@ -125,6 +159,12 @@ export async function excluirCentro(id: string) {
     revalidarArvore(resultado.missaoId);
     return sucesso({ grupos: resultado.grupos, eventos: resultado.eventos });
   } catch (erro) {
+    if (erro instanceof Error && erro.message === PRINCIPAL_NAO_SE_APAGA) {
+      return falha(PRINCIPAL_NAO_SE_APAGA);
+    }
+    if (erro instanceof Error && erro.message === SEM_PRINCIPAL) {
+      return falha(SEM_PRINCIPAL);
+    }
     return falha(traduzirErroDeBanco(erro));
   }
 }

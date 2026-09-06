@@ -46,6 +46,9 @@ export default async function PaginaEditarEvento({
                   missaoId: evento.missaoId,
                   nome: `${evento.centroNome} (inativo)`,
                   tipo: evento.centroTipo,
+                  // Nunca é o principal: esse vem sempre na lista, mesmo
+                  // arquivado, justamente porque `centroId` é obrigatório.
+                  principal: false,
                   ativo: false,
                 },
               ]

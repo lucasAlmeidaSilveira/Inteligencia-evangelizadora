@@ -49,7 +49,7 @@ import { DialogoGrupo } from "./dialogo-grupo";
 function paraFormulario(grupo: GrupoListado) {
   return {
     nome: grupo.nome,
-    centroId: grupo.centroId ?? "",
+    centroId: grupo.centroId,
     quantidadePessoas: grupo.quantidadePessoas,
     diaSemana: grupo.diaSemana === null ? "" : String(grupo.diaSemana),
     // O Postgres devolve `time` como "19:30:00"; o input espera "19:30".
@@ -81,8 +81,10 @@ export function ListaGrupos({
   const router = useRouter();
   const [excluindo, iniciarExclusao] = useTransition();
 
-  // Centro arquivado não recebe vínculo novo, mas continua filtrável.
-  const centrosAtivos = centros.filter((c) => c.ativo);
+  /* Centro arquivado não recebe vínculo novo, mas o principal entra sempre:
+     `centroId` é obrigatório, e uma lista vazia deixaria o formulário sem nada
+     a escolher e sem como salvar. */
+  const centrosAtivos = centros.filter((c) => c.ativo || c.principal);
 
   /** Os ativos, mais o centro do próprio grupo quando ele já está arquivado. */
   function centrosParaEditar(grupo: GrupoListado) {
@@ -306,9 +308,8 @@ export function ListaGrupos({
           key={emEdicao.id}
           missaoId={missaoId}
           // O centro do grupo pode estar arquivado, e arquivado não entra na
-          // lista de escolha. Sem devolvê-lo aqui, o select abriria em
-          // "Diretamente na missão" e salvar desvincularia o grupo sem
-          // ninguém pedir.
+          // lista de escolha. Sem devolvê-lo aqui, o select abriria em branco
+          // e o grupo não teria como ser salvo sem trocar de centro.
           centros={centrosParaEditar(emEdicao)}
           grupoId={emEdicao.id}
           valores={paraFormulario(emEdicao)}

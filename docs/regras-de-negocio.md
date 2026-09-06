@@ -11,8 +11,9 @@ apostólicas** realiza. As ações têm prestação de contas, documentos e link
 indicadores da missão podem ser fotografados mês a mês para gerar tendência.
 
 A missão não é um bloco só: ela se organiza em **centros de evangelização** e
-**irradiações**, frentes que funcionam como missões pequenas e sob as quais os
-grupos e as ações podem ser registrados.
+**irradiações**, frentes que funcionam como missões pequenas. Toda missão nasce
+com um centro — o **principal** —, e é sob algum centro que cada grupo de
+oração e cada ação apostólica é registrado.
 
 Vocabulário que a interface usa e o código deve seguir:
 
@@ -68,17 +69,25 @@ irradiação é registro, não cadastro da missão — por isso o auxiliar tamb�
 
 ## Centros de evangelização
 
-Cada missão tem zero ou mais **centros de evangelização**, e cada centro tem um
+Cada missão tem um ou mais **centros de evangelização**, e cada centro tem um
 tipo: centro de evangelização ou **irradiação** — a frente menor, que nasceu de
 um centro e ainda não se sustenta sozinha. A contagem de centros ativos aparece
 no cartão da missão, na visão geral dela e no painel: é o número que diz quantas
 frentes a missão sustenta.
 
-- **O vínculo de grupos e ações com o centro é opcional.** Um grupo pode pender
-  do centro ou diretamente da missão. Antes desta divisão tudo pendia da missão,
-  e continuar aceitando esse estado evitou inventar um centro "Sede" para dado
-  antigo que ninguém decidiu criar. É também o estado real de quem ainda não
-  organizou as frentes.
+- **Toda missão tem exatamente um centro principal.** Ele nasce junto com ela,
+  em `criarMissao` e na mesma transação, com o nome da própria missão — é como
+  as missões chamam a sede, e poupa o coordenador de aprender um rótulo novo.
+  Índice único parcial `uq_centro_principal_por_missao`; dois principais seriam
+  dois destinos padrão sem regra para escolher entre eles.
+- **Todo grupo e toda ação pertencem a um centro** (`centro_id not null`). O
+  principal é o destino do que não foi separado em outra frente — e é por ele
+  existir sempre que a coluna pode ser obrigatória, sem um estado "sem centro"
+  que ninguém sabe interpretar. O formulário já abre com ele marcado.
+- **O principal não pode ser excluído.** Apagá-lo deixaria a missão sem para
+  onde apontar. Pode ser renomeado, arquivado e ter o tipo trocado; arquivado,
+  ele sai das contagens mas continua sendo oferecido nos formulários, senão não
+  haveria o que escolher.
 - **Um grupo ou ação nunca aponta para o centro de outra missão.** A chave
   estrangeira é o par `(centro_id, missao_id)`, não só o centro — imposto pelo
   banco. Com um FK simples, um grupo da Zona Leste poderia apontar para um
@@ -88,19 +97,19 @@ frentes a missão sustenta.
   maiúsculas (`uq_centro_nome_por_missao`, sobre `lower(nome)`). Homônimos
   tornariam o select de grupos e ações uma adivinhação.
 - **Excluir um centro não apaga nada do que pertencia a ele.** Os grupos e as
-  ações são desvinculados e voltam a pender diretamente da missão; o diálogo de
-  confirmação diz quantos são, antes de confirmar. Para só tirar o centro das
-  contagens, o caminho é marcá-lo como inativo.
+  ações passam para o centro principal da missão; o diálogo de confirmação diz
+  quantos são, antes de confirmar. Para só tirar o centro das contagens, o
+  caminho é marcá-lo como inativo.
 - **Centro inativo não recebe vínculo novo**, mas quem já aponta para ele
   continua apontando — e o formulário de edição mostra o centro atual mesmo
   arquivado, para que salvar não o desvincule sem ninguém pedir.
 - **A lista de grupos de oração filtra por centro**, pela query string, como os
-  demais filtros. São três recortes, não dois: todos, um centro, e **os que
-  pendem diretamente da missão** — este último é onde se acha o que ainda não
-  foi organizado em frentes. Os totais do cabeçalho acompanham o recorte, e é
-  isso que responde "quantas pessoas os grupos deste centro reúnem". O filtro
-  lista também os centros arquivados: o nome deles aparece no cartão dos
-  grupos, e não poder filtrar por um nome visível seria um beco.
+  demais filtros. Não há opção "sem centro": o que não foi separado em outra
+  frente está no principal, que aparece pelo nome dele. Os totais do cabeçalho
+  acompanham o recorte, e é isso que responde "quantas pessoas os grupos deste
+  centro reúnem". O filtro lista também os centros arquivados: o nome deles
+  aparece no cartão dos grupos, e não poder filtrar por um nome visível seria
+  um beco.
 
 ### Missão em foco
 
