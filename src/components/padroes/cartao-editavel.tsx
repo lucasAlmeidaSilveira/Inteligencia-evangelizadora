@@ -5,12 +5,13 @@ import { Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
   CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+import { CartaoAcionavel } from "./cartao-acionavel";
 
 /**
  * Card que troca de leitura para formulário no lugar, sem mudar de rota.
@@ -41,7 +42,13 @@ export function CartaoEditavel({
   const [editando, setEditando] = useState(false);
 
   return (
-    <Card className={className}>
+    /* Aberto, o cartão já é o formulário: acionar de novo não teria o que
+       abrir, e um clique perdido no meio dos campos não pode significar nada.
+       Por isso `aoAcionar` só existe enquanto se está lendo. */
+    <CartaoAcionavel
+      aoAcionar={editando ? undefined : () => setEditando(true)}
+      className={className}
+    >
       <CardHeader>
         <CardTitle className="text-base">{titulo}</CardTitle>
         {/* Durante a edição o lápis sai: o card já está aberto, e o caminho de
@@ -68,7 +75,7 @@ export function CartaoEditavel({
       <CardContent>
         {children({ editando, fechar: () => setEditando(false) })}
       </CardContent>
-    </Card>
+    </CartaoAcionavel>
   );
 }
 

@@ -6,6 +6,7 @@ import { LoaderCircle, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
+import { CartaoAcionavel } from "@/components/padroes/cartao-acionavel";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -284,7 +285,10 @@ export function PainelCategorias({
           <Presenca>
             {visiveis.map((categoria) => (
               <ItemPresente key={categoria.id}>
-                <Card className="gap-0 py-3">
+                <CartaoAcionavel
+                  aoAcionar={() => setEditando(categoria)}
+                  className="gap-0 py-3"
+                >
                   <CardContent className="flex items-center gap-3 px-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -324,7 +328,7 @@ export function PainelCategorias({
                       </Button>
                     </div>
                   </CardContent>
-                </Card>
+                </CartaoAcionavel>
               </ItemPresente>
             ))}
           </Presenca>

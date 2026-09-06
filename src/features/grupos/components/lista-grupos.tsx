@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CartaoAcionavel } from "@/components/padroes/cartao-acionavel";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -191,7 +192,10 @@ export function ListaGrupos({
                    Presenca, e sem isto o cartão para de esticar até a altura da
                    fileira — grupos com e sem local deixariam de se alinhar. */
                 <ItemPresente key={grupo.id}>
-                  <Card className="h-full">
+                  <CartaoAcionavel
+                    aoAcionar={() => setEmEdicao(grupo)}
+                    className="h-full"
+                  >
                     <CardContent className="space-y-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
@@ -284,7 +288,7 @@ export function ListaGrupos({
                         </ul>
                       </div>
                     </CardContent>
-                  </Card>
+                  </CartaoAcionavel>
                 </ItemPresente>
               );
             })}

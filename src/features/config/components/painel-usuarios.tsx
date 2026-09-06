@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
+import { CartaoAcionavel } from "@/components/padroes/cartao-acionavel";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import {
@@ -29,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -466,7 +467,15 @@ export function PainelUsuarios({
 
               return (
                 <ItemPresente key={usuario.id}>
-                  <Card className="gap-0 py-3">
+                  {/* Sem permissão sobre esta pessoa, o cartão não é alvo de
+                      clique: prometer edição e abrir nada é pior que não
+                      prometer. É a mesma condição que esconde os botões. */}
+                  <CartaoAcionavel
+                    aoAcionar={
+                      editavel ? () => setEditando(usuario) : undefined
+                    }
+                    className="gap-0 py-3"
+                  >
                     <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -551,7 +560,7 @@ export function PainelUsuarios({
                         </div>
                       ) : null}
                     </CardContent>
-                  </Card>
+                  </CartaoAcionavel>
                 </ItemPresente>
               );
             })}
