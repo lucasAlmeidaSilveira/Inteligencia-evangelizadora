@@ -66,9 +66,16 @@ export default async function PaginaEditarEvento({
           dataFim: paraDatetimeLocal(evento.dataFim),
           local: evento.local ?? "",
           endereco: evento.endereco ?? "",
+          responsavelNome: evento.responsavelNome ?? "",
+          participantesInscritos: evento.participantesInscritos,
           participantesTotal: evento.participantesTotal,
+          participantesNovos: evento.participantesNovos,
+          participantesPermaneceram: evento.participantesPermaneceram,
           servosEngajados: evento.servosEngajados,
+          // Vazio, não "0,00": o input em branco é o que diz "não orçado".
+          orcamentoPrevisto: evento.orcamentoPrevisto ?? "",
           status: evento.status,
+          destaqueRegional: evento.destaqueRegional,
         }}
       />
     </div>

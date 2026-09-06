@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { CentroParaSelecao } from "@/features/centros/queries";
@@ -263,6 +265,47 @@ export function FormularioEvento({
               />
             )}
           </Campo>
+
+          <Campo
+            rotulo="Responsável"
+            ajuda="Quem responde pela ação — não precisa ter login no sistema."
+            erro={errors.responsavelNome?.message}
+            className="sm:col-span-2"
+          >
+            {(props) => (
+              <Input
+                {...props}
+                {...register("responsavelNome")}
+                placeholder="João Silva"
+              />
+            )}
+          </Campo>
+
+          <div className="bg-muted/40 flex items-start gap-3 rounded-lg border p-3 sm:col-span-2">
+            <Controller
+              control={control}
+              name="destaqueRegional"
+              render={({ field }) => (
+                <Switch
+                  id="destaqueRegional"
+                  checked={field.value === true}
+                  onCheckedChange={field.onChange}
+                  className="mt-0.5 cursor-pointer"
+                />
+              )}
+            />
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="destaqueRegional"
+                className="cursor-pointer text-sm font-medium"
+              >
+                Destacar para o regional
+              </Label>
+              <p className="text-muted-foreground text-sm">
+                Marca esta ação entre as que a missão quer levar ao regional.
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -310,20 +353,54 @@ export function FormularioEvento({
           <Campo rotulo="Endereço" erro={errors.endereco?.message}>
             {(props) => <Input {...props} {...register("endereco")} />}
           </Campo>
+
+          <Campo
+            rotulo="Orçamento previsto"
+            ajuda="Quanto se planeja gastar. Deixe vazio se não houver orçamento."
+            erro={errors.orcamentoPrevisto?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                inputMode="decimal"
+                placeholder="0,00"
+                className="tabular"
+                {...register("orcamentoPrevisto")}
+              />
+            )}
+          </Campo>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Alcance</CardTitle>
+          <CardTitle>Participação e alcance</CardTitle>
           <CardDescription>
             Preencha depois de realizada, se ainda não souber os números.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <Campo
-            rotulo="Participantes"
-            ajuda="Quantas pessoas foram alcançadas."
+            rotulo="Participantes inscritos"
+            ajuda="Quantas pessoas se inscreveram antes."
+            erro={errors.participantesInscritos?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="0"
+                className="tabular"
+                {...register("participantesInscritos")}
+              />
+            )}
+          </Campo>
+
+          <Campo
+            rotulo="Participantes presentes"
+            ajuda="Quantas compareceram de fato. É este o número que entra nos relatórios."
             erro={errors.participantesTotal?.message}
           >
             {(props) => (
@@ -340,9 +417,46 @@ export function FormularioEvento({
           </Campo>
 
           <Campo
+            rotulo="Novos participantes"
+            ajuda="Quantas vieram pela primeira vez."
+            erro={errors.participantesNovos?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="0"
+                className="tabular"
+                {...register("participantesNovos")}
+              />
+            )}
+          </Campo>
+
+          <Campo
+            rotulo="Permaneceram após a ação"
+            ajuda="Quantas seguiram num grupo de oração depois."
+            erro={errors.participantesPermaneceram?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="0"
+                className="tabular"
+                {...register("participantesPermaneceram")}
+              />
+            )}
+          </Campo>
+
+          <Campo
             rotulo="Servos engajados"
             ajuda="Quantos serviram na realização."
             erro={errors.servosEngajados?.message}
+            className="sm:col-span-2"
           >
             {(props) => (
               <Input

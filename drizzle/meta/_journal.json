@@ -43,6 +43,13 @@
       "when": 1788671518586,
       "tag": "0005_left_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788721210148,
+      "tag": "0006_sturdy_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }

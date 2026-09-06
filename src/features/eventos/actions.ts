@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import { ETIQUETAS } from "@/server/etiquetas";
@@ -129,6 +129,38 @@ export async function atualizarEvento(id: string, entrada: unknown) {
 
     revalidar(id, validado.data.missaoId);
     return sucesso();
+  } catch (erro) {
+    return falha(traduzirErroDeBanco(erro));
+  }
+}
+
+/**
+ * Liga e desliga o destaque para o regional direto do cabeçalho.
+ *
+ * Recebe só o id: o `destaque` novo sai do valor atual no banco e o `missaoId`
+ * do próprio `returning`, nunca do cliente — um responsável poderia forjar a
+ * requisição, e o RLS é quem garante que o UPDATE não alcança ação de outra
+ * missão. Existe separada de `atualizarEvento` porque marcar destaque não pode
+ * exigir revalidar o formulário inteiro.
+ */
+export async function alternarDestaqueRegional(id: string) {
+  try {
+    const alterado = await comUsuario(async (tx) => {
+      const [linha] = await tx
+        .update(eventos)
+        .set({ destaqueRegional: sql`not ${eventos.destaqueRegional}` })
+        .where(eq(eventos.id, id))
+        .returning({
+          missaoId: eventos.missaoId,
+          destaque: eventos.destaqueRegional,
+        });
+      return linha ?? null;
+    });
+
+    if (!alterado) return falha("Ação apostólica não encontrada.");
+
+    revalidar(id, alterado.missaoId);
+    return sucesso({ destaque: alterado.destaque });
   } catch (erro) {
     return falha(traduzirErroDeBanco(erro));
   }

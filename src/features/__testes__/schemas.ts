@@ -5,6 +5,7 @@ config({ path: ".env.local" });
 import type { z } from "zod";
 
 import { centroSchema, lerFiltroDeCentro } from "@/features/centros/schemas";
+import { eventoSchema } from "@/features/eventos/schemas";
 import { grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
@@ -138,6 +139,90 @@ recusar(
     ativo: true,
   },
   "dataFundacao",
+);
+
+/* ─── Ação apostólica ─────────────────────────────────────────────────────── */
+
+const UUID_A = "11111111-1111-4111-8111-111111111111";
+const UUID_B = "22222222-2222-4222-8222-222222222222";
+const UUID_C = "33333333-3333-4333-8333-333333333333";
+
+const acaoBase = {
+  missaoId: UUID_A,
+  centroId: UUID_B,
+  tipoEventoId: UUID_C,
+  titulo: "Seminário de Vida no Espírito Santo",
+  descricao: "",
+  observacoes: "",
+  dataInicio: "2026-09-12T09:00",
+  dataFim: "2026-09-14T17:00",
+  local: "",
+  endereco: "",
+  responsavelNome: "",
+  participantesInscritos: "",
+  participantesTotal: "",
+  participantesNovos: "",
+  participantesPermaneceram: "",
+  servosEngajados: "",
+  orcamentoPrevisto: "",
+  status: "planejado",
+  destaqueRegional: false,
+};
+
+verificar(
+  "Ação apostólica — apenas os obrigatórios",
+  eventoSchema,
+  acaoBase,
+  "formulário com todos os opcionais em branco",
+);
+
+/*
+ * O orçamento é a razão de este caso existir. O schema roda no cliente e de
+ * novo no servidor, sobre a própria saída: um parser que apaga todo ponto lê
+ * o "1234.56" que ele mesmo gerou como 123456 e centuplica o valor a cada
+ * salvamento — sem erro, sem teste vermelho, só o número errado no banco.
+ */
+verificar(
+  "Ação apostólica — completa, com orçamento no formato brasileiro",
+  eventoSchema,
+  {
+    ...acaoBase,
+    descricao: "Três dias de pregação e oração.",
+    observacoes: "Confirmar equipe de música.",
+    local: "Centro Bonsucesso",
+    endereco: "Av. Central, 1200",
+    responsavelNome: "João Silva",
+    participantesInscritos: "168",
+    participantesTotal: "142",
+    participantesNovos: "58",
+    participantesPermaneceram: "37",
+    servosEngajados: "24",
+    orcamentoPrevisto: "12.400,50",
+    status: "realizado",
+    destaqueRegional: true,
+  },
+  "formulário completo",
+);
+
+verificar(
+  "Ação apostólica — orçamento já no formato canônico",
+  eventoSchema,
+  { ...acaoBase, orcamentoPrevisto: "8900.00" },
+  "valor com ponto decimal, como volta do banco",
+);
+
+recusar(
+  "Ação apostólica — mais novos do que presentes",
+  eventoSchema,
+  { ...acaoBase, participantesTotal: "40", participantesNovos: "80" },
+  "participantesNovos",
+);
+
+recusar(
+  "Ação apostólica — permaneceram mais do que participaram",
+  eventoSchema,
+  { ...acaoBase, participantesTotal: "40", participantesPermaneceram: "50" },
+  "participantesPermaneceram",
 );
 
 verificar(

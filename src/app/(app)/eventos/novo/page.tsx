@@ -58,9 +58,15 @@ export default async function PaginaNovoEvento({
           dataFim: paraDatetimeLocal(fim),
           local: "",
           endereco: "",
+          responsavelNome: "",
+          participantesInscritos: "",
           participantesTotal: "",
+          participantesNovos: "",
+          participantesPermaneceram: "",
           servosEngajados: "",
+          orcamentoPrevisto: "",
           status: "planejado",
+          destaqueRegional: false,
         }}
       />
     </div>

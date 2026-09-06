@@ -65,6 +65,8 @@ export type FiltrosEvento = {
   status?: "planejado" | "em_andamento" | "realizado" | "cancelado";
   de?: Date;
   ate?: Date;
+  /** Só as ações marcadas para o regional. Ausente traz todas. */
+  destaque?: boolean;
 };
 
 const colunas = {
@@ -85,9 +87,16 @@ const colunas = {
   dataInicio: emIso(eventos.dataInicio),
   dataFim: emIso(eventos.dataFim),
   local: eventos.local,
+  responsavelNome: eventos.responsavelNome,
+  participantesInscritos: eventos.participantesInscritos,
+  /** Presentes. Ver a nota na coluna, em `db/schema.ts`. */
   participantesTotal: eventos.participantesTotal,
+  participantesNovos: eventos.participantesNovos,
+  participantesPermaneceram: eventos.participantesPermaneceram,
   servosEngajados: eventos.servosEngajados,
+  orcamentoPrevisto: eventos.orcamentoPrevisto,
   status: eventos.status,
+  destaqueRegional: eventos.destaqueRegional,
 };
 
 export const listarEventos = leituraCacheada(
@@ -99,6 +108,7 @@ export const listarEventos = leituraCacheada(
         ? eq(eventos.tipoEventoId, filtros.tipoEventoId)
         : undefined,
       filtros.status ? eq(eventos.status, filtros.status) : undefined,
+      filtros.destaque ? eq(eventos.destaqueRegional, true) : undefined,
       // Um evento entra no período se qualquer parte dele o intersecta.
       filtros.ate ? lte(eventos.dataInicio, filtros.ate) : undefined,
       filtros.de ? gte(eventos.dataFim, filtros.de) : undefined,

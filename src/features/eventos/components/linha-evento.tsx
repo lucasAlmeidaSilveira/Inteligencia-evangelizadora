@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Church, MapPin, Users } from "lucide-react";
+import { Church, MapPin, Star, Users } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatarMoeda, formatarNumero, formatarPeriodo } from "@/lib/format";
 
@@ -43,7 +44,18 @@ export function LinhaEvento({
                   {evento.titulo}
                 </Link>
               </h2>
-              <SeloStatus status={evento.status} className="shrink-0" />
+              <span className="flex shrink-0 items-center gap-1.5">
+                {evento.destaqueRegional ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-laranja/10 text-laranja border-laranja/25"
+                  >
+                    <Star className="fill-current" aria-hidden />
+                    Destaque
+                  </Badge>
+                ) : null}
+                <SeloStatus status={evento.status} />
+              </span>
             </div>
 
             <p className="text-muted-foreground text-sm">

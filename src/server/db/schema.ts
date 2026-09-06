@@ -384,9 +384,35 @@ export const eventos = ie.table(
     dataFim: timestamp("data_fim", { withTimezone: true }).notNull(),
     local: text("local"),
     endereco: text("endereco"),
+    /** Quem responde pela ação. Texto livre de propósito: quase sempre é um
+     *  servo da equipe que não tem login no sistema, e exigir um usuário
+     *  cadastrado deixaria o campo vazio na maioria das ações. */
+    responsavelNome: text("responsavel_nome"),
+    /**
+     * Quantos compareceram. O nome ficou de quando havia um número só; hoje
+     * lê-se "presentes", e é este o número que painel, relatórios e agregados
+     * somam — o que interessa consolidar é presença, não inscrição.
+     */
     participantesTotal: integer("participantes_total").notNull().default(0),
+    /** Pode ser menor que `participantesTotal`: gente aparece sem se inscrever. */
+    participantesInscritos: integer("participantes_inscritos")
+      .notNull()
+      .default(0),
+    participantesNovos: integer("participantes_novos").notNull().default(0),
+    /** Seguiram em grupo de oração depois da ação — o fruto que a missão mede. */
+    participantesPermaneceram: integer("participantes_permaneceram")
+      .notNull()
+      .default(0),
     servosEngajados: integer("servos_engajados").notNull().default(0),
+    /** Nulo é "não orçado", diferente de zero, que é "orçado em nada". Sem essa
+     *  distinção a tela mostraria R$ 0,00 previsto em toda ação antiga. */
+    orcamentoPrevisto: numeric("orcamento_previsto", {
+      precision: 12,
+      scale: 2,
+    }),
     status: statusEventoEnum("status").notNull().default("planejado"),
+    /** Marcada pela missão para ser levada ao regional. */
+    destaqueRegional: boolean("destaque_regional").notNull().default(false),
     criadoPor: uuid("criado_por").references(() => usuarios.id, {
       onDelete: "set null",
     }),
@@ -395,12 +421,23 @@ export const eventos = ie.table(
   (t) => [
     check("periodo_valido", sql`${t.dataFim} >= ${t.dataInicio}`),
     check("participantes_nao_negativo", sql`${t.participantesTotal} >= 0`),
+    check("inscritos_nao_negativo", sql`${t.participantesInscritos} >= 0`),
+    check("novos_nao_negativo", sql`${t.participantesNovos} >= 0`),
+    check("permaneceram_nao_negativo", sql`${t.participantesPermaneceram} >= 0`),
     check("servos_nao_negativo", sql`${t.servosEngajados} >= 0`),
+    check("orcamento_nao_negativo", sql`${t.orcamentoPrevisto} >= 0`),
+    /* Não há CHECK relacionando `novos`/`permaneceram` a `participantesTotal`:
+       essa regra vive no zod, onde o erro chega no campo certo e em português.
+       Vindo do banco, um engano de digitação viraria erro de constraint. */
     index("idx_eventos_missao").on(t.missaoId),
     index("idx_eventos_centro").on(t.centroId),
     index("idx_eventos_tipo").on(t.tipoEventoId),
     // Consulta mais frequente do sistema: eventos de um mês no calendário.
     index("idx_eventos_periodo").on(t.dataInicio, t.dataFim),
+    // Parcial: destaque é a minoria das ações, e o índice só precisa dessas.
+    index("idx_eventos_destaque")
+      .on(t.missaoId)
+      .where(sql`${t.destaqueRegional}`),
     // Mesmo raciocínio do FK de `grupos_oracao`: o par impede que a ação de
     // uma missão aponte para o centro de outra.
     foreignKey({

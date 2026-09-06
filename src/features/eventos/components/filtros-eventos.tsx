@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { X } from "lucide-react";
+import { Star, X } from "lucide-react";
 
 import { useFiltro } from "@/components/padroes/area-filtrada";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,10 @@ export function FiltrosEventos({
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
-  const temFiltro = ["tipo", "status"].some((c) => parametros.has(c));
+  const temFiltro = ["tipo", "status", "destaque"].some((c) =>
+    parametros.has(c),
+  );
+  const soDestaques = parametros.has("destaque");
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -85,6 +88,18 @@ export function FiltrosEventos({
           ))}
         </SelectContent>
       </Select>
+
+      {/* Botão de duas posições, não um terceiro select: o filtro é ligado ou
+          desligado, e `aria-pressed` conta o estado a quem não vê a cor. */}
+      <Button
+        variant={soDestaques ? "secondary" : "outline"}
+        aria-pressed={soDestaques}
+        className="cursor-pointer"
+        onClick={() => definir("destaque", soDestaques ? TODOS : "1")}
+      >
+        <Star className={soDestaques ? "fill-current" : ""} aria-hidden />
+        Só destaques
+      </Button>
 
       {temFiltro ? (
         <Button

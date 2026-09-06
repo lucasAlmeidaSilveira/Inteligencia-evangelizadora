@@ -33,6 +33,49 @@ export function calcularFinanceiro(
   return { receitas: r / 100, despesas: d / 100, saldo: (r - d) / 100 };
 }
 
+export type Orcamento = {
+  /** `null` quando a ação não foi orçada — diferente de orçada em zero. */
+  previsto: number | null;
+  executado: number;
+  /** Positivo é folga, negativo é estouro. `null` sem orçamento. */
+  restante: number | null;
+  /** Quanto do orçamento já foi gasto. `null` sem orçamento. */
+  percentual: number | null;
+};
+
+/**
+ * Compara o que se planejou gastar com o que se gastou de fato.
+ *
+ * Em centavos inteiros como todo o resto do módulo: comparar `previsto` e
+ * `despesas` em ponto flutuante faria uma ação gasta exatamente no orçamento
+ * aparecer estourada por um centavo de arredondamento.
+ */
+export function compararOrcamento(
+  previsto: string | number | null | undefined,
+  despesas: number,
+): Orcamento {
+  const executado = paraCentavos(despesas);
+
+  // `null` e `""` são "não orçado"; zero orçado é um valor legítimo.
+  if (previsto === null || previsto === undefined || previsto === "") {
+    return {
+      previsto: null,
+      executado: executado / 100,
+      restante: null,
+      percentual: null,
+    };
+  }
+
+  const alvo = paraCentavos(previsto);
+  return {
+    previsto: alvo / 100,
+    executado: executado / 100,
+    restante: (alvo - executado) / 100,
+    // Orçamento zerado não tem base para percentual — mesma regra das taxas.
+    percentual: alvo > 0 ? (executado / alvo) * 100 : null,
+  };
+}
+
 /** Soma uma lista de lançamentos já separados por tipo. */
 export function somarLancamentos(
   lancamentos: { tipo: "receita" | "despesa"; valor: string }[],

@@ -309,18 +309,35 @@ async function principal() {
 
         const participantes = status === "cancelado" || futuro ? 0 : inteiro(25, 480);
         const servos = participantes === 0 ? 0 : Math.max(4, Math.round(participantes / inteiro(6, 14)));
+        // Inscritos oscila em torno dos presentes: às vezes falta quem se
+        // inscreveu, às vezes aparece gente sem inscrição. Os dois casos são
+        // reais, e a tela precisa mostrar comparecimento acima de 100% também.
+        const inscritos = participantes === 0
+          ? 0
+          : Math.max(1, Math.round(participantes * (0.8 + aleatorio() * 0.5)));
+        const novos = Math.round(participantes * (0.15 + aleatorio() * 0.3));
+        const permaneceram = Math.round(novos * (0.3 + aleatorio() * 0.5));
+        // Nem toda ação é orçada — a tela precisa mostrar as duas situações.
+        const orcamento = status === "cancelado" || aleatorio() > 0.65
+          ? null
+          : (inteiro(2_000, 25_000) + inteiro(0, 99) / 100).toFixed(2);
 
         const { rows: [evento] } = await c.query<{ id: string }>(
           `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, descricao,
-                                data_inicio, data_fim, local, endereco,
-                                participantes_total, servos_engajados, status)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+                                data_inicio, data_fim, local, endereco, responsavel_nome,
+                                participantes_inscritos, participantes_total,
+                                participantes_novos, participantes_permaneceram,
+                                servos_engajados, orcamento_previsto, status,
+                                destaque_regional)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) returning id`,
           [criada.id, centroSorteado(), escolher(tipos).id,
            `${escolher(TITULOS)} ${inicio.getFullYear()}`,
            aleatorio() > 0.5 ? "Ação voltada à evangelização e ao acolhimento da comunidade." : null,
            inicio.toISOString(), fim.toISOString(), escolher(LOCAIS),
            aleatorio() > 0.6 ? `Av. Central, ${inteiro(100, 2000)}` : null,
-           participantes, servos, status],
+           escolher(NOMES),
+           inscritos, participantes, novos, permaneceram, servos, orcamento, status,
+           status === "realizado" && aleatorio() > 0.75],
         );
         totais.eventos++;
 

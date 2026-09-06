@@ -48,6 +48,8 @@ export default async function PaginaEventos({
     missaoId: foco.missaoId,
     tipoEventoId: texto("tipo"),
     status,
+    // Presença do parâmetro basta: o filtro só tem "ligado" e "ausente".
+    destaque: parametros.destaque !== undefined || undefined,
   };
 
   const [eventos, missoes, tipos] = await Promise.all([
@@ -56,7 +58,9 @@ export default async function PaginaEventos({
     listarTiposEvento(),
   ]);
 
-  const temFiltro = Boolean(filtros.tipoEventoId || filtros.status);
+  const temFiltro = Boolean(
+    filtros.tipoEventoId || filtros.status || filtros.destaque,
+  );
   const podeCriar = missoes.length > 0;
 
   return (
