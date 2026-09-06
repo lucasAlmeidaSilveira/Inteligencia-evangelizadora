@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 
+import { Marca } from "@/components/marca";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { FormularioLogin } from "./formulario-login";
@@ -11,27 +12,27 @@ export default function PaginaLogin() {
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       {/* Painel de marca — some no mobile, onde a tarefa é entrar, não admirar */}
-      <section className="bg-primary text-primary-foreground relative hidden flex-col justify-between overflow-hidden p-12 lg:flex">
+      <section className="bg-marca-azul text-marca-tinta relative hidden flex-col justify-between overflow-hidden p-12 lg:flex [--marca-acento:var(--marca-luz)]">
+        {/* O fogo missionário atrás do azul da contemplação — a única peça
+            decorativa da tela, e por isso ela pode ser generosa. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-32 -right-24 size-[28rem] rounded-full opacity-20 blur-3xl"
-          style={{ background: "var(--gold)" }}
+          className="pointer-events-none absolute -top-48 -right-40 size-[40rem] rounded-full opacity-45 blur-3xl"
+          style={{ background: "var(--marca-luz)" }}
         />
-        <p className="font-brand text-2xl tracking-tight">
-          Inteligência&nbsp;Evangelizadora
-        </p>
+        <Marca className="relative" />
 
         <div className="relative max-w-md space-y-4">
           <h1 className="font-brand text-4xl leading-tight text-balance">
             Cada missão tem uma história de crescimento.
           </h1>
-          <p className="text-primary-foreground/70 text-lg leading-relaxed text-pretty">
+          <p className="text-marca-tinta/70 text-lg leading-relaxed text-pretty">
             Acompanhe membros, grupos de oração e ações apostólicas das missões
             de São Paulo em um só lugar.
           </p>
         </div>
 
-        <p className="text-primary-foreground/50 relative text-sm">
+        <p className="text-marca-tinta/50 relative text-sm">
           Acesso restrito aos responsáveis cadastrados.
         </p>
       </section>
@@ -39,9 +40,7 @@ export default function PaginaLogin() {
       <section className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <p className="font-brand text-primary text-xl tracking-tight">
-              Inteligência&nbsp;Evangelizadora
-            </p>
+            <Marca className="text-primary" />
           </div>
 
           <div className="mb-8 space-y-1.5">

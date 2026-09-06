@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { SimboloBloco } from "@/components/marca";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
@@ -54,9 +56,7 @@ export function SidebarApp({
           href="/"
           className="flex items-center gap-2.5 overflow-hidden rounded-md"
         >
-          <span className="bg-primary text-primary-foreground font-brand flex size-8 shrink-0 items-center justify-center rounded-lg text-sm">
-            IE
-          </span>
+          <SimboloBloco />
           <span className="font-brand truncate text-base leading-none tracking-tight group-data-[collapsible=icon]:hidden">
             Inteligência
             <br />

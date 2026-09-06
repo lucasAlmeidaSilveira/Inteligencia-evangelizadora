@@ -6,20 +6,28 @@
 
 /* ---------------------------------------------------------------------------
    Inteligência Evangelizadora — design tokens
-   Identidade provisional: roxo litúrgico + dourado quente.
-   Toda a identidade visual vive aqui. Trocar a marca = editar este arquivo.
+
+   Azul e laranja não são preferência estética: são o carisma da Comunidade
+   Católica Shalom. O Shalom é reconciliação com Deus e com o próximo pelo
+   encontro com Cristo Ressuscitado, vivida em dois polos — contemplação e
+   missão. O azul é a profundidade da oração; o laranja, o fogo do impulso
+   missionário. A marca (`src/components/marca.tsx`) leva os dois: o E azul é a
+   estrutura que acumula; o I laranja é quem sai dela.
+
    Cores em OKLCH: luminosidade perceptual uniforme, o que mantém o contraste
-   previsível ao gerar variações claras/escuras.
+   previsível ao gerar variações. Todos os valores abaixo foram medidos, não
+   escolhidos no olho — contraste WCAG para texto e interface, e as séries de
+   gráfico validadas por script contra daltonismo.
 --------------------------------------------------------------------------- */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  --font-sans: var(--font-inter);
-  --font-serif: var(--font-fraunces);
+  --font-sans: var(--font-plex);
+  --font-marca: var(--font-grotesk);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-heading: var(--font-inter);
+  --font-heading: var(--font-plex);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -40,8 +48,11 @@
   --color-ring: var(--ring);
 
   /* Marca e semântica de estado — próprios do projeto */
-  --color-gold: var(--gold);
-  --color-gold-foreground: var(--gold-foreground);
+  --color-marca-azul: var(--marca-azul);
+  --color-marca-tinta: var(--marca-tinta);
+  --color-laranja: var(--laranja);
+  --color-laranja-forte: var(--laranja-forte);
+  --color-laranja-foreground: var(--laranja-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -76,123 +87,134 @@
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(0.994 0.002 293);
-  --foreground: oklch(0.24 0.035 285);
+  /* Fundo levemente azulado, não creme: a temperatura acompanha a marca. */
+  --background: oklch(0.985 0.006 250);
+  --foreground: oklch(0.2 0.035 250); /* 17,3:1 — AAA */
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.035 285);
+  --card-foreground: oklch(0.2 0.035 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.24 0.035 285);
+  --popover-foreground: oklch(0.2 0.035 250);
 
-  /* Roxo litúrgico — #7C3AED */
-  --primary: oklch(0.541 0.281 293.009);
-  --primary-foreground: oklch(0.99 0.005 293);
+  /* Azul da contemplação — 8,4:1 sobre branco, AAA */
+  --primary: oklch(0.42 0.135 250);
+  --primary-foreground: oklch(0.99 0.005 250);
 
-  --secondary: oklch(0.962 0.014 293);
-  --secondary-foreground: oklch(0.38 0.15 293);
+  /* Azul da marca. Não tem contraparte em .dark de propósito: uma identidade
+     que troca de cor com o tema deixa de ser identidade. É o azul do hábito
+     e das publicações da Comunidade, e vale nas duas versões do sistema. */
+  --marca-azul: oklch(0.42 0.135 250);
+  --marca-tinta: oklch(0.99 0.005 250);
+  /* Sobre o azul profundo o laranja precisa clarear para render como luz. */
+  --marca-luz: oklch(0.74 0.16 48);
 
-  --muted: oklch(0.968 0.006 286);
-  --muted-foreground: oklch(0.505 0.022 286);
+  --secondary: oklch(0.955 0.018 250);
+  --secondary-foreground: oklch(0.35 0.1 250);
 
-  /* `accent` é superfície de hover na semântica shadcn — não é a cor de CTA */
-  --accent: oklch(0.955 0.022 293);
-  --accent-foreground: oklch(0.36 0.16 293);
+  --muted: oklch(0.965 0.008 250);
+  --muted-foreground: oklch(0.5 0.022 250); /* 5,8:1 — AA */
 
-  --destructive: oklch(0.577 0.245 27.325);
+  /* `accent` é superfície de hover na semântica shadcn — não é a cor de marca */
+  --accent: oklch(0.95 0.022 250);
+  --accent-foreground: oklch(0.33 0.1 250);
+
+  /* Vermelho deslocado do laranja da marca, para os dois não se confundirem */
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.912 0.008 286);
-  --input: oklch(0.898 0.01 286);
-  --ring: oklch(0.541 0.281 293.009);
+  --border: oklch(0.9 0.012 250);
+  --input: oklch(0.885 0.015 250);
+  --ring: oklch(0.42 0.135 250);
 
-  /* Dourado quente — #A16207. Destaque de marca, nunca sozinho como estado. */
-  --gold: oklch(0.554 0.135 66.442);
-  --gold-foreground: oklch(0.99 0 0);
+  /* Laranja do impulso missionário. `forte` é a variante para quando há
+     texto branco por cima — 5,9:1 — já que o tom vivo não alcançaria. */
+  --laranja: oklch(0.64 0.17 48);
+  --laranja-forte: oklch(0.52 0.165 48);
+  --laranja-foreground: oklch(0.99 0 0);
 
-  --success: oklch(0.55 0.135 155);
+  --success: oklch(0.52 0.13 160);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.63 0.145 70);
+  --warning: oklch(0.62 0.145 70);
   --warning-foreground: oklch(0.99 0 0);
-  --info: oklch(0.55 0.16 250);
+  --info: oklch(0.5 0.14 250);
   --info-foreground: oklch(0.99 0 0);
 
-  /* Séries de gráfico — ordem fixa, nunca reciclada.
-     Validadas por script (não a olho) contra a superfície clara: faixa de
-     luminosidade, piso de croma, separação para daltonismo (pior par ΔE 12,7)
-     e contraste. Ainda assim nunca são o único diferenciador: traço e rótulo
-     direto acompanham. O terceiro slot precisou de mais croma — em 0.11 lia
-     como cinza e reprovava no piso. */
-  --chart-1: oklch(0.541 0.281 293.009);
-  --chart-2: oklch(0.62 0.14 66);
-  --chart-3: oklch(0.64 0.19 200);
-  --chart-4: oklch(0.6 0.19 12);
-  --chart-5: oklch(0.52 0.14 250);
+  /* Séries de gráfico — ordem fixa, nunca reciclada. Azul e laranja da marca
+     abrem a sequência. Validadas por script: faixa de luminosidade, piso de
+     croma, separação para daltonismo (pior par ΔE 10,9) e contraste. Ainda
+     assim nunca são o único diferenciador: traço e rótulo direto acompanham. */
+  --chart-1: oklch(0.64 0.17 250);
+  --chart-2: oklch(0.64 0.17 48);
+  --chart-3: oklch(0.64 0.17 170);
+  --chart-4: oklch(0.64 0.17 325);
+  --chart-5: oklch(0.64 0.17 80);
 
-  --sidebar: oklch(0.985 0.006 293);
-  --sidebar-foreground: oklch(0.3 0.03 286);
-  --sidebar-primary: oklch(0.541 0.281 293.009);
-  --sidebar-primary-foreground: oklch(0.99 0.005 293);
-  --sidebar-accent: oklch(0.955 0.022 293);
-  --sidebar-accent-foreground: oklch(0.36 0.16 293);
-  --sidebar-border: oklch(0.915 0.01 290);
-  --sidebar-ring: oklch(0.541 0.281 293.009);
+  --sidebar: oklch(0.975 0.008 250);
+  --sidebar-foreground: oklch(0.3 0.03 250);
+  --sidebar-primary: oklch(0.42 0.135 250);
+  --sidebar-primary-foreground: oklch(0.99 0.005 250);
+  --sidebar-accent: oklch(0.94 0.022 250);
+  --sidebar-accent-foreground: oklch(0.33 0.1 250);
+  --sidebar-border: oklch(0.905 0.014 250);
+  --sidebar-ring: oklch(0.42 0.135 250);
 }
 
 .dark {
-  --background: oklch(0.165 0.015 285);
-  --foreground: oklch(0.96 0.005 286);
+  --background: oklch(0.19 0.028 250);
+  --foreground: oklch(0.95 0.008 250);
 
-  --card: oklch(0.215 0.018 285);
-  --card-foreground: oklch(0.96 0.005 286);
-  --popover: oklch(0.215 0.018 285);
-  --popover-foreground: oklch(0.96 0.005 286);
+  --card: oklch(0.24 0.03 250);
+  --card-foreground: oklch(0.95 0.008 250);
+  --popover: oklch(0.24 0.03 250);
+  --popover-foreground: oklch(0.95 0.008 250);
 
-  /* Violeta clareado: no escuro o tom de 54% de luminosidade não atinge 4.5:1 */
-  --primary: oklch(0.7 0.185 293);
-  --primary-foreground: oklch(0.18 0.04 285);
+  /* Azul clareado: no escuro, o tom de 42% de luminosidade não alcança 4,5:1 */
+  --primary: oklch(0.7 0.15 250);
+  --primary-foreground: oklch(0.19 0.04 250);
 
-  --secondary: oklch(0.28 0.025 286);
-  --secondary-foreground: oklch(0.96 0.005 286);
+  --secondary: oklch(0.3 0.035 250);
+  --secondary-foreground: oklch(0.95 0.008 250);
 
-  --muted: oklch(0.27 0.02 286);
-  --muted-foreground: oklch(0.72 0.022 286);
+  --muted: oklch(0.29 0.028 250);
+  --muted-foreground: oklch(0.72 0.02 250);
 
-  --accent: oklch(0.3 0.045 293);
-  --accent-foreground: oklch(0.95 0.015 293);
+  --accent: oklch(0.32 0.05 250);
+  --accent-foreground: oklch(0.94 0.015 250);
 
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.16 0.02 25);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.17 0.03 25);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.7 0.185 293);
+  --border: oklch(1 0 0 / 13%);
+  --input: oklch(1 0 0 / 17%);
+  --ring: oklch(0.7 0.15 250);
 
-  --gold: oklch(0.75 0.13 72);
-  --gold-foreground: oklch(0.18 0.03 70);
+  --laranja: oklch(0.74 0.16 48);
+  --laranja-forte: oklch(0.66 0.16 48);
+  --laranja-foreground: oklch(0.18 0.03 48);
 
-  --success: oklch(0.7 0.15 155);
-  --success-foreground: oklch(0.16 0.03 155);
+  --success: oklch(0.72 0.14 160);
+  --success-foreground: oklch(0.17 0.03 160);
   --warning: oklch(0.78 0.15 75);
   --warning-foreground: oklch(0.18 0.03 70);
   --info: oklch(0.7 0.14 250);
-  --info-foreground: oklch(0.16 0.03 250);
+  --info-foreground: oklch(0.17 0.03 250);
 
-  /* Escolhidas para a superfície escura, não invertidas da clara: as duas
-     paletas foram validadas em separado (pior par ΔE 10,5 aqui). */
-  --chart-1: oklch(0.66 0.19 293.009);
-  --chart-2: oklch(0.64 0.17 66);
-  --chart-3: oklch(0.64 0.17 200);
-  --chart-4: oklch(0.64 0.17 12);
-  --chart-5: oklch(0.64 0.17 250);
+  /* Validadas em separado contra a superfície escura — não são uma inversão
+     da paleta clara. Pior par ΔE 10,9. */
+  --chart-1: oklch(0.64 0.17 250);
+  --chart-2: oklch(0.64 0.17 48);
+  --chart-3: oklch(0.64 0.17 170);
+  --chart-4: oklch(0.64 0.17 325);
+  --chart-5: oklch(0.64 0.17 80);
 
-  --sidebar: oklch(0.2 0.02 285);
-  --sidebar-foreground: oklch(0.92 0.008 286);
-  --sidebar-primary: oklch(0.7 0.185 293);
-  --sidebar-primary-foreground: oklch(0.18 0.04 285);
-  --sidebar-accent: oklch(0.3 0.045 293);
-  --sidebar-accent-foreground: oklch(0.95 0.015 293);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.7 0.185 293);
+  --sidebar: oklch(0.215 0.03 250);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-primary: oklch(0.7 0.15 250);
+  --sidebar-primary-foreground: oklch(0.19 0.04 250);
+  --sidebar-accent: oklch(0.32 0.05 250);
+  --sidebar-accent-foreground: oklch(0.94 0.015 250);
+  --sidebar-border: oklch(1 0 0 / 13%);
+  --sidebar-ring: oklch(0.7 0.15 250);
 }
 
 @layer base {
@@ -227,7 +249,7 @@
 
 @layer utilities {
   .font-brand {
-    font-family: var(--font-serif), ui-serif, Georgia, serif;
+    font-family: var(--font-marca), ui-sans-serif, system-ui, sans-serif;
   }
 
   .tabular {
