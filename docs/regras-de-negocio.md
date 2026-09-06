@@ -81,24 +81,36 @@ continuam na query string, e continuam compartilháveis. A escolha do recorte
 
 ## Ciclo de vida do acesso
 
-1. O admin master cria a missão e, **no mesmo passo**, convida o responsável.
-   Uma missão sem ninguém que responda por ela é pendência que alguém teria de
-   lembrar de resolver depois — resolver na hora evita a missão órfã.
-2. A ação devolve um **link para a pessoa definir a própria senha**. Não se
+1. O admin master cria a missão. O cadastro da missão é **só isso** — nenhuma
+   conta nasce daí.
+2. Em **Equipe**, o admin convida o responsável e o vincula à missão. É a
+   **única porta** para gravar papel e vínculo: uma segunda seria uma segunda
+   sem `normalizar()`, sem a trava de própria conta e sem a checagem de quem já
+   está na equipe. Até isso acontecer a missão fica sem responsável, e a tela
+   dela avisa disso com um caminho direto para Equipe — a pendência fica
+   visível em vez de esquecida.
+3. O convite devolve um **link para a pessoa definir a própria senha**. Não se
    gera senha provisória: assim a senha nunca passa por terceiros. O link é
-   reemitível em Configurações → Usuários, para quem perdeu o dele.
-3. Dali em diante o responsável convida os auxiliares da própria missão,
+   reemitível na própria tela de Equipe, para quem perdeu o dele.
+4. Dali em diante o responsável convida os auxiliares da própria missão,
    sozinho.
 
 Detalhes que sustentam esse fluxo:
 
 - **A conta pode já existir no Firebase sem estar liberada aqui.** Nesse caso
-  o convite apenas vincula, não cria de novo.
+  o convite apenas vincula, não cria de novo. Isso vale para a conta do
+  Firebase; quem **já tem linha em `usuarios`** não é convidado de novo — veja
+  o item seguinte.
+- **Convidar quem já está na equipe é recusado**, e a interface manda editar o
+  acesso da pessoa. Sem isso o convite recairia no `on conflict` e sobrescreveria
+  papel e missão em silêncio: um responsável de outra missão a deixaria órfã, e
+  um admin seria rebaixado sem nada avisar.
 - **Papel e missão vindos do formulário só valem para o admin master.** Para o
   responsável, os dois são impostos no servidor: auxiliar, na missão dele.
 - **Ninguém altera o próprio papel, remove o próprio acesso nem se exclui.**
   Trancar-se para fora seria irreversível pela interface — sem admin ativo,
-  ninguém devolve acesso a ninguém.
+  ninguém devolve acesso a ninguém. Vale também para o convite: convidar o
+  próprio e-mail é a mesma escrita por outro caminho, e é recusada igual.
 - **`pnpm admin:criar` existe só para o primeiro acesso**, o problema do ovo e
   da galinha. Não há cadastro público em lugar nenhum.
 - **Desativar alguém (`ativo = false`) surte efeito na requisição seguinte**,

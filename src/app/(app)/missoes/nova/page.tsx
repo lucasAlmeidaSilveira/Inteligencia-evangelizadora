@@ -11,7 +11,7 @@ export default async function PaginaNovaMissao() {
     <div className="mx-auto max-w-3xl space-y-6">
       <CabecalhoPagina
         titulo="Nova missão"
-        descricao="Os grupos de oração e as ações apostólicas são cadastrados depois, dentro da missão."
+        descricao="Aqui vai só o cadastro da missão. O responsável é definido em Equipe, e os grupos de oração e as ações apostólicas são cadastrados depois, dentro da missão."
       />
       <FormularioMissao />
     </div>

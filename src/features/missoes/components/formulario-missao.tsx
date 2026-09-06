@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { z } from "zod";
 
@@ -22,16 +21,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-import { DialogoLink } from "@/features/config/components/painel-usuarios";
-
 import { atualizarMissao, criarMissao } from "../actions";
-import { criacaoMissaoSchema } from "../schemas";
+import { missaoSchema } from "../schemas";
 
-/* O formulário sempre usa o schema de criação: os campos do responsável são
-   opcionais, e na edição eles simplesmente não são renderizados. Cada action
-   revalida com o schema que lhe cabe. */
-type Entrada = z.input<typeof criacaoMissaoSchema>;
-type Saida = z.output<typeof criacaoMissaoSchema>;
+/* Criar e editar usam o mesmo schema: o cadastro da missão é o mesmo nos dois
+   momentos. Quem responde pela missão não é campo daqui — é a conta com papel
+   `responsavel` vinculada a ela, definida em Equipe. */
+type Entrada = z.input<typeof missaoSchema>;
+type Saida = z.output<typeof missaoSchema>;
 
 export const VALORES_INICIAIS: Entrada = {
   nome: "",
@@ -43,8 +40,6 @@ export const VALORES_INICIAIS: Entrada = {
   membrosTotal: "",
   observacoes: "",
   ativo: true,
-  responsavelNome: "",
-  responsavelEmail: "",
 };
 
 export function FormularioMissao({
@@ -59,12 +54,9 @@ export function FormularioMissao({
   podeArquivar?: boolean;
 }) {
   const router = useRouter();
-  const [convite, setConvite] = useState<{ link: string; email: string } | null>(
-    null,
-  );
 
   const form = useForm<Entrada, unknown, Saida>({
-    resolver: zodResolver(criacaoMissaoSchema),
+    resolver: zodResolver(missaoSchema),
     defaultValues: valores,
   });
 
@@ -93,25 +85,13 @@ export function FormularioMissao({
 
     toast.success(missaoId ? "Missão atualizada" : "Missão criada");
 
-    if (!missaoId) {
-      const dados = (resultado as {
-        dados: { id: string; link: string | null; email: string | null };
-      }).dados;
+    // A missão nova abre na própria tela, que avisa que ainda não tem
+    // responsável e leva a Equipe — o passo seguinte de quem acabou de criá-la.
+    const destino = missaoId
+      ? missaoId
+      : (resultado as { dados: { id: string } }).dados.id;
 
-      // Com responsável convidado, o link é a última coisa a fazer antes de
-      // sair da tela — navegar direto o perderia.
-      if (dados.link && dados.email) {
-        setConvite({ link: dados.link, email: dados.email });
-        router.refresh();
-        return;
-      }
-
-      router.push(`/missoes/${dados.id}`);
-      router.refresh();
-      return;
-    }
-
-    router.push(`/missoes/${missaoId}`);
+    router.push(`/missoes/${destino}`);
     router.refresh();
   }
 
@@ -185,8 +165,7 @@ export function FormularioMissao({
         <CardHeader>
           <CardTitle>Contato</CardTitle>
           <CardDescription>
-            Telefone público da missão. Quem responde por ela é definido pela
-            conta de responsável, em Equipe.
+            Telefone público da missão, para quem procura por ela.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
@@ -204,39 +183,18 @@ export function FormularioMissao({
         </CardContent>
       </Card>
 
-      {!missaoId ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Responsável pela missão</CardTitle>
-            <CardDescription>
-              Quem vai responder por ela e convidar os auxiliares. A conta é
-              criada sem senha: ao salvar, você recebe um link para enviar.
-              Pode ficar em branco e ser definido depois, em Equipe.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5 sm:grid-cols-2">
-            <Campo
-              rotulo="Nome completo"
-              erro={errors.responsavelNome?.message}
-            >
-              {(props) => (
-                <Input {...props} {...register("responsavelNome")} />
-              )}
-            </Campo>
-
-            <Campo rotulo="E-mail" erro={errors.responsavelEmail?.message}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="email"
-                  inputMode="email"
-                  {...register("responsavelEmail")}
-                />
-              )}
-            </Campo>
-          </CardContent>
-        </Card>
-      ) : null}
+      {/* Ocupa o lugar do antigo card de responsável: diz onde ele se define,
+          para o admin não procurar aqui o campo que não existe mais. */}
+      <div className="text-muted-foreground flex items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-pretty">
+        <UserRound className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p>
+          Quem responde pela missão é definido em{" "}
+          <span className="text-foreground font-medium">Equipe</span>
+          {missaoId
+            ? ", que é também onde se troca de responsável."
+            : ", depois de criar a missão."}
+        </p>
+      </div>
 
       <Card>
         <CardHeader>
@@ -327,14 +285,6 @@ export function FormularioMissao({
           )}
         </Button>
       </div>
-
-      {convite ? (
-        <DialogoLink
-          link={convite.link}
-          email={convite.email}
-          aoFechar={() => router.push("/missoes")}
-        />
-      ) : null}
     </form>
   );
 }

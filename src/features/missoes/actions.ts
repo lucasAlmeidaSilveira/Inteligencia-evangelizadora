@@ -9,11 +9,10 @@ import { gerarSlug } from "@/lib/slug";
 import { requerUsuario } from "@/server/auth/sessao";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
-import { gruposOracao, missaoIndicadores, missoes, usuarios } from "@/server/db/schema";
-import { adminAuth } from "@/server/firebase/admin";
+import { gruposOracao, missaoIndicadores, missoes } from "@/server/db/schema";
 
 import { COOKIE_FOCO, DURACAO_FOCO_S } from "./foco";
-import { competenciaSchema, criacaoMissaoSchema, missaoSchema } from "./schemas";
+import { competenciaSchema, missaoSchema } from "./schemas";
 
 /** Só admin cria missão — o RLS já barra, mas a mensagem aqui é legível. */
 const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
@@ -24,6 +23,11 @@ const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
 function revalidarArvore(missaoId?: string) {
   revalidatePath("/missoes", "layout");
   if (missaoId) revalidatePath(`/missoes/${missaoId}`, "layout");
+  // Equipe também depende da lista de missões: é dela que sai o select do
+  // convite, e o nome da missão aparece ao lado de cada pessoa. Sem isto uma
+  // missão recém-criada não aparece para vincular, e uma excluída continua
+  // aparecendo.
+  revalidatePath("/equipe");
   revalidatePath("/");
 }
 
@@ -44,36 +48,28 @@ async function slugLivre(tx: Transacao, base: string) {
 }
 
 /**
- * Criação de missão — sempre ato do administrador master.
+ * Criação de missão — sempre ato do administrador master. Cria só a missão.
  *
- * O responsável é convidado no mesmo passo, e a ação devolve o link para ele
- * definir a senha. Uma missão sem ninguém que responda por ela é um estado que
- * alguém precisa lembrar de resolver depois; resolvê-lo aqui, no momento em
- * que a informação está à mão, evita a missão órfã.
+ * O responsável não entra aqui, embora a informação costume estar à mão: quem
+ * responde pela missão é a conta com papel `responsavel` vinculada a ela, e
+ * gravar esse vínculo é atribuição de `convidarUsuario`, na tela Equipe. Uma
+ * segunda porta para a mesma escrita seria uma porta sem `normalizar()`, sem a
+ * trava de própria conta e sem a checagem de quem já está na equipe — foi
+ * exatamente o que existiu aqui, e o `on conflict` movia de missão, em
+ * silêncio, quem já tivesse conta.
+ *
+ * A missão recém-criada fica sem responsável até isso ser feito, e a tela dela
+ * avisa disso com um caminho direto para Equipe.
  */
 export async function criarMissao(entrada: unknown) {
-  const validado = criacaoMissaoSchema.safeParse(entrada);
+  const validado = missaoSchema.safeParse(entrada);
   if (!validado.success) {
     return falha("Confira os campos destacados.", camposComErro(validado.error));
   }
 
-  const { responsavelNome, responsavelEmail, ...dadosMissao } = validado.data;
-  const convidar = Boolean(responsavelNome && responsavelEmail);
+  const dadosMissao = validado.data;
 
   try {
-    // A conta no Firebase nasce antes da transação. Se o banco falhar depois,
-    // sobra uma conta sem vínculo — inofensiva, e reaproveitada no próximo
-    // convite, que procura por e-mail antes de criar.
-    const auth = convidar ? await adminAuth() : null;
-    const conta = auth
-      ? await auth.getUserByEmail(responsavelEmail!).catch(() =>
-          auth.createUser({
-            email: responsavelEmail!,
-            displayName: responsavelNome!,
-          }),
-        )
-      : null;
-
     const id = await comUsuario(async (tx, usuario) => {
       if (!usuario.ehAdmin) throw new Error(APENAS_ADMIN);
 
@@ -85,38 +81,11 @@ export async function criarMissao(entrada: unknown) {
         })
         .returning({ id: missoes.id });
 
-      if (conta) {
-        await tx
-          .insert(usuarios)
-          .values({
-            firebaseUid: conta.uid,
-            nome: responsavelNome!,
-            email: responsavelEmail!,
-            papel: "responsavel",
-            missaoId: criada.id,
-            ativo: true,
-          })
-          .onConflictDoUpdate({
-            target: usuarios.firebaseUid,
-            set: {
-              nome: responsavelNome!,
-              papel: "responsavel",
-              missaoId: criada.id,
-              ativo: true,
-            },
-          });
-      }
-
       return criada.id;
     });
 
-    const link = auth
-      ? await auth.generatePasswordResetLink(responsavelEmail!)
-      : null;
-
     revalidarArvore(id);
-    revalidatePath("/equipe");
-    return sucesso({ id, link, email: responsavelEmail });
+    return sucesso({ id });
   } catch (erro) {
     if (erro instanceof Error && erro.message === APENAS_ADMIN) {
       return falha(APENAS_ADMIN);

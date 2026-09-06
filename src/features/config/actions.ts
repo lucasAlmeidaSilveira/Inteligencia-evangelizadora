@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import {
   categoriasFinanceiras,
-  missoes,
   tiposEvento,
   usuarios,
 } from "@/server/db/schema";
@@ -186,6 +185,11 @@ function normalizar(
  * A conta nasce sem senha: o retorno é um link para a própria pessoa definir a
  * dela. É mais seguro que gerar uma senha provisória e mandá-la por mensagem —
  * a senha nunca passa por ninguém além de quem vai usá-la.
+ *
+ * Convidar é só para quem ainda não tem linha em `usuarios`. Quem já tem se
+ * altera por `atualizarUsuario`, que é onde moram as travas: sem essa recusa o
+ * convite cairia no `on conflict` abaixo e sobrescreveria papel e missão em
+ * silêncio — inclusive os de quem está convidando.
  */
 export async function convidarUsuario(entrada: unknown) {
   const validado = usuarioSchema.safeParse(entrada);
@@ -207,8 +211,22 @@ export async function convidarUsuario(entrada: unknown) {
         }),
       );
 
-    await comUsuario(async (tx, usuario) => {
+    const resultado = await comUsuario(async (tx, usuario) => {
       if (!usuario.podeConvidar) throw new Error(SO_QUEM_CONVIDA);
+
+      // Pelo `firebaseUid`, não pelo e-mail digitado: grafias diferentes podem
+      // resolver para a mesma conta do Firebase, e é a conta que manda.
+      if (conta.uid === usuario.firebaseUid) return "propria-conta" as const;
+
+      const [existente] = await tx
+        .select({ nome: usuarios.nome })
+        .from(usuarios)
+        .where(eq(usuarios.firebaseUid, conta.uid))
+        .limit(1);
+
+      // O RLS pode esconder a linha de quem é de outra missão; nesse caso o
+      // `on conflict` continua sendo a rede — e falha, em vez de sobrescrever.
+      if (existente) return { jaExiste: existente.nome };
 
       const dados = normalizar(validado.data, usuario);
 
@@ -219,7 +237,21 @@ export async function convidarUsuario(entrada: unknown) {
           target: usuarios.firebaseUid,
           set: dados,
         });
+
+      return "ok" as const;
     });
+
+    if (resultado === "propria-conta") {
+      return falha(
+        "Esse e-mail é o seu. Você não pode alterar o próprio papel nem a própria missão. Peça a outro administrador.",
+      );
+    }
+    if (typeof resultado === "object") {
+      return falha(
+        `${resultado.jaExiste} já tem acesso ao sistema. Use "Editar acesso" para mudar o papel ou a missão dessa pessoa.`,
+        { email: "Este e-mail já está na equipe." },
+      );
+    }
 
     const link = await auth.generatePasswordResetLink(validado.data.email);
 
@@ -351,15 +383,4 @@ export async function gerarLinkDeSenha(usuarioId: string) {
   } catch (erro) {
     return tratar(erro);
   }
-}
-
-/** Missões disponíveis para vincular — só o admin master escolhe. */
-export async function missoesParaVincular() {
-  return comUsuario(async (tx, usuario) => {
-    exigirAdmin(usuario.ehAdmin);
-    return tx
-      .select({ id: missoes.id, nome: missoes.nome })
-      .from(missoes)
-      .orderBy(missoes.nome);
-  });
 }

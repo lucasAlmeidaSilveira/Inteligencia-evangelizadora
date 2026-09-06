@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ROTULO_PAPEL } from "@/features/config/schemas";
 import { FormularioSenha } from "@/features/conta/components/formulario-senha";
 import { listarMissoes } from "@/features/missoes/queries";
 import { requerUsuario } from "@/server/auth/sessao";
@@ -58,9 +59,9 @@ export default async function PaginaConta() {
           <Linha
             Icone={ShieldCheck}
             rotulo="Permissão"
-            valor={
-              usuario.ehAdmin ? "Administrador geral" : "Responsável de missão"
-            }
+            // A mesma fonte do badge em Equipe: o auxiliar não é responsável, e
+            // dizer que é confunde justamente quem tem menos permissão.
+            valor={ROTULO_PAPEL[usuario.papel]}
           />
           {!usuario.ehAdmin ? (
             <Linha

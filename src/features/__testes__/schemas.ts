@@ -68,6 +68,28 @@ function verificar(
   );
 }
 
+/** O contrário de `verificar`: entrada que precisa ser recusada, e no campo
+ *  certo — mensagem no campo errado não chega em quem precisa corrigi-la. */
+function recusar(
+  nome: string,
+  schema: z.ZodType,
+  entrada: unknown,
+  campoEsperado: string,
+) {
+  console.log(`\n${nome}`);
+
+  const resultado = schema.safeParse(entrada);
+  ok("a entrada é recusada", !resultado.success);
+  if (resultado.success) return;
+
+  const campos = resultado.error.issues.map((i) => i.path.join("."));
+  ok(
+    `o erro aponta para "${campoEsperado}"`,
+    campos.includes(campoEsperado),
+    `apontou para: ${campos.join(", ") || "(raiz)"}`,
+  );
+}
+
 verificar(
   "Missão — apenas o nome preenchido",
   missaoSchema,
@@ -77,9 +99,7 @@ verificar(
     regiao: "",
     endereco: "",
     dataFundacao: "",
-    responsavelNome: "",
     contatoTelefone: "",
-    contatoEmail: "",
     membrosTotal: "",
     observacoes: "",
     ativo: true,
@@ -96,14 +116,27 @@ verificar(
     regiao: "Zona Leste",
     endereco: "Rua das Flores, 100",
     dataFundacao: "2015-03-12",
-    responsavelNome: "Maria Silva",
     contatoTelefone: "(11) 90000-0000",
-    contatoEmail: "maria@missao.org.br",
     membrosTotal: "240",
     observacoes: "Missão com forte atuação social.",
     ativo: true,
   },
   "formulário completo",
+);
+
+recusar(
+  "Missão — fundação no futuro",
+  missaoSchema,
+  {
+    nome: "Missão Adiantada",
+    cidade: "São Paulo",
+    // Um ano à frente: a data existe e é válida, o que a torna a única forma
+    // de exercitar o refine em vez do Date.parse.
+    dataFundacao: `${new Date().getFullYear() + 1}-01-15`,
+    membrosTotal: "",
+    ativo: true,
+  },
+  "dataFundacao",
 );
 
 verificar(
