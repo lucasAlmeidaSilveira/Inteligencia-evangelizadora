@@ -20,7 +20,7 @@ export function NavAbas({ missaoId }: { missaoId: string }) {
      título da aba e no estado vazio, que é onde ele ensina. */
   const abas = [
     { rotulo: "Visão geral", href: base },
-    { rotulo: "Centros", href: `${base}/centros` },
+    { rotulo: "CEV", href: `${base}/centros` },
     { rotulo: "Grupos de oração", href: `${base}/grupos` },
     { rotulo: "Indicadores", href: `${base}/indicadores` },
   ];

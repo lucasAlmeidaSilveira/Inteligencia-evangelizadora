@@ -67,7 +67,7 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
           entrando na ordem de leitura contam que o painel foi montado para ser
           lido nessa ordem. */}
       <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {/* Com uma missão em foco, "Missões ativas" mostraria sempre 1 — um
+        {/* Com uma missão em foco, "Missões" mostraria sempre 1 — um
             cartão gasto para repetir o que o seletor ao lado já diz. */}
         {missaoId ? (
           <CartaoMetrica
@@ -78,7 +78,7 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
         ) : (
           <CartaoMetrica
             Icone={Church}
-            rotulo="Missões ativas"
+            rotulo="Missões"
             valor={formatarNumero(r.missoesAtivas)}
           />
         )}
