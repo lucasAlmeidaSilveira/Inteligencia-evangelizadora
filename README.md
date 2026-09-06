@@ -3,6 +3,13 @@
 Acompanhamento das missões de São Paulo: membros, grupos de oração e ações
 apostólicas — com dashboards, calendário mensal e controle financeiro por evento.
 
+| Documentação | |
+|---|---|
+| [Regras de negócio](docs/regras-de-negocio.md) | Papéis, permissões e o que o sistema garante sobre o domínio |
+| [Identidade visual](docs/identidade-visual.md) | Marca, cor, tipografia e padrões de interface |
+| [Arquitetura](docs/arquitetura.md) | Sessão, RLS, organização do código e decisões de desempenho |
+| [CLAUDE.md](CLAUDE.md) | Invariantes e convenções, para quem programa com IA |
+
 ## Quem faz o quê
 
 | | Admin master | Responsável | Auxiliar |
@@ -38,11 +45,12 @@ vira sozinho, convidando os auxiliares da sua missão.
 O Firebase confirma **quem** é a pessoa. O Postgres decide **o que** ela vê.
 
 O banco não conhece o usuário final — quem o informa é a aplicação, gravando
-`app.usuario_id` e `app.eh_admin` no início de cada transação
+`app.usuario_id`, `app.firebase_uid`, `app.papel` e `app.missao_id` no
+início de cada transação
 (`src/server/db/escopo.ts`). As políticas de RLS em `drizzle/politicas.sql`
 leem esses valores.
 
-Cinco detalhes que sustentam isso e não devem ser mexidos sem entender:
+Quatro detalhes que sustentam isso e não devem ser mexidos sem entender:
 
 - **A aplicação conecta como `ie_app`, nunca como dona do schema.** Um papel
   com o atributo `BYPASSRLS` ignora todas as políticas — é mais forte que
@@ -53,7 +61,7 @@ Cinco detalhes que sustentam isso e não devem ser mexidos sem entender:
 
 - **`set_config(..., true)`** deixa o escopo local à transação. Ele desaparece
   no commit e nunca vaza para a próxima requisição que reutilizar a conexão.
-- **`FORCE ROW LEVEL SECURITY`** em todas as tabelas. O Render entrega um
+- **`FORCE ROW LEVEL SECURITY`** em todas as tabelas. O provedor entrega um
   usuário dono das tabelas, e o dono ignora RLS por padrão — sem `FORCE`, as
   políticas seriam decorativas.
 - **Toda leitura e escrita de dados de missão passa por `comEscopo()`.** É o
@@ -172,15 +180,23 @@ luminosidade, piso de croma, separação para daltonismo e contraste contra a
 superfície. As duas paletas — clara e escura — foram validadas em separado; a
 escura não é uma inversão da clara.
 
-Cor nunca é o único diferenciador: as linhas têm padrões de traço distintos,
-séries têm legenda, e todo gráfico oferece "Ver como tabela".
+Cor nunca é o único diferenciador: as linhas têm padrões de traço distintos e
+séries têm legenda. Todo gráfico deve oferecer também "Ver como tabela" — por
+ora só o de evolução tem.
 
 ## Identidade visual
 
-A paleta é **provisional** — roxo litúrgico com dourado quente — e vive
-inteiramente em custom properties no topo de `src/app/globals.css`. Trocar a
-identidade quando a marca for definida é editar aquele arquivo, não caçar
-valores hexadecimais pelo código.
+Azul e laranja não são preferência estética: são as cores da Comunidade
+Católica Shalom, e carregam os dois polos do carisma — o azul é a profundidade
+da contemplação, o laranja é o fogo do impulso missionário. O monograma leva os
+dois: o E azul é a estrutura que acumula, o I laranja é quem sai dela.
+
+A paleta vive inteiramente em custom properties no topo de
+`src/app/globals.css`, em OKLCH e com contrastes medidos. Ajustar um tom é
+editar aquele arquivo, não caçar valores hexadecimais pelo código.
+
+Construção do monograma, pares tipográficos e regras de uso em
+[`docs/identidade-visual.md`](docs/identidade-visual.md).
 
 ## Banco de demonstração
 
