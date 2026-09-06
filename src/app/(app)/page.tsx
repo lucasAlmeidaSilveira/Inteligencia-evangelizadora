@@ -2,16 +2,21 @@ import { Suspense } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
+  CheckCircle2,
   Church,
   HandHeart,
   Plus,
-  Sparkles,
+  UserPlus,
   Users,
   UsersRound,
   Wallet,
   Waypoints,
 } from "lucide-react";
 
+import {
+  AreaFiltrada,
+  ResultadosFiltrados,
+} from "@/components/padroes/area-filtrada";
 import { CartaoMetrica } from "@/components/padroes/cartao-metrica";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import {
@@ -28,13 +33,16 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeloStatus } from "@/features/eventos/components/selo-status";
+import { FiltrosPainel } from "@/features/painel/components/filtros-painel";
 import { GraficoComparativo } from "@/features/painel/components/grafico-comparativo";
 import { GraficoEvolucao } from "@/features/painel/components/grafico-evolucao";
 import {
+  obterAcoes,
   obterComparativo,
+  obterEventosDoPeriodo,
   obterEvolucao,
+  obterPanorama,
   obterProximosEventos,
-  obterResumo,
 } from "@/features/painel/queries";
 import { focoAtual } from "@/features/missoes/foco";
 import { listarMissoes } from "@/features/missoes/queries";
@@ -43,7 +51,8 @@ import {
   formatarNumero,
   formatarRelativo,
 } from "@/lib/format";
-import { chaveDoMes } from "@/lib/mes";
+import { lerPeriodoDoPainel } from "@/features/painel/periodo";
+import { intervaloDoMes, rotuloDoMes } from "@/lib/mes";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Painel" };
@@ -55,137 +64,223 @@ function saudacao() {
   return "Boa noite";
 }
 
+/** O recorte como sufixo de URL, para os cartões levarem o mês consigo. */
+function sufixoDeMes(mes?: string) {
+  return mes ? `&mes=${mes}` : "";
+}
+
 /* ─── Seções ─────────────────────────────────────────────────────────────── */
 
-async function Indicadores({ missaoId }: { missaoId?: string }) {
-  const r = await obterResumo(missaoId);
-  const ano = new Date().getFullYear();
+async function Panorama({ missaoId }: { missaoId?: string }) {
+  const r = await obterPanorama(missaoId);
 
   return (
-    <div className="space-y-4">
-      {/* As duas fileiras são uma sequência só: `--cascata-inicio` na segunda
-          continua a contagem da primeira, em vez de reiniciá-la. Oito cartões
-          entrando na ordem de leitura contam que o painel foi montado para ser
-          lido nessa ordem. */}
-      <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {/* Com uma missão em foco, "Missões" mostraria sempre 1 — um
-            cartão gasto para repetir o que o seletor ao lado já diz. */}
-        {missaoId ? (
-          <CartaoMetrica
-            Icone={Sparkles}
-            rotulo={`Ações em ${ano}`}
-            valor={formatarNumero(r.acoesNoAno)}
-            href="/eventos"
-          />
-        ) : (
-          <CartaoMetrica
-            Icone={Church}
-            rotulo="Missões"
-            valor={formatarNumero(r.missoesAtivas)}
-            href="/missoes"
-          />
-        )}
+    <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Com uma missão em foco, "Missões" mostraria sempre 1 — um cartão
+          gasto para repetir o que o seletor ao lado já diz. */}
+      {missaoId ? null : (
         <CartaoMetrica
-          Icone={Users}
-          rotulo="Membros"
-          valor={formatarNumero(r.membros)}
-          detalhe={
-            r.membrosEstimados
-              ? "Inclui estimativas pelos grupos de oração"
-              : undefined
-          }
+          Icone={Church}
+          rotulo="Missões"
+          valor={formatarNumero(r.missoesAtivas)}
+          href="/missoes"
         />
-        {/* A missão em foco viaja como filtro para a tela de destino: sem isso
-            o cartão mostraria o número de uma missão e abriria a lista de
-            todas. As duas telas recortam por `?missao=`, não pelo foco. */}
-        <CartaoMetrica
-          Icone={Waypoints}
-          rotulo="Centros de evangelização"
-          valor={formatarNumero(r.centrosAtivos)}
-          href={missaoId ? `/centros?missao=${missaoId}` : "/centros"}
-        />
-        {/* "Pessoas em grupos" era um cartão inteiro para um número que só faz
-            sentido ao lado da contagem de grupos — como detalhe ele fica junto
-            do que qualifica, e a fileira continua com quatro. */}
-        <CartaoMetrica
-          Icone={UsersRound}
-          rotulo="Grupos de oração"
-          valor={formatarNumero(r.gruposAtivos)}
-          detalhe={
-            r.pessoasEmGrupos > 0
-              ? `${formatarNumero(r.pessoasEmGrupos)} pessoas reunidas`
-              : undefined
-          }
-          href={missaoId ? `/grupos?missao=${missaoId}` : "/grupos"}
-        />
-      </div>
-
-      <div className="cascata grid gap-4 [--cascata-inicio:140ms] sm:grid-cols-2 xl:grid-cols-4">
-        {/* Leva a /eventos já recortado neste mês: sem o `?mes=`, o cartão
-            diria um número e a tela de destino mostraria outro — a lista
-            inteira, de todos os meses. É a mesma conta dos dois lados, vinda de
-            `lib/mes.ts`. */}
-        <CartaoMetrica
-          Icone={Sparkles}
-          rotulo="Ações neste mês"
-          valor={formatarNumero(r.acoesNoMes)}
-          href={`/eventos?mes=${chaveDoMes()}`}
-        />
-        <CartaoMetrica
-          Icone={Users}
-          rotulo={`Participantes em ${ano}`}
-          valor={formatarNumero(r.participantesNoAno)}
-        />
-        <CartaoMetrica
-          Icone={HandHeart}
-          rotulo={`Servos engajados em ${ano}`}
-          valor={formatarNumero(r.servosNoAno)}
-        />
-        <CartaoMetrica
-          Icone={Wallet}
-          rotulo={`Saldo em ${ano}`}
-          valor={formatarMoeda(r.saldoNoAno)}
-          detalhe={
-            r.receitasNoAno > 0 || r.despesasNoAno > 0
-              ? `${formatarMoeda(r.receitasNoAno)} em receitas · ${formatarMoeda(r.despesasNoAno)} em despesas`
-              : "Sem lançamentos no período"
-          }
-          className={r.saldoNoAno < 0 ? "border-destructive/40" : undefined}
-        />
-      </div>
+      )}
+      <CartaoMetrica
+        Icone={Users}
+        rotulo="Total da Obra"
+        valor={formatarNumero(r.membros)}
+        detalhe={
+          r.membrosEstimados
+            ? "Inclui estimativas pelos grupos de oração"
+            : undefined
+        }
+      />
+      {/* A missão em foco viaja como filtro para a tela de destino: sem isso
+          o cartão mostraria o número de uma missão e abriria a lista de
+          todas. As duas telas recortam por `?missao=`, não pelo foco. */}
+      <CartaoMetrica
+        Icone={Waypoints}
+        rotulo="Centros de evangelização"
+        valor={formatarNumero(r.centrosAtivos)}
+        href={missaoId ? `/centros?missao=${missaoId}` : "/centros"}
+      />
+      {/* "Pessoas em grupos" era um cartão inteiro para um número que só faz
+          sentido ao lado da contagem de grupos — como detalhe ele fica junto
+          do que qualifica, e a fileira continua com quatro. */}
+      <CartaoMetrica
+        Icone={UsersRound}
+        rotulo="Grupos de oração"
+        valor={formatarNumero(r.gruposAtivos)}
+        detalhe={
+          r.pessoasEmGrupos > 0
+            ? `${formatarNumero(r.pessoasEmGrupos)} pessoas reunidas`
+            : undefined
+        }
+        href={missaoId ? `/grupos?missao=${missaoId}` : "/grupos"}
+      />
     </div>
   );
 }
 
-async function Evolucao({ missaoId }: { missaoId?: string }) {
-  const evolucao = await obterEvolucao(12, missaoId);
+async function Acoes({ missaoId, mes }: { missaoId?: string; mes?: string }) {
+  const r = await obterAcoes(missaoId, mes);
+  const sufixo = sufixoDeMes(mes);
+
+  /* Média por ação, não um segundo número solto: "1.284 participantes" não
+     diz se foram muitas ações pequenas ou poucas grandes, e é essa a diferença
+     que o coordenador procura ao comparar dois meses. */
+  const media =
+    r.realizadas > 0 ? Math.round(r.participantes / r.realizadas) : 0;
+
+  const proporcaoNovos =
+    r.participantes > 0
+      ? Math.round((r.participantesNovos / r.participantes) * 100)
+      : null;
+
+  return (
+    /* `--cascata-inicio` continua a contagem da fileira de cima em vez de
+       reiniciá-la: as duas são uma sequência de leitura só. */
+    <div className="cascata grid gap-4 [--cascata-inicio:140ms] sm:grid-cols-2 xl:grid-cols-4">
+      {/* Os destaques vêm primeiro porque são a pergunta que o painel existe
+          para responder — quantos seminários e retiros a missão fez. */}
+      {r.destacados.map((tipo) => (
+        <CartaoMetrica
+          key={tipo.id}
+          cor={tipo.cor}
+          rotulo={tipo.nome}
+          valor={formatarNumero(tipo.acoes)}
+          detalhe={
+            tipo.participantes > 0
+              ? `${formatarNumero(tipo.participantes)} participantes`
+              : undefined
+          }
+          href={`/eventos?tipo=${tipo.id}&status=realizado${sufixo}`}
+        />
+      ))}
+
+      {/* Leva a /eventos com o mesmo recorte: sem o `?mes=` e o `?status=`, o
+          cartão diria um número e a tela de destino mostraria outro — a lista
+          inteira, de todos os meses e situações. */}
+      <CartaoMetrica
+        Icone={CheckCircle2}
+        rotulo="Ações realizadas"
+        valor={formatarNumero(r.realizadas)}
+        detalhe={
+          r.agendadas > 0
+            ? `${formatarNumero(r.agendadas)} ainda agendadas`
+            : undefined
+        }
+        href={`/eventos?status=realizado${sufixo}`}
+      />
+      <CartaoMetrica
+        Icone={Users}
+        rotulo="Participantes"
+        valor={formatarNumero(r.participantes)}
+        detalhe={
+          media > 0 ? `Média de ${formatarNumero(media)} por ação` : undefined
+        }
+      />
+      <CartaoMetrica
+        Icone={UserPlus}
+        rotulo="Novos participantes"
+        valor={formatarNumero(r.participantesNovos)}
+        detalhe={
+          proporcaoNovos !== null
+            ? `${proporcaoNovos}% dos participantes`
+            : undefined
+        }
+      />
+      <CartaoMetrica
+        Icone={HandHeart}
+        rotulo="Servos engajados"
+        valor={formatarNumero(r.servos)}
+      />
+      <CartaoMetrica
+        Icone={Wallet}
+        rotulo="Saldo"
+        valor={formatarMoeda(r.saldo)}
+        detalhe={
+          r.receitas > 0 || r.despesas > 0
+            ? `${formatarMoeda(r.receitas)} em receitas · ${formatarMoeda(r.despesas)} em despesas`
+            : "Sem lançamentos no período"
+        }
+        className={r.saldo < 0 ? "border-destructive/40" : undefined}
+      />
+    </div>
+  );
+}
+
+async function Evolucao({
+  missaoId,
+  mes,
+}: {
+  missaoId?: string;
+  mes?: string;
+}) {
+  const evolucao = await obterEvolucao(12, missaoId, mes);
   return <GraficoEvolucao evolucao={evolucao} />;
 }
 
 /* O ranking não estreita com o foco: a pergunta que ele responde é onde a
    missão está em relação às outras, e filtrar apagaria justamente a resposta.
-   O recorte vira destaque. */
-async function Comparativo({ destaque }: { destaque?: string }) {
-  const missoes = await obterComparativo();
+   O recorte vira destaque. O mês, esse sim, vale — ele muda a régua, não o
+   conjunto comparado. */
+async function Comparativo({
+  destaque,
+  mes,
+}: {
+  destaque?: string;
+  mes?: string;
+}) {
+  const { missoes, semRegistro } = await obterComparativo(mes);
 
   if (missoes.length < 2) {
     return (
       <p className="text-muted-foreground py-10 text-center text-sm text-pretty">
-        A comparação aparece a partir de duas missões cadastradas.
+        {mes
+          ? "Faltam competências registradas nesse mês para comparar as missões."
+          : "A comparação aparece a partir de duas missões cadastradas."}
       </p>
     );
   }
 
-  return <GraficoComparativo missoes={missoes} destaque={destaque} />;
+  return (
+    <div className="space-y-3">
+      <GraficoComparativo missoes={missoes} destaque={destaque} />
+      {/* Missão fora do ranking por falta de indicador precisa ser dita: sem
+          isso, a que sumiu pareceria ter deixado de existir. */}
+      {semRegistro > 0 ? (
+        <p className="text-muted-foreground text-xs text-pretty">
+          {semRegistro === 1
+            ? "1 missão ficou de fora por não ter competência registrada até esse mês."
+            : `${formatarNumero(semRegistro)} missões ficaram de fora por não terem competência registrada até esse mês.`}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
-async function ProximasAcoes({ missaoId }: { missaoId?: string }) {
-  const eventos = await obterProximosEventos(6, missaoId);
+/**
+ * A agenda do recorte.
+ *
+ * Sem mês, são as próximas — a pergunta de quem abre o painel hoje. Com um mês
+ * escolhido, "próximas" não quer dizer nada: em março do ano passado não há
+ * nada à frente, e a lista viria vazia como se a missão não tivesse feito
+ * nada. Aí passa a listar o que aconteceu naquele mês.
+ */
+async function Agenda({ missaoId, mes }: { missaoId?: string; mes?: string }) {
+  const intervalo = mes ? intervaloDoMes(mes) : undefined;
+  const eventos = intervalo
+    ? await obterEventosDoPeriodo(intervalo.de, intervalo.ate, missaoId)
+    : await obterProximosEventos(6, missaoId);
 
   if (eventos.length === 0) {
     return (
       <p className="text-muted-foreground py-8 text-center text-sm">
-        Nenhuma ação apostólica agendada.
+        {mes
+          ? "Nenhuma ação apostólica nesse mês."
+          : "Nenhuma ação apostólica agendada."}
       </p>
     );
   }
@@ -229,13 +324,22 @@ async function ProximasAcoes({ missaoId }: { missaoId?: string }) {
 
 /* ─── Página ─────────────────────────────────────────────────────────────── */
 
-export default async function PaginaPainel() {
+export default async function PaginaPainel({
+  searchParams,
+}: PageProps<"/">) {
+  const parametros = await searchParams;
   const usuario = await requerUsuario();
   const [missoes, foco] = await Promise.all([
     listarMissoes(usuario.ehAdmin),
     focoAtual(),
   ]);
   const primeiroNome = usuario.nome.split(" ")[0];
+
+  /* O mês vem da URL e a missão do cookie: o recorte de período é para ser
+     mandado por mensagem, o de missão é de quem está trabalhando. Sem
+     parâmetro o painel abre no mês corrente; `undefined` aqui é "todo o
+     período", pedido explicitamente. */
+  const mes = lerPeriodoDoPainel(parametros.mes);
 
   if (missoes.length === 0) {
     return (
@@ -294,50 +398,87 @@ export default async function PaginaPainel() {
         </Button>
       </header>
 
-      {/* Cada seção carrega em fronteira própria: a mais lenta não segura as
-          outras, e o painel vai se preenchendo em vez de esperar por tudo. */}
-      <Suspense fallback={<EsqueletoMetricas quantidade={8} />}>
-        <Indicadores missaoId={foco.missaoId} />
-      </Suspense>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Evolução de membros</CardTitle>
-            <CardDescription>
-              A partir das competências registradas em cada missão.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <Evolucao missaoId={foco.missaoId} />
+      {/* Filtro e conteúdo sob a mesma área: é o que permite o painel esmaecer
+          enquanto o servidor responde, em vez de deixar os números do recorte
+          anterior na tela como se nada tivesse sido pedido. As seções continuam
+          renderizadas no servidor — chegam aqui como `children`. */}
+      <AreaFiltrada className="space-y-6">
+        <ResultadosFiltrados className="space-y-6">
+          {/* O rótulo da fileira não é decoração: membros, centros e grupos
+              valem hoje e não mudam com o mês. Sem ele, "Total da Obra: 1.240"
+              sob "Setembro de 2026" se leria como 1.240 pessoas em setembro. */}
+          <section className="space-y-3">
+            <h2 className="text-muted-foreground text-xs font-medium">Hoje</h2>
+            {/* Cada seção carrega em fronteira própria: a mais lenta não segura
+                as outras, e o painel vai se preenchendo em vez de esperar por
+                tudo. */}
+            <Suspense
+              fallback={<EsqueletoMetricas quantidade={foco.missaoId ? 3 : 4} />}
+            >
+              <Panorama missaoId={foco.missaoId} />
             </Suspense>
-          </CardContent>
-        </Card>
+          </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Missões por membros</CardTitle>
-            <CardDescription>Da maior para a menor.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <Comparativo destaque={foco.missaoId} />
+          <section className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-muted-foreground text-xs font-medium">
+                {mes ? rotuloDoMes(mes) : "Todo o período"}
+              </h2>
+              <FiltrosPainel />
+            </div>
+            <Suspense fallback={<EsqueletoMetricas quantidade={7} />}>
+              <Acoes missaoId={foco.missaoId} mes={mes} />
             </Suspense>
-          </CardContent>
-        </Card>
-      </div>
+          </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Próximas ações apostólicas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<EsqueletoLinhas quantidade={3} />}>
-            <ProximasAcoes missaoId={foco.missaoId} />
-          </Suspense>
-        </CardContent>
-      </Card>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Evolução de membros</CardTitle>
+                <CardDescription>
+                  A partir das competências registradas em cada missão.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <Evolucao missaoId={foco.missaoId} mes={mes} />
+                </Suspense>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Missões por membros</CardTitle>
+                <CardDescription>
+                  {mes
+                    ? `Da maior para a menor, pela competência de ${rotuloDoMes(mes).toLowerCase()}.`
+                    : "Da maior para a menor."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <Comparativo destaque={foco.missaoId} mes={mes} />
+                </Suspense>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {mes
+                  ? `Ações apostólicas de ${rotuloDoMes(mes).toLowerCase()}`
+                  : "Próximas ações apostólicas"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<EsqueletoLinhas quantidade={3} />}>
+                <Agenda missaoId={foco.missaoId} mes={mes} />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </ResultadosFiltrados>
+      </AreaFiltrada>
     </div>
   );
 }

@@ -42,9 +42,20 @@ export const tipoEventoSchema = z.object({
     )
     .pipe(z.number().int().min(0).max(999)),
   ativo: z.boolean(),
+  destacarNoPainel: z.boolean(),
 });
 
 export type DadosTipoEvento = z.input<typeof tipoEventoSchema>;
+
+/**
+ * Quantos tipos cabem em destaque no painel.
+ *
+ * O limite é de leitura, não de banco: a fileira de ações já tem cinco cartões
+ * fixos, e cada destaque empurra o resto para uma terceira linha. Contar linhas
+ * não vira `CHECK` — como as regras cruzadas de participação, mora onde o erro
+ * chega em português e no campo certo.
+ */
+export const MAXIMO_DESTAQUES = 4;
 
 export const categoriaSchema = z.object({
   nome: z

@@ -344,6 +344,16 @@ export const tiposEvento = ie.table(
     descricao: text("descricao"),
     ordem: integer("ordem").notNull().default(0),
     ativo: boolean("ativo").notNull().default(true),
+    /**
+     * Ganha cartão próprio no painel, com o total de ações realizadas do tipo.
+     *
+     * SVES e retiros são os números que a missão acompanha de perto, e o tipo
+     * é cadastro do admin — não dá para fixá-los no código sem quebrar na
+     * primeira renomeação. Marcar a linha sobrevive a isso e serve tipos que
+     * ainda não existem. `false` por padrão: nenhum tipo já cadastrado aparece
+     * no painel sem alguém ter pedido.
+     */
+    destacarNoPainel: boolean("destacar_no_painel").notNull().default(false),
     ...auditoria,
   },
   (t) => [check("cor_hexadecimal", sql`${t.cor} ~* '^#[0-9a-f]{6}$'`)],

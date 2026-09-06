@@ -136,6 +136,33 @@ O foco vive num cookie, não na URL — os filtros de período, tipo e situaçã
 continuam na query string, e continuam compartilháveis. A escolha do recorte
 é do coordenador que está trabalhando, não do link que ele manda para alguém.
 
+### Período do painel
+
+O painel recorta por mês pela query string (`?mes=2026-09`), o mesmo parâmetro
+de `/eventos` — os cartões levam para lá com o recorte aplicado, e dois
+vocabulários de período fariam o painel dizer um número e a tela de destino
+mostrar outro.
+
+Três diferenças em relação aos demais filtros, todas deliberadas:
+
+- **Sem parâmetro, vale o mês corrente**, não "tudo". O painel é a tela de quem
+  entra uma vez por mês para fechar o acompanhamento; somar o histórico inteiro
+  por padrão daria um número grande que não responde a nada. Por isso "todo o
+  período" tem valor próprio: `?mes=tudo`.
+- **Escolher o mês corrente limpa o parâmetro.** `/` é o endereço do painel, e
+  o link mandado a outra pessoa em outubro mostra outubro. Quem quiser fixar
+  setembro escolhe setembro e leva `?mes=2026-09`, que não se move.
+- **O recorte vale para a tela toda** — cartões de ação, os dois gráficos e a
+  lista de ações. O que não muda são missões, membros, centros e grupos: são
+  estado atual, não têm dimensão de período. A fileira deles é rotulada "Hoje"
+  justamente para que "Total da Obra" sob "Setembro de 2026" não se leia como
+  gente que entrou em setembro.
+
+Com um mês escolhido, "Missões por membros" passa a comparar o **último
+indicador registrado até aquela competência**, e a missão sem nenhum registro
+até ali fica de fora — o cartão diz quantas. Misturar o valor de hoje com
+valores históricos daria um ranking com duas réguas.
+
 ## Ciclo de vida do acesso
 
 1. O admin master cria a missão. O cadastro da missão é **só isso** — nenhuma
@@ -223,6 +250,16 @@ Detalhes que sustentam esse fluxo:
 - Excluir um tipo de ação em uso é **bloqueado** — apagaria o histórico junto.
 - O calendário mensal é a consulta mais frequente do sistema; há índice
   dedicado sobre o período (`idx_eventos_periodo`).
+- **Até quatro tipos de ação ganham cartão próprio no painel**
+  (`tipos_evento.destacar_no_painel`, marcado em Configurações). Nasce marcado
+  o SVES — Seminário de Vida no Espírito Santo —, que é o número que as missões
+  acompanham de perto. O limite é validado na Server Action, não por `CHECK`:
+  contar linhas em restrição de banco daria erro de constraint no lugar de uma
+  frase. Tipo marcado sem nenhuma ação no recorte **continua aparecendo, com
+  zero** — "nenhum seminário em março" é a informação, e o cartão sumindo faria
+  o painel mudar de forma a cada mês.
+- O tipo é identificado pela marca, nunca pelo nome escrito no código: renomear
+  "Retiro" para "Retiros" não pode zerar um cartão em silêncio.
 
 ## Financeiro
 

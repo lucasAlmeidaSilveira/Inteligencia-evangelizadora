@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { emIso } from "@/server/db/iso";
@@ -16,35 +16,47 @@ import {
 } from "@/server/db/schema";
 import { membrosDaMissao } from "@/features/missoes/agregados";
 import { calcularFinanceiro } from "@/features/eventos/financeiro";
-import { fimDoMes, inicioDoMes } from "@/lib/mes";
+import { intervaloDoMes } from "@/lib/mes";
 
 /* ─── Períodos ───────────────────────────────────────────────────────────── */
 
-/* O mês vem de `lib/mes.ts` e não daqui: o cartão "Ações neste mês" leva a
-   /eventos com `?mes=` aplicado, e as duas pontas precisam concordar sobre
-   onde o mês começa e termina. Duas contas iguais hoje divergiriam na primeira
-   correção feita em só uma delas. */
+/*
+ * O mês vem de `lib/mes.ts` e não daqui: o painel e /eventos falam o mesmo
+ * `?mes=`, e as duas pontas precisam concordar sobre onde o mês começa e
+ * termina. Duas contas iguais hoje divergiriam na primeira correção feita em
+ * só uma delas.
+ *
+ * Ele viaja como chave (`"2026-09"`), não como `Date`: o argumento compõe a
+ * chave do cache, e a de um `Date` seria o instante em que a página montou —
+ * uma entrada nova a cada visita, nenhum acerto.
+ */
+function recorteDoMes(mes?: string) {
+  if (!mes) return undefined;
+  return intervaloDoMes(mes);
+}
 
-function inicioDoAno(referencia = new Date()) {
-  return new Date(referencia.getFullYear(), 0, 1);
+/* Um evento entra no período se qualquer parte dele o intersecta — o mesmo
+   critério de `listarEventos`. Ação que atravessa a virada conta nos dois
+   meses, que é como o coordenador a enxerga no calendário. */
+function noPeriodo(intervalo?: { de: Date; ate: Date }) {
+  return intervalo
+    ? and(
+        lte(eventos.dataInicio, intervalo.ate),
+        gte(eventos.dataFim, intervalo.de),
+      )
+    : undefined;
 }
 
 /* ─── Panorama ───────────────────────────────────────────────────────────── */
 
-export type Resumo = {
+/** O que não tem dimensão de período: vale hoje, qualquer que seja o recorte. */
+export type Panorama = {
   missoesAtivas: number;
   membros: number;
   membrosEstimados: boolean;
   centrosAtivos: number;
   gruposAtivos: number;
   pessoasEmGrupos: number;
-  acoesNoMes: number;
-  acoesNoAno: number;
-  participantesNoAno: number;
-  servosNoAno: number;
-  receitasNoAno: number;
-  despesasNoAno: number;
-  saldoNoAno: number;
 };
 
 /*
@@ -59,10 +71,13 @@ const ETIQUETAS_DO_PAINEL = [
   ETIQUETAS.eventos,
   ETIQUETAS.grupos,
   ETIQUETAS.centros,
+  // Marcar um tipo como destaque cria um cartão. Sem esta, ele só apareceria
+  // quando a rede de segurança de cinco minutos vencesse.
+  ETIQUETAS.tipos,
 ];
 
 /**
- * Números do topo do painel.
+ * Missões, membros, centros e grupos: o estado da obra hoje.
  *
  * `missaoId` é a missão em foco (ver `features/missoes/foco.ts`) e chega por
  * parâmetro, não lido do cookie aqui dentro: consulta que muda de resultado
@@ -71,14 +86,18 @@ const ETIQUETAS_DO_PAINEL = [
  * de servir o panorama de todas para quem escolheu uma. Basta estreitar esta
  * primeira lista — todo o resto já parte dos ids dela.
  *
+ * Separada de `obterAcoes` porque nada aqui depende do mês escolhido: junto,
+ * trocar o recorte recontaria membros e grupos de graça, e a fileira de cima
+ * ficaria esperando a agregação de ações para aparecer.
+ *
  * Cada consulta tem uma única tabela no FROM. Subconsulta correlacionada
  * escrita em `sql` bruto referencia a tabela externa sem qualificar o schema,
  * e o Postgres resolve o nome para a coluna homônima da tabela interna —
  * todos os totais voltam zerados sem erro algum.
  */
-export const obterResumo = leituraCacheada(
-  "painel-resumo",
-  async (tx, missaoId?: string): Promise<Resumo> => {
+export const obterPanorama = leituraCacheada(
+  "painel-panorama",
+  async (tx, missaoId?: string): Promise<Panorama> => {
     const lista = await tx
       .select({ id: missoes.id, membrosTotal: missoes.membrosTotal })
       .from(missoes)
@@ -99,13 +118,6 @@ export const obterResumo = leituraCacheada(
         centrosAtivos: 0,
         gruposAtivos: 0,
         pessoasEmGrupos: 0,
-        acoesNoMes: 0,
-        acoesNoAno: 0,
-        participantesNoAno: 0,
-        servosNoAno: 0,
-        receitasNoAno: 0,
-        despesasNoAno: 0,
-        saldoNoAno: 0,
       };
     }
 
@@ -155,43 +167,149 @@ export const obterResumo = leituraCacheada(
       if (calculado.estimado) algumEstimado = true;
     }
 
-    const [doMes] = await tx
-      .select({ total: sql<number>`count(*)`.mapWith(Number) })
-      .from(eventos)
+    return {
+      missoesAtivas: lista.length,
+      membros,
+      membrosEstimados: algumEstimado,
+      centrosAtivos: centros.total,
+      gruposAtivos: grupos.total,
+      pessoasEmGrupos: grupos.pessoas,
+    };
+  },
+  { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
+);
+
+/* ─── Ações no período ───────────────────────────────────────────────────── */
+
+/** Um tipo marcado em Configurações para ter cartão próprio no painel. */
+export type TipoDestacado = {
+  id: string;
+  nome: string;
+  cor: string;
+  acoes: number;
+  participantes: number;
+};
+
+export type ResumoDeAcoes = {
+  destacados: TipoDestacado[];
+  realizadas: number;
+  /** Planejadas e em andamento — o que ainda vai acontecer no recorte. */
+  agendadas: number;
+  participantes: number;
+  participantesNovos: number;
+  servos: number;
+  receitas: number;
+  despesas: number;
+  saldo: number;
+};
+
+const SEM_ACOES: ResumoDeAcoes = {
+  destacados: [],
+  realizadas: 0,
+  agendadas: 0,
+  participantes: 0,
+  participantesNovos: 0,
+  servos: 0,
+  receitas: 0,
+  despesas: 0,
+  saldo: 0,
+};
+
+/**
+ * O que as missões fizeram no recorte escolhido.
+ *
+ * Contagem de gente e de ação conta **só o realizado**: é o número que vai à
+ * prestação de contas, e somar uma ação planejada faria o painel prometer
+ * participantes que ainda não existem. O saldo é a exceção — conta tudo que
+ * não foi cancelado, porque dinheiro gasto numa ação ainda planejada já saiu
+ * do caixa.
+ *
+ * `mes` é a chave `"2026-09"`; ausente, vale todo o período. Vale a mesma
+ * regra de uma tabela por FROM que `obterPanorama` explica: os recortes por
+ * situação saem de `filter (where ...)`, não de subconsulta correlacionada.
+ */
+export const obterAcoes = leituraCacheada(
+  "painel-acoes",
+  async (tx, missaoId?: string, mes?: string): Promise<ResumoDeAcoes> => {
+    const lista = await tx
+      .select({ id: missoes.id })
+      .from(missoes)
       .where(
         and(
-          inArray(eventos.missaoId, ids),
-          lte(eventos.dataInicio, fimDoMes()),
-          gte(eventos.dataFim, inicioDoMes()),
+          eq(missoes.ativo, true),
+          missaoId ? eq(missoes.id, missaoId) : undefined,
         ),
       );
 
-    const [doAno] = await tx
+    const ids = lista.map((m) => m.id);
+    if (ids.length === 0) return SEM_ACOES;
+
+    const intervalo = recorteDoMes(mes);
+    const doRecorte = and(inArray(eventos.missaoId, ids), noPeriodo(intervalo));
+
+    const [totais] = await tx
       .select({
-        acoes: sql<number>`count(*)`.mapWith(Number),
-        participantes: sql<number>`coalesce(sum(participantes_total), 0)`.mapWith(Number),
-        servos: sql<number>`coalesce(sum(servos_engajados), 0)`.mapWith(Number),
+        realizadas: sql<number>`count(*) filter (where status = 'realizado')`.mapWith(Number),
+        agendadas: sql<number>`count(*) filter (where status in ('planejado', 'em_andamento'))`.mapWith(Number),
+        participantes: sql<number>`coalesce(sum(participantes_total) filter (where status = 'realizado'), 0)`.mapWith(Number),
+        novos: sql<number>`coalesce(sum(participantes_novos) filter (where status = 'realizado'), 0)`.mapWith(Number),
+        servos: sql<number>`coalesce(sum(servos_engajados) filter (where status = 'realizado'), 0)`.mapWith(Number),
       })
       .from(eventos)
+      .where(doRecorte);
+
+    /* Os tipos vêm antes da contagem e o resultado parte deles, não do
+       agrupamento: um SVES sem nenhuma edição no mês precisa aparecer com
+       zero. Se o cartão sumisse, o painel mudaria de forma a cada troca de
+       mês, e "nenhum seminário em março" — que é a informação — viraria
+       ausência de informação. */
+    const tipos = await tx
+      .select({
+        id: tiposEvento.id,
+        nome: tiposEvento.nome,
+        cor: tiposEvento.cor,
+      })
+      .from(tiposEvento)
       .where(
         and(
-          inArray(eventos.missaoId, ids),
-          gte(eventos.dataInicio, inicioDoAno()),
-          sql`${eventos.status} <> 'cancelado'`,
+          eq(tiposEvento.destacarNoPainel, true),
+          eq(tiposEvento.ativo, true),
         ),
-      );
+      )
+      .orderBy(asc(tiposEvento.ordem), asc(tiposEvento.nome));
 
-    const eventosDoAno = await tx
+    let porTipo = new Map<string, { acoes: number; participantes: number }>();
+
+    if (tipos.length > 0) {
+      const linhas = await tx
+        .select({
+          tipoEventoId: eventos.tipoEventoId,
+          acoes: sql<number>`count(*) filter (where status = 'realizado')`.mapWith(Number),
+          participantes: sql<number>`coalesce(sum(participantes_total) filter (where status = 'realizado'), 0)`.mapWith(Number),
+        })
+        .from(eventos)
+        .where(
+          and(
+            doRecorte,
+            inArray(
+              eventos.tipoEventoId,
+              tipos.map((t) => t.id),
+            ),
+          ),
+        )
+        .groupBy(eventos.tipoEventoId);
+
+      porTipo = new Map(linhas.map((l) => [l.tipoEventoId, l]));
+    }
+
+    /* O `status <> 'cancelado'` estava só no agregado ao lado, e o saldo somava
+       lançamentos de ações canceladas — dinheiro que a missão não movimentou. */
+    const doPeriodo = await tx
       .select({ id: eventos.id })
       .from(eventos)
-      .where(
-        and(
-          inArray(eventos.missaoId, ids),
-          gte(eventos.dataInicio, inicioDoAno()),
-        ),
-      );
+      .where(and(doRecorte, sql`${eventos.status} <> 'cancelado'`));
 
-    const idsEventos = eventosDoAno.map((e) => e.id);
+    const idsEventos = doPeriodo.map((e) => e.id);
     let financeiro = calcularFinanceiro(0, 0);
 
     if (idsEventos.length > 0) {
@@ -207,19 +325,19 @@ export const obterResumo = leituraCacheada(
     }
 
     return {
-      missoesAtivas: lista.length,
-      membros,
-      membrosEstimados: algumEstimado,
-      centrosAtivos: centros.total,
-      gruposAtivos: grupos.total,
-      pessoasEmGrupos: grupos.pessoas,
-      acoesNoMes: doMes.total,
-      acoesNoAno: doAno.acoes,
-      participantesNoAno: doAno.participantes,
-      servosNoAno: doAno.servos,
-      receitasNoAno: financeiro.receitas,
-      despesasNoAno: financeiro.despesas,
-      saldoNoAno: financeiro.saldo,
+      destacados: tipos.map((tipo) => ({
+        ...tipo,
+        acoes: porTipo.get(tipo.id)?.acoes ?? 0,
+        participantes: porTipo.get(tipo.id)?.participantes ?? 0,
+      })),
+      realizadas: totais.realizadas,
+      agendadas: totais.agendadas,
+      participantes: totais.participantes,
+      participantesNovos: totais.novos,
+      servos: totais.servos,
+      receitas: financeiro.receitas,
+      despesas: financeiro.despesas,
+      saldo: financeiro.saldo,
     };
   },
   { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
@@ -235,8 +353,18 @@ export type Evolucao = {
   competencias: number;
 };
 
+/** Competência (o dia 1) do mês escolhido, ou o mês corrente. */
+function competenciaDe(mes?: string) {
+  const referencia = mes ? intervaloDoMes(mes).de : new Date();
+  return new Date(referencia.getFullYear(), referencia.getMonth(), 1);
+}
+
 /**
  * Série histórica para a linha de evolução.
+ *
+ * A janela termina no mês escolhido em vez de hoje: com o painel recortado em
+ * março, uma linha que segue até dezembro mostraria o que ainda não tinha
+ * acontecido. Continua com doze pontos — só muda onde está ancorada.
  *
  * Depende do registro de competência, que é opcional por decisão de produto —
  * pode vir vazia, e a interface precisa dizer isso em vez de desenhar um
@@ -244,10 +372,22 @@ export type Evolucao = {
  */
 export const obterEvolucao = leituraCacheada(
   "painel-evolucao",
-  async (tx, meses: number = 12, missaoId?: string): Promise<Evolucao> => {
-    const corte = new Date();
+  async (
+    tx,
+    meses: number = 12,
+    missaoId?: string,
+    mes?: string,
+  ): Promise<Evolucao> => {
+    const fim = competenciaDe(mes);
+    const corte = new Date(fim);
     corte.setMonth(corte.getMonth() - meses);
-    corte.setDate(1);
+
+    /* Montada pelos componentes locais, não por `toISOString()`: a competência
+       é o dia 1 no fuso de quem registrou, e o UTC de um horário negativo cai
+       no último dia do mês anterior — a janela pegaria uma competência a mais
+       de um lado e perderia o mês escolhido do outro. */
+    const emIsoData = (data: Date) =>
+      `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-01`;
 
     const linhas = await tx
       .select({
@@ -260,7 +400,8 @@ export const obterEvolucao = leituraCacheada(
       .innerJoin(missoes, eq(missoes.id, missaoIndicadores.missaoId))
       .where(
         and(
-          gte(missaoIndicadores.competencia, corte.toISOString().slice(0, 10)),
+          gte(missaoIndicadores.competencia, emIsoData(corte)),
+          lte(missaoIndicadores.competencia, emIsoData(fim)),
           missaoId ? eq(missaoIndicadores.missaoId, missaoId) : undefined,
         ),
       )
@@ -303,9 +444,29 @@ export type BarraMissao = {
   estimado: boolean;
 };
 
+export type Comparativo = {
+  missoes: BarraMissao[];
+  /** Missões sem competência registrada até o mês — fora do ranking. */
+  semRegistro: number;
+};
+
+/**
+ * Ranking de missões por membros.
+ *
+ * Sem mês, compara o valor corrente. Com mês, compara o **último indicador
+ * registrado até aquela competência**: perguntar "como estávamos em março" e
+ * receber o número de hoje seria responder outra pergunta. O último conhecido,
+ * e não só o do próprio mês, porque registrar competência é opcional — exigir
+ * o mês exato esvaziaria o gráfico em quase todo recorte.
+ *
+ * Missão sem nenhum registro até ali fica de fora e é contada em
+ * `semRegistro`: pôr o valor de hoje ao lado de valores históricos daria um
+ * ranking com duas réguas, e a missão parecendo maior só por ser a única
+ * medida no presente.
+ */
 export const obterComparativo = leituraCacheada(
   "painel-comparativo",
-  async (tx): Promise<BarraMissao[]> => {
+  async (tx, mes?: string): Promise<Comparativo> => {
     const lista = await tx
       .select({
         id: missoes.id,
@@ -315,7 +476,52 @@ export const obterComparativo = leituraCacheada(
       .from(missoes)
       .where(eq(missoes.ativo, true));
 
-    if (lista.length === 0) return [];
+    if (lista.length === 0) return { missoes: [], semRegistro: 0 };
+
+    if (mes) {
+      const fim = competenciaDe(mes);
+      const ate = `${fim.getFullYear()}-${String(fim.getMonth() + 1).padStart(2, "0")}-01`;
+
+      // `distinct on` pela missão, ordenado por competência decrescente: o
+      // Postgres guarda a primeira linha de cada grupo, que é a mais recente.
+      const registros = await tx
+        .selectDistinctOn([missaoIndicadores.missaoId], {
+          missaoId: missaoIndicadores.missaoId,
+          membros: missaoIndicadores.membrosTotal,
+        })
+        .from(missaoIndicadores)
+        .where(
+          and(
+            lte(missaoIndicadores.competencia, ate),
+            inArray(
+              missaoIndicadores.missaoId,
+              lista.map((m) => m.id),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(missaoIndicadores.missaoId),
+          desc(missaoIndicadores.competencia),
+        );
+
+      const porMissao = new Map(registros.map((r) => [r.missaoId, r.membros]));
+
+      const comRegistro = lista
+        .filter((missao) => porMissao.has(missao.id))
+        .map((missao) => ({
+          id: missao.id,
+          nome: missao.nome,
+          membros: porMissao.get(missao.id) ?? 0,
+          // Indicador é número informado, nunca estimativa pelos grupos.
+          estimado: false,
+        }))
+        .sort((a, b) => b.membros - a.membros);
+
+      return {
+        missoes: comRegistro,
+        semRegistro: lista.length - comRegistro.length,
+      };
+    }
 
     const grupos = await tx
       .select({
@@ -336,21 +542,24 @@ export const obterComparativo = leituraCacheada(
 
     const pessoas = new Map(grupos.map((g) => [g.missaoId, g.pessoas]));
 
-    return lista
-      .map((missao) => {
-        const calculado = membrosDaMissao(
-          missao.membrosTotal,
-          pessoas.get(missao.id) ?? 0,
-        );
-        return {
-          id: missao.id,
-          nome: missao.nome,
-          membros: calculado.valor,
-          estimado: calculado.estimado,
-        };
-      })
-      // Ranking: sempre decrescente, que é como se lê comparação de magnitude.
-      .sort((a, b) => b.membros - a.membros);
+    return {
+      missoes: lista
+        .map((missao) => {
+          const calculado = membrosDaMissao(
+            missao.membrosTotal,
+            pessoas.get(missao.id) ?? 0,
+          );
+          return {
+            id: missao.id,
+            nome: missao.nome,
+            membros: calculado.valor,
+            estimado: calculado.estimado,
+          };
+        })
+        // Ranking: sempre decrescente, que é como se lê comparação de magnitude.
+        .sort((a, b) => b.membros - a.membros),
+      semRegistro: 0,
+    };
   },
   { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
 );

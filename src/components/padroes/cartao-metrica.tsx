@@ -10,6 +10,7 @@ export function CartaoMetrica({
   valor,
   detalhe,
   Icone,
+  cor,
   href,
   className,
 }: {
@@ -17,6 +18,15 @@ export function CartaoMetrica({
   valor: string;
   detalhe?: string;
   Icone?: LucideIcon;
+  /**
+   * Cor do tipo de ação, no lugar do ícone.
+   *
+   * Hexadecimal vem do banco — é cadastro do admin, não decisão de design —, e
+   * a bolinha é como tipo de ação aparece nos filtros, no calendário e nos
+   * relatórios. Um ícone genérico aqui faria o cartão de SVES parecer de outra
+   * família que os outros lugares onde o mesmo tipo é mostrado.
+   */
+  cor?: string;
   /** Presente, o cartão inteiro leva à tela que detalha o número. */
   href?: Route;
   className?: string;
@@ -36,7 +46,15 @@ export function CartaoMetrica({
     >
       <CardContent className="space-y-2 px-5">
         <div className="text-muted-foreground flex items-center gap-1.5">
-          {Icone ? <Icone className="size-3.5" aria-hidden /> : null}
+          {cor ? (
+            <span
+              aria-hidden
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ background: cor }}
+            />
+          ) : Icone ? (
+            <Icone className="size-3.5" aria-hidden />
+          ) : null}
           {/* O link cobre o cartão inteiro, mas só o rótulo recebe foco: o
               leitor de tela anuncia "Grupos de oração", não o rótulo colado ao
               número. O sublinhado no hover existe porque cor não pode ser a

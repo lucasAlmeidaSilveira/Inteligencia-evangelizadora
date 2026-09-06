@@ -46,6 +46,7 @@ export const listarTodosOsTipos = leituraCacheada(
         descricao: tiposEvento.descricao,
         ordem: tiposEvento.ordem,
         ativo: tiposEvento.ativo,
+        destacarNoPainel: tiposEvento.destacarNoPainel,
       })
       .from(tiposEvento)
       .orderBy(asc(tiposEvento.ordem), asc(tiposEvento.nome));

@@ -50,6 +50,13 @@
       "when": 1788721210148,
       "tag": "0006_sturdy_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788727651299,
+      "tag": "0007_secret_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

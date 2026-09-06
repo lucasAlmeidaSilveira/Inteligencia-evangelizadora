@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import { ETIQUETAS } from "@/server/etiquetas";
@@ -12,7 +12,12 @@ import {
 } from "@/server/db/schema";
 import { adminAuth } from "@/server/firebase/admin";
 
-import { categoriaSchema, tipoEventoSchema, usuarioSchema } from "./schemas";
+import {
+  categoriaSchema,
+  MAXIMO_DESTAQUES,
+  tipoEventoSchema,
+  usuarioSchema,
+} from "./schemas";
 
 const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
 
@@ -74,14 +79,42 @@ export async function salvarTipoEvento(id: string | null, entrada: unknown) {
   }
 
   try {
-    await comUsuario(async (tx, usuario) => {
+    const resultado = await comUsuario(async (tx, usuario) => {
       exigirAdmin(usuario.ehAdmin);
+
+      // A contagem vai na mesma transação da escrita: contar antes, fora dela,
+      // deixaria duas abas marcarem o quinto destaque ao mesmo tempo, cada uma
+      // vendo três.
+      if (validado.data.destacarNoPainel) {
+        const [{ marcados }] = await tx
+          .select({ marcados: sql<number>`count(*)`.mapWith(Number) })
+          .from(tiposEvento)
+          .where(
+            and(
+              eq(tiposEvento.destacarNoPainel, true),
+              // Reeditar um tipo já marcado não conta como um novo destaque.
+              id ? ne(tiposEvento.id, id) : undefined,
+            ),
+          );
+
+        if (marcados >= MAXIMO_DESTAQUES) return "destaques-cheios" as const;
+      }
+
       if (id) {
         await tx.update(tiposEvento).set(validado.data).where(eq(tiposEvento.id, id));
       } else {
         await tx.insert(tiposEvento).values(validado.data);
       }
+
+      return "ok" as const;
     });
+
+    if (resultado === "destaques-cheios") {
+      return falha(
+        `O painel comporta até ${MAXIMO_DESTAQUES} tipos em destaque. Desmarque um antes.`,
+        { destacarNoPainel: "Já há tipos demais em destaque." },
+      );
+    }
 
     revalidar();
     return sucesso();

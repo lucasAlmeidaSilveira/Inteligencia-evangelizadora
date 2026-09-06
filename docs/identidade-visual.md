@@ -152,7 +152,7 @@ Componentes em `src/components/padroes/` — use-os em vez de recriar:
 | Componente | Para |
 |---|---|
 | `CabecalhoPagina` | Título, descrição e ações da página. |
-| `CartaoMetrica` | Número em destaque. Já traz `data-slot="metric"`, que liga as figuras tabulares. |
+| `CartaoMetrica` | Número em destaque. Já traz `data-slot="metric"`, que liga as figuras tabulares. A prop `cor` troca o ícone pela bolinha do tipo de ação — é como tipo aparece nos filtros, no calendário e nos relatórios, e o hexadecimal vem do banco, que é cadastro do admin, não decisão de design. |
 | `EstadoVazio` | Tela vazia útil: diz o que falta e oferece o próximo passo, em vez de deixar o usuário diante de uma área em branco. |
 | `Campo`, esqueletos | Formulários e carregamento. |
 | `Revelar` | Conteúdo que acabou de chegar entra em vez de piscar. |

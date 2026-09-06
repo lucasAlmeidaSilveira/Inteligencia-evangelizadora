@@ -37,9 +37,17 @@ import { formatarNumero } from "@/lib/format";
 
 import { excluirTipoEvento, salvarTipoEvento } from "../actions";
 import type { TipoConfig } from "../queries";
+import { MAXIMO_DESTAQUES } from "../schemas";
 import { SeletorCor } from "./seletor-cor";
 
-const NOVO = { nome: "", cor: "#7f22fe", descricao: "", ordem: 0, ativo: true };
+const NOVO = {
+  nome: "",
+  cor: "#7f22fe",
+  descricao: "",
+  ordem: 0,
+  ativo: true,
+  destacarNoPainel: false,
+};
 
 function Formulario({
   tipo,
@@ -57,6 +65,7 @@ function Formulario({
           descricao: tipo.descricao ?? "",
           ordem: tipo.ordem,
           ativo: tipo.ativo,
+          destacarNoPainel: tipo.destacarNoPainel,
         }
       : NOVO,
   );
@@ -161,6 +170,37 @@ function Formulario({
                 id="tipo-ativo"
                 checked={dados.ativo}
                 onCheckedChange={(ativo) => setDados({ ...dados, ativo })}
+                className="cursor-pointer"
+              />
+            </div>
+
+            {/* O erro fica dentro da moldura do próprio interruptor: o limite
+                de destaques não é sobre o tipo, é sobre este campo, e a faixa
+                geral lá embaixo o afastaria do controle que o causou. */}
+            <div
+              className={`flex items-start justify-between gap-4 rounded-lg border p-4 ${
+                erros.destacarNoPainel ? "border-destructive/50" : ""
+              }`}
+            >
+              <div className="space-y-1">
+                <Label htmlFor="tipo-destaque">Destacar no painel</Label>
+                <p className="text-muted-foreground text-xs">
+                  Ganha um cartão próprio com o total de ações realizadas. Até{" "}
+                  {MAXIMO_DESTAQUES} tipos.
+                </p>
+                {erros.destacarNoPainel ? (
+                  <p role="alert" className="text-destructive text-xs">
+                    {erros.destacarNoPainel}
+                  </p>
+                ) : null}
+              </div>
+              <Switch
+                id="tipo-destaque"
+                checked={dados.destacarNoPainel}
+                onCheckedChange={(destacarNoPainel) =>
+                  setDados({ ...dados, destacarNoPainel })
+                }
+                aria-invalid={Boolean(erros.destacarNoPainel)}
                 className="cursor-pointer"
               />
             </div>
@@ -277,6 +317,11 @@ export function PainelTipos({ tipos }: { tipos: TipoConfig[] }) {
                         <p className="text-sm font-medium">{tipo.nome}</p>
                         {!tipo.ativo ? (
                           <Badge variant="secondary">Indisponível</Badge>
+                        ) : null}
+                        {/* Sem o selo, saber quais tipos estão no painel exigiria
+                            abrir um por um. */}
+                        {tipo.destacarNoPainel ? (
+                          <Badge variant="outline">No painel</Badge>
                         ) : null}
                       </div>
                       <p className="text-muted-foreground text-xs">

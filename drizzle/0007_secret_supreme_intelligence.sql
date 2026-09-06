@@ -1,0 +1,1 @@
+ALTER TABLE "ie"."tipos_evento" ADD COLUMN "destacar_no_painel" boolean DEFAULT false NOT NULL;
