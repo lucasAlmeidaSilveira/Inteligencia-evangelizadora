@@ -22,7 +22,15 @@ import {
   urlDeUpload,
 } from "@/server/armazenamento/r2";
 
-import { eventoSchema, lancamentoSchema, linkSchema } from "./schemas";
+import {
+  eventoSchema,
+  informacoesSchema,
+  lancamentoSchema,
+  linkSchema,
+  orcamentoSchema,
+  participacaoSchema,
+  textosSchema,
+} from "./schemas";
 
 /*
  * Duas camadas, porque são dois caches distintos.
@@ -129,6 +137,98 @@ export async function atualizarEvento(id: string, entrada: unknown) {
 
     revalidar(id, validado.data.missaoId);
     return sucesso();
+  } catch (erro) {
+    return falha(traduzirErroDeBanco(erro));
+  }
+}
+
+/**
+ * Grava um punhado de colunas da ação e revalida a árvore.
+ *
+ * O `missaoId` sai do `returning`, nunca do cliente (invariante 3), e o RLS é
+ * quem impede o UPDATE de alcançar ação de outra missão — por isso a ausência
+ * de linha alterada significa, ao mesmo tempo, "não existe" e "não é sua".
+ */
+async function gravarCampos(
+  id: string,
+  valores: Partial<typeof eventos.$inferInsert>,
+) {
+  const alterado = await comUsuario(async (tx) => {
+    const [linha] = await tx
+      .update(eventos)
+      .set(valores)
+      .where(eq(eventos.id, id))
+      .returning({ missaoId: eventos.missaoId });
+    return linha ?? null;
+  });
+
+  if (!alterado) return falha("Ação apostólica não encontrada.");
+
+  revalidar(id, alterado.missaoId);
+  return sucesso();
+}
+
+/*
+ * As quatro ações abaixo são a edição direto na visão geral, um card por vez.
+ * Existem separadas de `atualizarEvento` porque cada card só conhece os seus
+ * campos: mandar o evento inteiro obrigaria o card de participação a carregar
+ * e reenviar título, missão e datas, e duas edições simultâneas em cards
+ * diferentes fariam a última sobrescrever a outra com valores velhos.
+ */
+
+export async function atualizarInformacoes(id: string, entrada: unknown) {
+  const validado = informacoesSchema.safeParse(entrada);
+  if (!validado.success) {
+    return falha("Confira os campos destacados.", camposComErro(validado.error));
+  }
+
+  const { dataInicio, dataFim, ...resto } = validado.data;
+
+  try {
+    return await gravarCampos(id, {
+      ...resto,
+      dataInicio: new Date(dataInicio),
+      dataFim: new Date(dataFim),
+    });
+  } catch (erro) {
+    return falha(traduzirErroDeBanco(erro));
+  }
+}
+
+export async function atualizarParticipacao(id: string, entrada: unknown) {
+  const validado = participacaoSchema.safeParse(entrada);
+  if (!validado.success) {
+    return falha("Confira os campos destacados.", camposComErro(validado.error));
+  }
+
+  try {
+    return await gravarCampos(id, validado.data);
+  } catch (erro) {
+    return falha(traduzirErroDeBanco(erro));
+  }
+}
+
+export async function atualizarOrcamento(id: string, entrada: unknown) {
+  const validado = orcamentoSchema.safeParse(entrada);
+  if (!validado.success) {
+    return falha("Confira os campos destacados.", camposComErro(validado.error));
+  }
+
+  try {
+    return await gravarCampos(id, validado.data);
+  } catch (erro) {
+    return falha(traduzirErroDeBanco(erro));
+  }
+}
+
+export async function atualizarTextos(id: string, entrada: unknown) {
+  const validado = textosSchema.safeParse(entrada);
+  if (!validado.success) {
+    return falha("Confira os campos destacados.", camposComErro(validado.error));
+  }
+
+  try {
+    return await gravarCampos(id, validado.data);
   } catch (erro) {
     return falha(traduzirErroDeBanco(erro));
   }

@@ -75,66 +75,134 @@ export const STATUS_EVENTO = [
   { valor: "cancelado", rotulo: "Cancelado" },
 ] as const;
 
-export const eventoSchema = z
-  .object({
-    missaoId: z.uuid("Escolha a missão."),
-    /** Obrigatório, e o formulário abre no principal da missão escolhida. O
-     *  banco ainda impõe, por FK composta, que o centro seja daquela missão. */
-    centroId: centroIdObrigatorio,
-    tipoEventoId: z.uuid("Escolha o tipo da ação."),
-    titulo: z
-      .string()
-      .trim()
-      .min(3, "Informe ao menos 3 caracteres.")
-      .max(160, "No máximo 160 caracteres."),
-    descricao: opcional(4000),
-    observacoes: opcional(4000),
-    // `datetime-local` entrega "2026-03-12T09:00" — sem fuso. Interpretamos no
-    // fuso do navegador, que é o de quem está cadastrando.
-    dataInicio: z
-      .string()
-      .min(1, "Informe a data de início.")
-      .refine((v) => !Number.isNaN(Date.parse(v)), "Data de início inválida."),
-    dataFim: z
-      .string()
-      .min(1, "Informe a data de término.")
-      .refine((v) => !Number.isNaN(Date.parse(v)), "Data de término inválida."),
-    local: opcional(200),
-    endereco: opcional(300),
-    responsavelNome: opcional(160),
-    participantesInscritos: inteiroNaoNegativo(1_000_000, "inscritos"),
-    participantesTotal: inteiroNaoNegativo(1_000_000, "participantes"),
-    participantesNovos: inteiroNaoNegativo(1_000_000, "novos participantes"),
-    participantesPermaneceram: inteiroNaoNegativo(
-      1_000_000,
-      "permaneceram após a ação",
-    ),
-    servosEngajados: inteiroNaoNegativo(100_000, "servos engajados"),
-    orcamentoPrevisto: dinheiroOpcional,
-    status: z.enum(["planejado", "em_andamento", "realizado", "cancelado"]),
-    // Checkbox ausente no FormData vira `undefined`, que precisa virar `false`.
-    destaqueRegional: z
-      .union([z.boolean(), z.string(), z.undefined(), z.null()])
-      .transform((v) => v === true || v === "true" || v === "on"),
-  })
-  // O banco também impõe isto por CHECK; aqui a mensagem chega no campo certo.
-  .refine((d) => new Date(d.dataFim) >= new Date(d.dataInicio), {
+/* ─── Grupos de campos ──────────────────────────────────────────────────────
+ *
+ * A ação se edita por dois caminhos: o formulário inteiro, em /editar, e cada
+ * card da visão geral, isolado. Os campos ficam agrupados aqui para que os
+ * dois caminhos validem pela mesma definição — um limite de tamanho corrigido
+ * num lugar só valeria para metade das telas.
+ */
+
+const camposInformacoes = {
+  /** Obrigatório, e o formulário abre no principal da missão escolhida. O
+   *  banco ainda impõe, por FK composta, que o centro seja daquela missão. */
+  centroId: centroIdObrigatorio,
+  tipoEventoId: z.uuid("Escolha o tipo da ação."),
+  // `datetime-local` entrega "2026-03-12T09:00" — sem fuso. Interpretamos no
+  // fuso do navegador, que é o de quem está cadastrando.
+  dataInicio: z
+    .string()
+    .min(1, "Informe a data de início.")
+    .refine((v) => !Number.isNaN(Date.parse(v)), "Data de início inválida."),
+  dataFim: z
+    .string()
+    .min(1, "Informe a data de término.")
+    .refine((v) => !Number.isNaN(Date.parse(v)), "Data de término inválida."),
+  local: opcional(200),
+  endereco: opcional(300),
+  responsavelNome: opcional(160),
+  status: z.enum(["planejado", "em_andamento", "realizado", "cancelado"]),
+};
+
+const camposParticipacao = {
+  participantesInscritos: inteiroNaoNegativo(1_000_000, "inscritos"),
+  participantesTotal: inteiroNaoNegativo(1_000_000, "participantes"),
+  participantesNovos: inteiroNaoNegativo(1_000_000, "novos participantes"),
+  participantesPermaneceram: inteiroNaoNegativo(
+    1_000_000,
+    "permaneceram após a ação",
+  ),
+  servosEngajados: inteiroNaoNegativo(100_000, "servos engajados"),
+};
+
+const camposTextos = {
+  descricao: opcional(4000),
+  observacoes: opcional(4000),
+};
+
+const camposOrcamento = { orcamentoPrevisto: dinheiroOpcional };
+
+/* ─── Regras cruzadas ───────────────────────────────────────────────────────
+ *
+ * Escritas uma vez e aplicadas nos dois caminhos pelo mesmo motivo dos grupos
+ * acima: a regra é do domínio, não da tela onde se digita.
+ */
+
+/** O banco também impõe por CHECK; aqui a mensagem chega no campo certo. */
+function comRegraDePeriodo<
+  S extends z.ZodType<{ dataInicio: string; dataFim: string }>,
+>(schema: S) {
+  return schema.refine((d) => new Date(d.dataFim) >= new Date(d.dataInicio), {
     message: "O término não pode ser anterior ao início.",
     path: ["dataFim"],
-  })
-  /* Estas duas não têm CHECK no banco de propósito: são engano de digitação
-     comum, e a mensagem precisa apontar o campo. Note que inscritos × presentes
-     não é comparado — comparecer sem se inscrever é normal e frequente. */
-  .refine((d) => d.participantesNovos <= d.participantesTotal, {
-    message: "Não pode haver mais participantes novos do que presentes.",
-    path: ["participantesNovos"],
-  })
-  .refine((d) => d.participantesPermaneceram <= d.participantesTotal, {
-    message: "Não pode permanecer mais gente do que participou.",
-    path: ["participantesPermaneceram"],
   });
+}
+
+/**
+ * Estas duas não têm CHECK no banco de propósito: são engano de digitação
+ * comum, e a mensagem precisa apontar o campo. Note que inscritos × presentes
+ * não é comparado — comparecer sem se inscrever é normal e frequente.
+ */
+function comRegrasDeParticipacao<
+  S extends z.ZodType<{
+    participantesTotal: number;
+    participantesNovos: number;
+    participantesPermaneceram: number;
+  }>,
+>(schema: S) {
+  return schema
+    .refine((d) => d.participantesNovos <= d.participantesTotal, {
+      message: "Não pode haver mais participantes novos do que presentes.",
+      path: ["participantesNovos"],
+    })
+    .refine((d) => d.participantesPermaneceram <= d.participantesTotal, {
+      message: "Não pode permanecer mais gente do que participou.",
+      path: ["participantesPermaneceram"],
+    });
+}
+
+export const eventoSchema = comRegrasDeParticipacao(
+  comRegraDePeriodo(
+    z.object({
+      missaoId: z.uuid("Escolha a missão."),
+      titulo: z
+        .string()
+        .trim()
+        .min(3, "Informe ao menos 3 caracteres.")
+        .max(160, "No máximo 160 caracteres."),
+      // Checkbox ausente no FormData vira `undefined`, que precisa virar `false`.
+      destaqueRegional: z
+        .union([z.boolean(), z.string(), z.undefined(), z.null()])
+        .transform((v) => v === true || v === "true" || v === "on"),
+      ...camposInformacoes,
+      ...camposTextos,
+      ...camposParticipacao,
+      ...camposOrcamento,
+    }),
+  ),
+);
 
 export type DadosEvento = z.input<typeof eventoSchema>;
+
+/* ─── Edição por seção, na visão geral ──────────────────────────────────────
+ *
+ * Cada card grava só os seus campos. Um schema por seção, e não um parcial do
+ * `eventoSchema`, porque parcial aceitaria ausência de campo obrigatório: o
+ * card de informações que esquecesse de enviar `centroId` gravaria nulo numa
+ * coluna que não aceita, e o erro só apareceria no banco.
+ */
+
+export const informacoesSchema = comRegraDePeriodo(z.object(camposInformacoes));
+export const participacaoSchema = comRegrasDeParticipacao(
+  z.object(camposParticipacao),
+);
+export const orcamentoSchema = z.object(camposOrcamento);
+export const textosSchema = z.object(camposTextos);
+
+export type DadosInformacoes = z.input<typeof informacoesSchema>;
+export type DadosParticipacao = z.input<typeof participacaoSchema>;
+export type DadosOrcamento = z.input<typeof orcamentoSchema>;
+export type DadosTextos = z.input<typeof textosSchema>;
 
 export const lancamentoSchema = z.object({
   eventoId: z.uuid(),

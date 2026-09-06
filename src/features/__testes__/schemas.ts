@@ -5,7 +5,13 @@ config({ path: ".env.local" });
 import type { z } from "zod";
 
 import { centroSchema, lerFiltroDeCentro } from "@/features/centros/schemas";
-import { eventoSchema } from "@/features/eventos/schemas";
+import {
+  eventoSchema,
+  informacoesSchema,
+  orcamentoSchema,
+  participacaoSchema,
+  textosSchema,
+} from "@/features/eventos/schemas";
 import { grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
@@ -209,6 +215,81 @@ verificar(
   eventoSchema,
   { ...acaoBase, orcamentoPrevisto: "8900.00" },
   "valor com ponto decimal, como volta do banco",
+);
+
+/*
+ * Os schemas de seção são o caminho da edição direto na visão geral: um card
+ * grava só os seus campos. Rodam duas vezes como o completo, e as regras
+ * cruzadas precisam continuar valendo aqui — um card que aceitasse o que o
+ * formulário inteiro recusa seria uma porta lateral para dado inconsistente.
+ */
+verificar(
+  "Seção Informações",
+  informacoesSchema,
+  {
+    centroId: UUID_B,
+    tipoEventoId: UUID_C,
+    dataInicio: "2026-09-12T09:00",
+    dataFim: "2026-09-14T17:00",
+    local: "",
+    endereco: "",
+    responsavelNome: "",
+    status: "em_andamento",
+  },
+  "card de informações com os opcionais em branco",
+);
+
+verificar(
+  "Seção Participação",
+  participacaoSchema,
+  {
+    participantesInscritos: "168",
+    participantesTotal: "142",
+    participantesNovos: "58",
+    participantesPermaneceram: "37",
+    servosEngajados: "24",
+  },
+  "card de participação preenchido",
+);
+
+verificar(
+  "Seção Orçamento — formato brasileiro",
+  orcamentoSchema,
+  { orcamentoPrevisto: "12.400,50" },
+  "card de orçamento",
+);
+
+verificar(
+  "Seção Textos — ambos em branco",
+  textosSchema,
+  { descricao: "", observacoes: "" },
+  "card de descrição e observações",
+);
+
+recusar(
+  "Seção Informações — término antes do início",
+  informacoesSchema,
+  {
+    centroId: UUID_B,
+    tipoEventoId: UUID_C,
+    dataInicio: "2026-09-14T17:00",
+    dataFim: "2026-09-12T09:00",
+    status: "planejado",
+  },
+  "dataFim",
+);
+
+recusar(
+  "Seção Participação — permaneceram mais do que participaram",
+  participacaoSchema,
+  {
+    participantesInscritos: "0",
+    participantesTotal: "40",
+    participantesNovos: "0",
+    participantesPermaneceram: "50",
+    servosEngajados: "0",
+  },
+  "participantesPermaneceram",
 );
 
 recusar(

@@ -62,6 +62,21 @@ export default function Carregando() {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-48" />
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="space-y-1.5">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

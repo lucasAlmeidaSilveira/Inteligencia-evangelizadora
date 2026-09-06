@@ -1,30 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, FileText, HandHeart, Link2, MapPin } from "lucide-react";
+import { ArrowRight, FileText, Link2 } from "lucide-react";
 
-import { MetricaCompacta } from "@/components/padroes/metrica-compacta";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { centrosDasMissoesVisiveis } from "@/features/centros/queries";
+import { CartaoFinanceiro } from "@/features/eventos/components/cartao-financeiro";
+import { CartaoInformacoes } from "@/features/eventos/components/cartao-informacoes";
+import { CartaoParticipacao } from "@/features/eventos/components/cartao-participacao";
+import { CartaoTextos } from "@/features/eventos/components/cartao-textos";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { SeloTipoCentro } from "@/features/centros/components/selo-tipo-centro";
-import { SeloStatus } from "@/features/eventos/components/selo-status";
-import { compararOrcamento } from "@/features/eventos/financeiro";
-import {
-  calcularParticipacao,
-  formatarTaxa,
-} from "@/features/eventos/participacao";
-import { obterEventoCompleto } from "@/features/eventos/queries";
-import {
-  formatarData,
-  formatarMoeda,
-  formatarNumero,
-  formatarPeriodo,
-  formatarTamanhoArquivo,
-} from "@/lib/format";
+  listarTiposEvento,
+  obterEventoCompleto,
+} from "@/features/eventos/queries";
+import { formatarData, formatarTamanhoArquivo } from "@/lib/format";
 
 /** Quantos itens de documento e link cabem antes de virar ruído. */
 const PREVIA = 4;
@@ -36,202 +24,83 @@ export default async function PaginaVisaoGeralEvento({
 
   /* A mesma chamada que o layout já fez — o `cache` do React devolve o
      resultado sem nova transação. É o que torna os blocos de documentos e
-     links abaixo gratuitos: os dados já estavam aqui. */
-  const dados = await obterEventoCompleto(id);
+     links abaixo gratuitos: os dados já estavam aqui.
+
+     Tipos e centros vêm por causa da edição em tela: os dois selects do card
+     de informações precisam das opções. Ambas as listas são cacheadas e
+     compartilhadas com o formulário de /editar. */
+  const [dados, tipos, centros] = await Promise.all([
+    obterEventoCompleto(id),
+    listarTiposEvento(),
+    centrosDasMissoesVisiveis(),
+  ]);
   if (!dados) notFound();
 
   const { evento, documentos, links } = dados;
-  const { receitas, despesas, saldo } = evento.financeiro;
 
-  const participacao = calcularParticipacao(evento);
-  const orcamento = compararOrcamento(evento.orcamentoPrevisto, despesas);
+  /* Só os centros desta missão: a FK composta `(centro_id, missao_id)` recusa
+     os de outra, e oferecê-los no select seria oferecer um erro. O centro da
+     própria ação entra mesmo se estiver arquivado e fora da lista — sem isso
+     o select abriria vazio e trocaria o centro sem ninguém pedir. */
+  const centrosDaMissao = centros.filter((c) => c.missaoId === evento.missaoId);
+  const centrosDisponiveis = centrosDaMissao.some(
+    (c) => c.id === evento.centroId,
+  )
+    ? centrosDaMissao
+    : [
+        ...centrosDaMissao,
+        {
+          id: evento.centroId,
+          nome: `${evento.centroNome} (inativo)`,
+          principal: false,
+        },
+      ];
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-base">Informações da ação</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <Info rotulo="Tipo da ação">
-              <span className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: evento.tipoCor }}
-                />
-                {evento.tipoNome}
-              </span>
-            </Info>
-
-            <Info rotulo="Missão">
-              <Link
-                href={`/missoes/${evento.missaoId}`}
-                className="rounded-sm underline-offset-4 hover:underline"
-              >
-                {evento.missaoNome}
-              </Link>
-            </Info>
-
-            <Info rotulo="Centro de evangelização">
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="break-words">{evento.centroNome}</span>
-                <SeloTipoCentro tipo={evento.centroTipo} />
-              </span>
-            </Info>
-
-            <Info rotulo="Responsável">
-              {evento.responsavelNome ?? (
-                <span className="text-muted-foreground">Não informado</span>
-              )}
-            </Info>
-
-            <Info rotulo="Período">
-              {formatarPeriodo(evento.dataInicio, evento.dataFim)}
-            </Info>
-
-            {evento.local || evento.endereco ? (
-              <Info rotulo="Local">
-                <span className="flex gap-2">
-                  <MapPin
-                    className="text-muted-foreground mt-0.5 size-3.5 shrink-0"
-                    aria-hidden
-                  />
-                  <span className="min-w-0">
-                    <span className="block break-words">
-                      {evento.local ?? evento.endereco}
-                    </span>
-                    {evento.local && evento.endereco ? (
-                      <span className="text-muted-foreground block break-words">
-                        {evento.endereco}
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-              </Info>
-            ) : null}
-
-            <Info rotulo="Situação">
-              <SeloStatus status={evento.status} />
-            </Info>
-
-            <Info rotulo="Registro">
-              <span className="text-muted-foreground">
-                Criada em {formatarData(evento.criadoEm)} · atualizada em{" "}
-                {formatarData(evento.atualizadoEm)}
-              </span>
-            </Info>
-          </CardContent>
-        </Card>
+        <CartaoInformacoes
+          eventoId={evento.id}
+          className="lg:col-span-1"
+          tipos={tipos}
+          centros={centrosDisponiveis}
+          informacoes={{
+            centroId: evento.centroId,
+            centroNome: evento.centroNome,
+            centroTipo: evento.centroTipo,
+            tipoEventoId: evento.tipoEventoId,
+            tipoNome: evento.tipoNome,
+            tipoCor: evento.tipoCor,
+            missaoId: evento.missaoId,
+            missaoNome: evento.missaoNome,
+            dataInicio: evento.dataInicio,
+            dataFim: evento.dataFim,
+            local: evento.local,
+            endereco: evento.endereco,
+            responsavelNome: evento.responsavelNome,
+            status: evento.status,
+            criadoEm: evento.criadoEm,
+            atualizadoEm: evento.atualizadoEm,
+          }}
+        />
 
         <div className="space-y-4 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Participação</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-                <MetricaCompacta
-                  rotulo="Inscritos"
-                  valor={formatarNumero(participacao.inscritos)}
-                />
-                <MetricaCompacta
-                  rotulo="Presentes"
-                  valor={formatarNumero(participacao.presentes)}
-                />
-                <MetricaCompacta
-                  rotulo="Novos"
-                  valor={formatarNumero(participacao.novos)}
-                />
-                <MetricaCompacta
-                  rotulo="Permaneceram"
-                  valor={formatarNumero(participacao.permaneceram)}
-                />
-                {/* A taxa é o número que a missão de fato acompanha: quantos
-                    dos que vieram seguiram num grupo de oração depois. */}
-                <MetricaCompacta
-                  rotulo="Permanência"
-                  valor={formatarTaxa(participacao.taxaPermanencia)}
-                  detalhe={
-                    participacao.taxaPermanencia === null
-                      ? "Sem presentes informados"
-                      : undefined
-                  }
-                />
-              </div>
+          <CartaoParticipacao
+            eventoId={evento.id}
+            valores={{
+              participantesInscritos: evento.participantesInscritos,
+              participantesTotal: evento.participantesTotal,
+              participantesNovos: evento.participantesNovos,
+              participantesPermaneceram: evento.participantesPermaneceram,
+              servosEngajados: evento.servosEngajados,
+            }}
+          />
 
-              <p className="text-muted-foreground flex items-center gap-1.5 border-t pt-3 text-sm">
-                <HandHeart className="size-3.5 shrink-0" aria-hidden />
-                <span className="tabular font-medium">
-                  {formatarNumero(evento.servosEngajados)}
-                </span>
-                {evento.servosEngajados === 1
-                  ? "servo engajado"
-                  : "servos engajados"}
-                {participacao.taxaComparecimento !== null ? (
-                  <span className="before:mx-2 before:content-['·']">
-                    {formatarTaxa(participacao.taxaComparecimento)} de
-                    comparecimento
-                  </span>
-                ) : null}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Financeiro</CardTitle>
-              <CardAction>
-                <Link
-                  href={`/eventos/${evento.id}/financeiro`}
-                  className="text-primary flex items-center gap-1 rounded-sm text-sm font-medium underline-offset-4 hover:underline"
-                >
-                  Ver lançamentos
-                  <ArrowRight className="size-3.5" aria-hidden />
-                </Link>
-              </CardAction>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-                <MetricaCompacta
-                  rotulo="Previsto"
-                  valor={
-                    orcamento.previsto === null
-                      ? "—"
-                      : formatarMoeda(orcamento.previsto)
-                  }
-                  detalhe={
-                    orcamento.previsto === null ? "Não orçado" : undefined
-                  }
-                  tom={orcamento.previsto === null ? "atenuado" : "normal"}
-                />
-                <MetricaCompacta
-                  rotulo="Receitas"
-                  valor={formatarMoeda(receitas)}
-                />
-                <MetricaCompacta
-                  rotulo="Despesas"
-                  valor={formatarMoeda(despesas)}
-                />
-                {/* Saldo negativo leva cor e sinal: cor sozinha não diferencia
-                    para quem não distingue matizes. */}
-                <MetricaCompacta
-                  rotulo="Saldo"
-                  valor={formatarMoeda(saldo)}
-                  tom={saldo < 0 ? "negativo" : "positivo"}
-                  detalhe={saldo < 0 ? "No vermelho" : undefined}
-                />
-              </div>
-
-              {orcamento.previsto !== null ? (
-                <BarraOrcamento
-                  percentual={orcamento.percentual}
-                  restante={orcamento.restante}
-                />
-              ) : null}
-            </CardContent>
-          </Card>
+          <CartaoFinanceiro
+            eventoId={evento.id}
+            orcamentoPrevisto={evento.orcamentoPrevisto}
+            financeiro={evento.financeiro}
+          />
         </div>
       </div>
 
@@ -325,100 +194,11 @@ export default async function PaginaVisaoGeralEvento({
         </Card>
       </div>
 
-      {evento.descricao || evento.observacoes ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {evento.descricao ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Descrição</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed whitespace-pre-line">
-                  {evento.descricao}
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {evento.observacoes ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Observações</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed whitespace-pre-line">
-                  {evento.observacoes}
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function Info({
-  rotulo,
-  children,
-}: {
-  rotulo: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="text-muted-foreground text-xs font-medium">{rotulo}</p>
-      <div className="break-words">{children}</div>
-    </div>
-  );
-}
-
-/**
- * Previsto × executado. A barra não é decoração: mostra de relance se a ação
- * está dentro do que se planejou gastar, que é a pergunta da prestação de
- * contas. Estouro vira `destructive` **e** ganha a palavra "acima" — a cor
- * sozinha não conta a história.
- */
-function BarraOrcamento({
-  percentual,
-  restante,
-}: {
-  percentual: number | null;
-  restante: number | null;
-}) {
-  if (percentual === null || restante === null) return null;
-
-  const estourou = restante < 0;
-  const preenchido = Math.min(percentual, 100);
-
-  return (
-    <div className="space-y-1.5 border-t pt-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-        <span className="text-muted-foreground">
-          {Math.round(percentual)}% do orçamento executado
-        </span>
-        <span
-          className={
-            estourou
-              ? "text-destructive tabular font-medium"
-              : "text-muted-foreground tabular"
-          }
-        >
-          {estourou
-            ? `${formatarMoeda(Math.abs(restante))} acima do previsto`
-            : `${formatarMoeda(restante)} disponíveis`}
-        </span>
-      </div>
-      <div
-        role="img"
-        aria-label={`${Math.round(percentual)} por cento do orçamento executado`}
-        className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
-      >
-        <div
-          className={estourou ? "bg-destructive h-full" : "bg-primary h-full"}
-          style={{ width: `${preenchido}%` }}
-        />
-      </div>
+      <CartaoTextos
+        eventoId={evento.id}
+        descricao={evento.descricao}
+        observacoes={evento.observacoes}
+      />
     </div>
   );
 }
