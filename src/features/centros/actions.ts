@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { and, eq } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import {
   centrosEvangelizacao,
   eventos,
@@ -19,6 +20,13 @@ import { centroSchema } from "./schemas";
  * deixaria as outras telas servindo o total anterior.
  */
 function revalidarArvore(missaoId: string) {
+  // As duas etiquetas de centro: a da missão alcança a lista e o select dela;
+  // a geral alcança o que atravessa missões — o painel e o formulário de ação.
+  updateTag(ETIQUETAS.centrosDaMissao(missaoId));
+  updateTag(ETIQUETAS.centros);
+  updateTag(ETIQUETAS.missoes);
+  updateTag(ETIQUETAS.painel);
+
   revalidatePath("/missoes", "layout");
   revalidatePath(`/missoes/${missaoId}`, "layout");
   // As ações apostólicas têm árvore própria e mostram o nome do centro, que

@@ -37,7 +37,7 @@ function Linha({
 
 export default async function PaginaConta() {
   const usuario = await requerUsuario();
-  const missoes = usuario.ehAdmin ? [] : await listarMissoes();
+  const missoes = usuario.ehAdmin ? [] : await listarMissoes(false);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -8,6 +8,7 @@ import { missoesDisponiveis } from "@/features/eventos/queries";
 import { gerarSlug } from "@/lib/slug";
 import { requerUsuario } from "@/server/auth/sessao";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import type { Transacao } from "@/server/db/index";
 import {
   centrosEvangelizacao,
@@ -26,6 +27,10 @@ const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
  *  Revalidar a árvore sob /missoes evita que alguma delas continue servindo
  *  a contagem anterior depois de uma alteração. */
 function revalidarArvore(missaoId?: string) {
+  updateTag(ETIQUETAS.missoes);
+  if (missaoId) updateTag(ETIQUETAS.missao(missaoId));
+  updateTag(ETIQUETAS.painel);
+
   revalidatePath("/missoes", "layout");
   if (missaoId) revalidatePath(`/missoes/${missaoId}`, "layout");
   // Equipe também depende da lista de missões: é dela que sai o select do

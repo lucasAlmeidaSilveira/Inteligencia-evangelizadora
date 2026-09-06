@@ -13,7 +13,7 @@ export const metadata = { title: "Missões" };
 export default async function PaginaMissoes() {
   const usuario = await requerUsuario();
   // Admin também vê as arquivadas; o responsável, só as ativas.
-  const missoes = await listarMissoes({ incluirInativas: usuario.ehAdmin });
+  const missoes = await listarMissoes(usuario.ehAdmin);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">

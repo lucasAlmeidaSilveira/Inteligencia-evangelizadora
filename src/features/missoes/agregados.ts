@@ -12,7 +12,20 @@ export type Agregados = {
   gruposAtivos: number;
   pessoasEmGrupos: number;
   eventosTotal: number;
-  proximoEvento: Date | null;
+  /**
+   * ISO-8601, não `Date`.
+   *
+   * Mesma razão pela qual dinheiro trafega como string: é a forma que
+   * atravessa serialização sem perder nada. Estes agregados alimentam
+   * consultas cacheadas, e o `unstable_cache` grava com `JSON.stringify` — um
+   * `Date` voltaria como string apenas a partir do segundo acesso, quando o
+   * cache tem entrada. O tipo seria verdade na primeira visita e mentira na
+   * seguinte, e o `.getTime()` quebraria só em produção.
+   *
+   * Os formatadores de `lib/format.ts` já aceitam `string | Date`, então a
+   * exibição não muda.
+   */
+  proximoEvento: string | null;
 };
 
 /**
@@ -107,16 +120,17 @@ export async function agregadosPorMissao(tx: Transacao, missaoIds: string[]) {
     .select({
       missaoId: eventos.missaoId,
       total: sql<number>`count(*)`.mapWith(Number),
-      // Conversão explícita: sem mapeador, o driver devolve a data como
-      // string e o tipo `Date` seria uma mentira que só aparece em produção,
-      // no primeiro `.getTime()`.
-      proximo: sql<Date | null>`min(data_inicio) filter (where data_inicio >= now() and status <> 'cancelado')`.mapWith(
+      // Normaliza para ISO: o driver ora devolve `Date`, ora string, conforme
+      // o tipo da coluna e o mapeador. Fixar uma forma só aqui é o que faz o
+      // valor sobreviver ao cache sem mudar de tipo entre a primeira visita e
+      // a segunda.
+      proximo: sql<string | null>`min(data_inicio) filter (where data_inicio >= now() and status <> 'cancelado')`.mapWith(
         (valor) =>
           valor === null || valor === undefined
             ? null
             : valor instanceof Date
-              ? valor
-              : new Date(valor as string),
+              ? valor.toISOString()
+              : new Date(valor as string).toISOString(),
       ),
     })
     .from(eventos)

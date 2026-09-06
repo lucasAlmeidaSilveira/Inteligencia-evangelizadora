@@ -24,7 +24,7 @@ export default async function PaginaGrupos({
   // vínculo novo.
   const [grupos, centros] = await Promise.all([
     listarGrupos(id, { centroId: centroFiltrado }),
-    centrosParaSelecao(id, { incluirInativos: true }),
+    centrosParaSelecao(id, true),
   ]);
 
   return (

@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { eq } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import type { Transacao } from "@/server/db/index";
 import { grupoPastores, gruposOracao } from "@/server/db/schema";
 
@@ -18,6 +19,13 @@ type Pastor = { nome: string; telefone: string | null };
  * outras servindo o número anterior.
  */
 function revalidarArvore(missaoId: string) {
+  // A geral entra junto porque o painel soma as pessoas em grupos de todas as
+  // missões — sem ela o total continuaria o anterior.
+  updateTag(ETIQUETAS.gruposDaMissao(missaoId));
+  updateTag(ETIQUETAS.grupos);
+  updateTag(ETIQUETAS.missoes);
+  updateTag(ETIQUETAS.painel);
+
   revalidatePath("/missoes", "layout");
   revalidatePath(`/missoes/${missaoId}`, "layout");
   revalidatePath("/");

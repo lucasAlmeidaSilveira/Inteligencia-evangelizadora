@@ -3,7 +3,9 @@ import "server-only";
 import { cache } from "react";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
-import { comUsuario } from "@/server/dados";
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
+import { ETIQUETAS } from "@/server/etiquetas";
+import { emIso } from "@/server/db/iso";
 import { missaoIndicadores, missoes, usuarios } from "@/server/db/schema";
 import type { Transacao } from "@/server/db/index";
 
@@ -39,8 +41,12 @@ async function responsaveisPorMissao(tx: Transacao, ids: string[]) {
   return mapa;
 }
 
-export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
-  return comUsuario(async (tx) => {
+/* `incluirInativas` como booleano posicional, não dentro de um objeto: é ele
+   que separa as duas entradas de cache, e um objeto literal novo a cada
+   chamada também impediria o `cache` do React de casar as chamadas. */
+export const listarMissoes = leituraCacheada(
+  "missoes",
+  async (tx, incluirInativas: boolean) => {
     const base = tx
       .select({
         id: missoes.id,
@@ -54,7 +60,7 @@ export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
       .from(missoes)
       .orderBy(asc(missoes.nome));
 
-    const lista = await (opcoes?.incluirInativas
+    const lista = await (incluirInativas
       ? base
       : base.where(eq(missoes.ativo, true)));
 
@@ -78,59 +84,85 @@ export async function listarMissoes(opcoes?: { incluirInativas?: boolean }) {
         membrosEstimados: membros.estimado,
       };
     });
-  });
-}
+  },
+  {
+    /* Os agregados somam centros, grupos e ações: qualquer um deles muda esta
+       lista, e por isso ela responde às quatro etiquetas. */
+    etiquetas: () => [
+      ETIQUETAS.missoes,
+      ETIQUETAS.centros,
+      ETIQUETAS.grupos,
+      ETIQUETAS.eventos,
+    ],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
-/** `cache` dedupe a consulta: o layout e a página do detalhe pedem a mesma
- *  missão na mesma renderização, e o banco é consultado uma vez só. */
-export const obterMissao = cache(async (id: string) => {
-  return comUsuario(async (tx) => {
-    const [missao] = await tx
-      .select({
-        id: missoes.id,
-        nome: missoes.nome,
-        slug: missoes.slug,
-        cidade: missoes.cidade,
-        regiao: missoes.regiao,
-        endereco: missoes.endereco,
-        dataFundacao: missoes.dataFundacao,
-        contatoTelefone: missoes.contatoTelefone,
-        membrosTotal: missoes.membrosTotal,
-        observacoes: missoes.observacoes,
-        ativo: missoes.ativo,
-        atualizadoEm: missoes.atualizadoEm,
-      })
-      .from(missoes)
-      .where(eq(missoes.id, id))
-      .limit(1);
+/** Duas camadas: `leituraCacheada` guarda entre requisições, e o `cache` do
+ *  React faz o layout e a página do detalhe — que pedem a mesma missão na
+ *  mesma renderização — dividirem o resultado sem nem consultar o cache. */
+export const obterMissao = cache(
+  leituraCacheada(
+    "missao",
+    async (tx, id: string) => {
+      const [missao] = await tx
+        .select({
+          id: missoes.id,
+          nome: missoes.nome,
+          slug: missoes.slug,
+          cidade: missoes.cidade,
+          regiao: missoes.regiao,
+          endereco: missoes.endereco,
+          dataFundacao: missoes.dataFundacao,
+          contatoTelefone: missoes.contatoTelefone,
+          membrosTotal: missoes.membrosTotal,
+          observacoes: missoes.observacoes,
+          ativo: missoes.ativo,
+          atualizadoEm: emIso(missoes.atualizadoEm),
+        })
+        .from(missoes)
+        .where(eq(missoes.id, id))
+        .limit(1);
 
-    // RLS já filtrou: se não veio nada, ou não existe ou não é do usuário —
-    // e a distinção não deve vazar para quem perguntou.
-    if (!missao) return null;
+      // RLS já filtrou: se não veio nada, ou não existe ou não é do usuário —
+      // e a distinção não deve vazar para quem perguntou.
+      if (!missao) return null;
 
-    const [agregados, responsaveis] = await Promise.all([
-      agregadosPorMissao(tx, [missao.id]),
-      responsaveisPorMissao(tx, [missao.id]),
-    ]);
-    const derivados = agregados.get(missao.id) ?? ZERADO;
-    const membros = membrosDaMissao(
-      missao.membrosTotal,
-      derivados.pessoasEmGrupos,
-    );
-    return {
-      ...missao,
-      ...derivados,
-      responsavel: responsaveis.get(missao.id) ?? null,
-      membrosExibidos: membros.valor,
-      membrosEstimados: membros.estimado,
-    };
-  });
-});
+      const [agregados, responsaveis] = await Promise.all([
+        agregadosPorMissao(tx, [missao.id]),
+        responsaveisPorMissao(tx, [missao.id]),
+      ]);
+      const derivados = agregados.get(missao.id) ?? ZERADO;
+      const membros = membrosDaMissao(
+        missao.membrosTotal,
+        derivados.pessoasEmGrupos,
+      );
+      return {
+        ...missao,
+        ...derivados,
+        responsavel: responsaveis.get(missao.id) ?? null,
+        membrosExibidos: membros.valor,
+        membrosEstimados: membros.estimado,
+      };
+    },
+    {
+      etiquetas: ([id]) => [
+        ETIQUETAS.missao(id),
+        ETIQUETAS.missoes,
+        ETIQUETAS.centros,
+        ETIQUETAS.grupos,
+        ETIQUETAS.eventos,
+      ],
+      revalidar: CINCO_MINUTOS,
+    },
+  ),
+);
 
 /** Série histórica para o gráfico de evolução. Pode vir vazia: o registro
  *  de competência é opcional por decisão de produto. */
-export async function listarIndicadores(missaoId: string, limite = 24) {
-  return comUsuario(async (tx) =>
+export const listarIndicadores = leituraCacheada(
+  "indicadores",
+  async (tx, missaoId: string, limite: number = 24) =>
     tx
       .select({
         competencia: missaoIndicadores.competencia,
@@ -143,8 +175,11 @@ export async function listarIndicadores(missaoId: string, limite = 24) {
       .where(eq(missaoIndicadores.missaoId, missaoId))
       .orderBy(desc(missaoIndicadores.competencia))
       .limit(limite),
-  );
-}
+  {
+    etiquetas: ([missaoId]) => [ETIQUETAS.missao(missaoId)],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 export type MissaoListada = Awaited<ReturnType<typeof listarMissoes>>[number];
 export type MissaoDetalhe = NonNullable<Awaited<ReturnType<typeof obterMissao>>>;

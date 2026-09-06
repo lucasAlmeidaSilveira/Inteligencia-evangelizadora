@@ -2,7 +2,8 @@ import "server-only";
 
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
-import { comUsuario } from "@/server/dados";
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
+import { ETIQUETAS } from "@/server/etiquetas";
 import {
   eventoLancamentos,
   eventos,
@@ -45,10 +46,12 @@ export type Relatorio = {
  * em memória, em centavos inteiros — agregar dinheiro em ponto flutuante deixa
  * centavo faltando no relatório, e ninguém consegue explicar de onde veio.
  */
-export async function gerarRelatorio(
-  filtros: FiltrosRelatorio,
-): Promise<Relatorio> {
-  return comUsuario(async (tx) => {
+const consolidar = leituraCacheada(
+  "relatorio",
+  async (
+    tx,
+    filtros: FiltrosRelatorio,
+  ): Promise<Omit<Relatorio, "periodo">> => {
     const condicoes = [
       // Um evento entra se qualquer parte dele toca o período.
       lte(eventos.dataInicio, filtros.ate),
@@ -176,7 +179,24 @@ export async function gerarRelatorio(
         servos: lista.reduce((s, e) => s + e.servos, 0),
         ...calcularFinanceiro(totalReceitas / 100, totalDespesas / 100),
       },
-      periodo: { de: filtros.de, ate: filtros.ate },
     };
-  });
+  },
+  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+);
+
+/**
+ * O `periodo` é eco da entrada, não resultado de consulta — por isso é
+ * reanexado aqui fora, depois do cache.
+ *
+ * Assim ele continua sendo `Date`, que é o que `csv.ts` espera para chamar
+ * `toLocaleDateString` e `toISOString`. Dentro do escopo cacheado ele voltaria
+ * como string no segundo acesso, e o nome do arquivo exportado quebraria.
+ */
+export async function gerarRelatorio(
+  filtros: FiltrosRelatorio,
+): Promise<Relatorio> {
+  return {
+    ...(await consolidar(filtros)),
+    periodo: { de: filtros.de, ate: filtros.ate },
+  };
 }

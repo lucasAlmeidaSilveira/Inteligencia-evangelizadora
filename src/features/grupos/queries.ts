@@ -4,7 +4,9 @@ import { cache } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
 import { lerFiltroDeCentro } from "@/features/centros/schemas";
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { comUsuario } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import { centrosEvangelizacao, gruposOracao } from "@/server/db/schema";
 
 import { pastoresPorGrupo } from "./pastores";
@@ -39,11 +41,12 @@ function condicaoDoCentro(centroId: string | undefined) {
   return valido ? eq(gruposOracao.centroId, valido) : undefined;
 }
 
-export async function listarGrupos(
-  missaoId: string,
-  filtros: FiltroGrupos = {},
-) {
-  return comUsuario(async (tx) => {
+/* `filtros` é obrigatório, sem valor padrão: o que muda o resultado precisa
+   aparecer na chamada, porque é o que compõe a chave do cache. Argumento
+   omitido é filtro que alguém esquece de considerar ao invalidar. */
+export const listarGrupos = leituraCacheada(
+  "grupos",
+  async (tx, missaoId: string, filtros: FiltroGrupos) => {
     const grupos = await tx
       .select(colunas)
       .from(gruposOracao)
@@ -69,8 +72,12 @@ export async function listarGrupos(
       ...grupo,
       pastores: pastores.get(grupo.id) ?? [],
     }));
-  });
-}
+  },
+  {
+    etiquetas: ([missaoId]) => [ETIQUETAS.gruposDaMissao(missaoId)],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 export const obterGrupo = cache(async (id: string) => {
   return comUsuario(async (tx) => {

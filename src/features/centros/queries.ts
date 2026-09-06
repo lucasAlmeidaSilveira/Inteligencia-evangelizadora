@@ -3,7 +3,9 @@ import "server-only";
 import { cache } from "react";
 import { and, asc, desc, eq, or } from "drizzle-orm";
 
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { comUsuario } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import { centrosEvangelizacao } from "@/server/db/schema";
 
 import { SEM_VINCULOS, vinculadosPorCentro } from "./vinculados";
@@ -25,8 +27,9 @@ const colunas = {
   ativo: centrosEvangelizacao.ativo,
 };
 
-export async function listarCentros(missaoId: string) {
-  return comUsuario(async (tx) => {
+export const listarCentros = leituraCacheada(
+  "centros",
+  async (tx, missaoId: string) => {
     const centros = await tx
       .select(colunas)
       .from(centrosEvangelizacao)
@@ -44,8 +47,12 @@ export async function listarCentros(missaoId: string) {
       ...centro,
       ...(vinculados.get(centro.id) ?? SEM_VINCULOS),
     }));
-  });
-}
+  },
+  {
+    etiquetas: ([missaoId]) => [ETIQUETAS.centrosDaMissao(missaoId)],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 export const obterCentro = cache(async (id: string) => {
   return comUsuario(async (tx) => {
@@ -92,27 +99,30 @@ const ordemDeSelecao = [
 /**
  * Centros de uma missão, para os selects de grupos e ações.
  *
- * Por padrão só quem pode receber vínculo novo. O `incluirInativos` é do
- * filtro da lista de grupos: sem ele, o nome de um centro arquivado apareceria
- * no cartão do grupo sem haver como filtrar por ele.
+ * `incluirInativos` é do filtro da lista de grupos: sem ele, o nome de um
+ * centro arquivado apareceria no cartão do grupo sem haver como filtrar por
+ * ele. Passa como booleano, não dentro de um objeto de opções, porque é ele
+ * que separa as duas entradas de cache.
  */
-export async function centrosParaSelecao(
-  missaoId: string,
-  opcoes: { incluirInativos?: boolean } = {},
-) {
-  return comUsuario(async (tx) => {
+export const centrosParaSelecao = leituraCacheada(
+  "centros-selecao",
+  async (tx, missaoId: string, incluirInativos: boolean) => {
     return tx
       .select(colunasSelecao)
       .from(centrosEvangelizacao)
       .where(
         and(
           eq(centrosEvangelizacao.missaoId, missaoId),
-          opcoes.incluirInativos ? undefined : podeReceberVinculo,
+          incluirInativos ? undefined : podeReceberVinculo,
         ),
       )
       .orderBy(...ordemDeSelecao);
-  });
-}
+  },
+  {
+    etiquetas: ([missaoId]) => [ETIQUETAS.centrosDaMissao(missaoId)],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 /**
  * Centros de todas as missões visíveis, com a missão de cada um.
@@ -121,15 +131,19 @@ export async function centrosParaSelecao(
  * inteira em mãos para trocar as opções de centro sem uma ida ao servidor a
  * cada troca. O RLS já limita o que vem — o admin vê tudo, os demais só a sua.
  */
-export async function centrosDasMissoesVisiveis() {
-  return comUsuario(async (tx) => {
-    return tx
-      .select(colunasSelecao)
-      .from(centrosEvangelizacao)
-      .where(podeReceberVinculo)
-      .orderBy(...ordemDeSelecao);
-  });
-}
+export const centrosDasMissoesVisiveis = cache(
+  leituraCacheada(
+    "centros-visiveis",
+    async (tx) =>
+      tx
+        .select(colunasSelecao)
+        .from(centrosEvangelizacao)
+        .where(podeReceberVinculo)
+        .orderBy(...ordemDeSelecao),
+    // Atravessa missões: só a etiqueta geral alcança esta entrada.
+    { etiquetas: () => [ETIQUETAS.centros], revalidar: CINCO_MINUTOS },
+  ),
+);
 
 export type CentroListado = Awaited<ReturnType<typeof listarCentros>>[number];
 export type CentroParaSelecao = Awaited<

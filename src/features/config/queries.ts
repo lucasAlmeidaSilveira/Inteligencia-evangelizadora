@@ -2,7 +2,9 @@ import "server-only";
 
 import { asc, eq, inArray, sql } from "drizzle-orm";
 
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { comUsuario } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import type { Transacao } from "@/server/db/index";
 import {
   categoriasFinanceiras,
@@ -31,8 +33,11 @@ async function usoDosTipos(tx: Transacao, ids: string[]) {
   return mapa;
 }
 
-export async function listarTodosOsTipos() {
-  return comUsuario(async (tx) => {
+/* Escopada, não global: o `emUso` conta eventos, que o RLS recorta por missão.
+   `listarTiposEvento` pode ser global porque lê só a tabela de tipos. */
+export const listarTodosOsTipos = leituraCacheada(
+  "config-tipos",
+  async (tx) => {
     const lista = await tx
       .select({
         id: tiposEvento.id,
@@ -51,11 +56,16 @@ export async function listarTodosOsTipos() {
     );
 
     return lista.map((tipo) => ({ ...tipo, emUso: uso.get(tipo.id) ?? 0 }));
-  });
-}
+  },
+  {
+    etiquetas: () => [ETIQUETAS.tipos, ETIQUETAS.eventos],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
-export async function listarTodasAsCategorias() {
-  return comUsuario(async (tx) => {
+export const listarTodasAsCategorias = leituraCacheada(
+  "config-categorias",
+  async (tx) => {
     const lista = await tx
       .select({
         id: categoriasFinanceiras.id,
@@ -85,8 +95,12 @@ export async function listarTodasAsCategorias() {
 
     const mapa = new Map(uso.map((u) => [u.categoriaId, u.total]));
     return lista.map((c) => ({ ...c, emUso: mapa.get(c.id) ?? 0 }));
-  });
-}
+  },
+  {
+    etiquetas: () => [ETIQUETAS.categorias, ETIQUETAS.eventos],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 /**
  * Quem tem acesso ao sistema.
@@ -95,6 +109,12 @@ export async function listarTodasAsCategorias() {
  * todos; responsável e auxiliar enxergam a si mesmos e os colegas da própria
  * missão. Não há `where` de missão nesta consulta de propósito — esquecer um
  * filtro é justamente a classe de erro que o RLS existe para tornar impossível.
+ *
+ * **Fora do cache, e é deliberado.** A policy `usuarios_leitura` inclui
+ * `firebase_uid = ie.firebase_uid()`: quem não tem missão enxerga só a própria
+ * linha. O resultado varia por pessoa, não por recorte — e a chave de
+ * `leituraCacheada` é por recorte. Cachear aqui serviria a lista de um usuário
+ * para outro do mesmo papel e missão.
  */
 export async function listarUsuarios() {
   return comUsuario(async (tx) =>
@@ -116,14 +136,15 @@ export async function listarUsuarios() {
   );
 }
 
-export async function listarMissoesParaVinculo() {
-  return comUsuario(async (tx) =>
+export const listarMissoesParaVinculo = leituraCacheada(
+  "config-missoes",
+  async (tx) =>
     tx
       .select({ id: missoes.id, nome: missoes.nome, ativo: missoes.ativo })
       .from(missoes)
       .orderBy(asc(missoes.nome)),
-  );
-}
+  { etiquetas: () => [ETIQUETAS.missoes], revalidar: CINCO_MINUTOS },
+);
 
 export type TipoConfig = Awaited<ReturnType<typeof listarTodosOsTipos>>[number];
 export type CategoriaConfig = Awaited<

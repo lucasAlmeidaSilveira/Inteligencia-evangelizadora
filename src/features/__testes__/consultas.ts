@@ -145,8 +145,11 @@ async function principal() {
           "próxima ação ignora o passado e o cancelado (a de 3 dias)",
           a?.proximoEvento !== null &&
             a?.proximoEvento !== undefined &&
+            // `proximoEvento` trafega em ISO para sobreviver ao cache; aqui a
+            // data volta a ser Date só para a conta de dias.
             Math.round(
-              (a.proximoEvento.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+              (new Date(a.proximoEvento).getTime() - Date.now()) /
+                (1000 * 60 * 60 * 24),
             ),
           3,
         );

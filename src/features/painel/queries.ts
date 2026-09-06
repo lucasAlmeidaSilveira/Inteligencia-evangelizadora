@@ -2,7 +2,9 @@ import "server-only";
 
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
-import { comUsuario } from "@/server/dados";
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
+import { emIso } from "@/server/db/iso";
+import { ETIQUETAS } from "@/server/etiquetas";
 import {
   centrosEvangelizacao,
   eventoLancamentos,
@@ -55,21 +57,38 @@ export type Resumo = {
   saldoNoAno: number;
 };
 
+/*
+ * O painel cruza quatro domínios ao mesmo tempo, então responde às etiquetas
+ * dos quatro: mexer num grupo de oração muda o total de membros, e mexer num
+ * lançamento muda o saldo do ano. Etiqueta a menos aqui é número velho na
+ * primeira tela que o coordenador abre.
+ */
+const ETIQUETAS_DO_PAINEL = [
+  ETIQUETAS.painel,
+  ETIQUETAS.missoes,
+  ETIQUETAS.eventos,
+  ETIQUETAS.grupos,
+  ETIQUETAS.centros,
+];
+
 /**
  * Números do topo do painel.
  *
  * `missaoId` é a missão em foco (ver `features/missoes/foco.ts`) e chega por
  * parâmetro, não lido do cookie aqui dentro: consulta que muda de resultado
- * sem a assinatura dizer nada é armadilha para quem for reusá-la. Basta
- * estreitar esta primeira lista — todo o resto já parte dos ids dela.
+ * sem a assinatura dizer nada é armadilha para quem for reusá-la — e, agora
+ * que a leitura é cacheada, é também o que separa uma entrada por foco em vez
+ * de servir o panorama de todas para quem escolheu uma. Basta estreitar esta
+ * primeira lista — todo o resto já parte dos ids dela.
  *
  * Cada consulta tem uma única tabela no FROM. Subconsulta correlacionada
  * escrita em `sql` bruto referencia a tabela externa sem qualificar o schema,
  * e o Postgres resolve o nome para a coluna homônima da tabela interna —
  * todos os totais voltam zerados sem erro algum.
  */
-export async function obterResumo(missaoId?: string): Promise<Resumo> {
-  return comUsuario(async (tx) => {
+export const obterResumo = leituraCacheada(
+  "painel-resumo",
+  async (tx, missaoId?: string): Promise<Resumo> => {
     const lista = await tx
       .select({ id: missoes.id, membrosTotal: missoes.membrosTotal })
       .from(missoes)
@@ -212,8 +231,9 @@ export async function obterResumo(missaoId?: string): Promise<Resumo> {
       despesasNoAno: financeiro.despesas,
       saldoNoAno: financeiro.saldo,
     };
-  });
-}
+  },
+  { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
+);
 
 /* ─── Evolução de membros ────────────────────────────────────────────────── */
 
@@ -232,11 +252,9 @@ export type Evolucao = {
  * pode vir vazia, e a interface precisa dizer isso em vez de desenhar um
  * gráfico de um ponto só.
  */
-export async function obterEvolucao(
-  meses = 12,
-  missaoId?: string,
-): Promise<Evolucao> {
-  return comUsuario(async (tx) => {
+export const obterEvolucao = leituraCacheada(
+  "painel-evolucao",
+  async (tx, meses: number = 12, missaoId?: string): Promise<Evolucao> => {
     const corte = new Date();
     corte.setMonth(corte.getMonth() - meses);
     corte.setDate(1);
@@ -282,8 +300,9 @@ export async function obterEvolucao(
       series: missoesNaSerie,
       competencias: competencias.length,
     };
-  });
-}
+  },
+  { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
+);
 
 /* ─── Comparativo entre missões ──────────────────────────────────────────── */
 
@@ -294,8 +313,9 @@ export type BarraMissao = {
   estimado: boolean;
 };
 
-export async function obterComparativo(): Promise<BarraMissao[]> {
-  return comUsuario(async (tx) => {
+export const obterComparativo = leituraCacheada(
+  "painel-comparativo",
+  async (tx): Promise<BarraMissao[]> => {
     const lista = await tx
       .select({
         id: missoes.id,
@@ -341,16 +361,18 @@ export async function obterComparativo(): Promise<BarraMissao[]> {
       })
       // Ranking: sempre decrescente, que é como se lê comparação de magnitude.
       .sort((a, b) => b.membros - a.membros);
-  });
-}
+  },
+  { etiquetas: () => ETIQUETAS_DO_PAINEL, revalidar: CINCO_MINUTOS },
+);
 
 /* ─── Agenda ─────────────────────────────────────────────────────────────── */
 
 const colunasAgenda = {
   id: eventos.id,
   titulo: eventos.titulo,
-  dataInicio: eventos.dataInicio,
-  dataFim: eventos.dataFim,
+  // ISO, não `Date`: ver `server/db/iso.ts`. É o que permite cachear.
+  dataInicio: emIso(eventos.dataInicio),
+  dataFim: emIso(eventos.dataFim),
   local: eventos.local,
   status: eventos.status,
   missaoId: eventos.missaoId,
@@ -360,12 +382,9 @@ const colunasAgenda = {
 };
 
 /** Eventos que tocam o intervalo — inclusive os que atravessam a virada. */
-export async function obterEventosDoPeriodo(
-  de: Date,
-  ate: Date,
-  missaoId?: string,
-) {
-  return comUsuario(async (tx) =>
+export const obterEventosDoPeriodo = leituraCacheada(
+  "agenda-periodo",
+  async (tx, de: Date, ate: Date, missaoId?: string) =>
     tx
       .select(colunasAgenda)
       .from(eventos)
@@ -379,11 +398,18 @@ export async function obterEventosDoPeriodo(
         ),
       )
       .orderBy(asc(eventos.dataInicio)),
-  );
-}
+  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+);
 
-export async function obterProximosEventos(limite = 5, missaoId?: string) {
-  return comUsuario(async (tx) =>
+/*
+ * O corte é `now()` no momento em que a entrada é criada, não a cada leitura:
+ * uma ação que termina fica na lista por até `revalidar` segundos depois de
+ * passar. É aceitável para uma agenda que se lê por dia, e o preço de manter
+ * a consulta fora do banco a cada visita.
+ */
+export const obterProximosEventos = leituraCacheada(
+  "agenda-proximos",
+  async (tx, limite: number = 5, missaoId?: string) =>
     tx
       .select(colunasAgenda)
       .from(eventos)
@@ -398,8 +424,8 @@ export async function obterProximosEventos(limite = 5, missaoId?: string) {
       )
       .orderBy(asc(eventos.dataInicio))
       .limit(limite),
-  );
-}
+  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+);
 
 export type EventoAgenda = Awaited<
   ReturnType<typeof obterEventosDoPeriodo>

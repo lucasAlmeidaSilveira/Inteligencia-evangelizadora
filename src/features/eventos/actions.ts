@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { eq } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import type { Transacao } from "@/server/db/index";
 import {
   eventoDocumentos,
@@ -23,7 +24,22 @@ import {
 
 import { eventoSchema, lancamentoSchema, linkSchema } from "./schemas";
 
+/*
+ * Duas camadas, porque são dois caches distintos.
+ *
+ * `updateTag` expira o que `leituraCacheada` guardou no servidor; os
+ * `revalidatePath` cuidam do Router Cache do navegador, que guarda a tela já
+ * renderizada e não conhece etiqueta alguma. Só um dos dois deixaria metade do
+ * caminho servindo o número anterior.
+ *
+ * `updateTag` e não `revalidateTag`: quem acabou de lançar uma despesa precisa
+ * ver o saldo novo na volta, não o anterior servido como stale enquanto revalida.
+ */
 function revalidar(eventoId?: string, missaoId?: string) {
+  updateTag(ETIQUETAS.eventos);
+  if (eventoId) updateTag(ETIQUETAS.evento(eventoId));
+  updateTag(ETIQUETAS.painel);
+
   revalidatePath("/eventos", "layout");
   if (eventoId) revalidatePath(`/eventos/${eventoId}`, "layout");
   if (missaoId) revalidatePath(`/missoes/${missaoId}`, "layout");

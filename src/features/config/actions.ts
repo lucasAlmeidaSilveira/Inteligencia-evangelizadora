@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { eq } from "drizzle-orm";
 
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
 import {
   categoriasFinanceiras,
   tiposEvento,
@@ -16,6 +17,14 @@ import { categoriaSchema, tipoEventoSchema, usuarioSchema } from "./schemas";
 const APENAS_ADMIN = "Apenas o administrador geral pode fazer isso.";
 
 function revalidar() {
+  // Tipos e categorias são cacheados globalmente (policy `ie.autenticado()`):
+  // uma entrada só para todo mundo, e uma etiqueta só para derrubá-la.
+  updateTag(ETIQUETAS.tipos);
+  updateTag(ETIQUETAS.categorias);
+  // O vínculo de um usuário a uma missão muda a lista que o convite oferece.
+  updateTag(ETIQUETAS.missoes);
+  updateTag(ETIQUETAS.painel);
+
   revalidatePath("/config", "layout");
   revalidatePath("/equipe");
   revalidatePath("/eventos", "layout");

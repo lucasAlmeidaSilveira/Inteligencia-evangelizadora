@@ -219,7 +219,7 @@ async function ProximasAcoes({ missaoId }: { missaoId?: string }) {
 export default async function PaginaPainel() {
   const usuario = await requerUsuario();
   const [missoes, foco] = await Promise.all([
-    listarMissoes({ incluirInativas: usuario.ehAdmin }),
+    listarMissoes(usuario.ehAdmin),
     focoAtual(),
   ]);
   const primeiroNome = usuario.nome.split(" ")[0];

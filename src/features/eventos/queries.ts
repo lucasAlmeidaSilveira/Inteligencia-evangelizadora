@@ -3,7 +3,15 @@ import "server-only";
 import { cache } from "react";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
+import {
+  CINCO_MINUTOS,
+  leituraCacheada,
+  leituraGlobal,
+  UMA_HORA,
+} from "@/server/cache";
 import { comUsuario } from "@/server/dados";
+import { ETIQUETAS } from "@/server/etiquetas";
+import { emIso } from "@/server/db/iso";
 import type { Transacao } from "@/server/db/index";
 import {
   categoriasFinanceiras,
@@ -73,16 +81,18 @@ const colunas = {
   tipoNome: tiposEvento.nome,
   tipoCor: tiposEvento.cor,
   titulo: eventos.titulo,
-  dataInicio: eventos.dataInicio,
-  dataFim: eventos.dataFim,
+  // ISO, não `Date`: ver `server/db/iso.ts`. É o que permite cachear.
+  dataInicio: emIso(eventos.dataInicio),
+  dataFim: emIso(eventos.dataFim),
   local: eventos.local,
   participantesTotal: eventos.participantesTotal,
   servosEngajados: eventos.servosEngajados,
   status: eventos.status,
 };
 
-export async function listarEventos(filtros: FiltrosEvento = {}) {
-  return comUsuario(async (tx) => {
+export const listarEventos = leituraCacheada(
+  "eventos",
+  async (tx, filtros: FiltrosEvento) => {
     const condicoes = [
       filtros.missaoId ? eq(eventos.missaoId, filtros.missaoId) : undefined,
       filtros.tipoEventoId
@@ -115,36 +125,47 @@ export async function listarEventos(filtros: FiltrosEvento = {}) {
       ...evento,
       financeiro: financeiro.get(evento.id) ?? SEM_MOVIMENTO,
     }));
-  });
-}
+  },
+  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+);
 
-export const obterEvento = cache(async (id: string) => {
-  return comUsuario(async (tx) => {
-    const [evento] = await tx
-      .select({
-        ...colunas,
-        descricao: eventos.descricao,
-        observacoes: eventos.observacoes,
-        endereco: eventos.endereco,
-        criadoEm: eventos.criadoEm,
-        atualizadoEm: eventos.atualizadoEm,
-      })
-      .from(eventos)
-      .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
-      .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .innerJoin(
-        centrosEvangelizacao,
-        eq(centrosEvangelizacao.id, eventos.centroId),
-      )
-      .where(eq(eventos.id, id))
-      .limit(1);
+export const obterEvento = cache(
+  leituraCacheada(
+    "evento",
+    async (tx, id: string) => {
+      const [evento] = await tx
+        .select({
+          ...colunas,
+          descricao: eventos.descricao,
+          observacoes: eventos.observacoes,
+          endereco: eventos.endereco,
+          criadoEm: emIso(eventos.criadoEm),
+          atualizadoEm: emIso(eventos.atualizadoEm),
+        })
+        .from(eventos)
+        .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
+        .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+        .innerJoin(
+          centrosEvangelizacao,
+          eq(centrosEvangelizacao.id, eventos.centroId),
+        )
+        .where(eq(eventos.id, id))
+        .limit(1);
 
-    if (!evento) return null;
+      if (!evento) return null;
 
-    const financeiro = await financeiroPorEvento(tx, [evento.id]);
-    return { ...evento, financeiro: financeiro.get(evento.id) ?? SEM_MOVIMENTO };
-  });
-});
+      const financeiro = await financeiroPorEvento(tx, [evento.id]);
+      return {
+        ...evento,
+        financeiro: financeiro.get(evento.id) ?? SEM_MOVIMENTO,
+      };
+    },
+    {
+      etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
+      revalidar: CINCO_MINUTOS,
+    },
+  ),
+);
 
 export async function listarLancamentos(eventoId: string) {
   return comUsuario(async (tx) =>
@@ -176,7 +197,7 @@ export async function listarDocumentos(eventoId: string) {
         nome: eventoDocumentos.nome,
         tipoMime: eventoDocumentos.tipoMime,
         tamanhoBytes: eventoDocumentos.tamanhoBytes,
-        criadoEm: eventoDocumentos.criadoEm,
+        criadoEm: emIso(eventoDocumentos.criadoEm),
       })
       .from(eventoDocumentos)
       .where(eq(eventoDocumentos.eventoId, eventoId))
@@ -201,44 +222,68 @@ export async function listarLinks(eventoId: string) {
 
 /* ─── Listas para os formulários ─────────────────────────────────────────── */
 
-export async function listarTiposEvento() {
-  return comUsuario(async (tx) =>
-    tx
-      .select({
-        id: tiposEvento.id,
-        nome: tiposEvento.nome,
-        cor: tiposEvento.cor,
-      })
-      .from(tiposEvento)
-      .where(eq(tiposEvento.ativo, true))
-      .orderBy(asc(tiposEvento.ordem), asc(tiposEvento.nome)),
-  );
-}
+/*
+ * As três listas abaixo são as mais relidas do sistema — aparecem em quase
+ * toda tela e mudam raramente. Cada uma leva duas camadas: `leituraCacheada`
+ * (ou `leituraGlobal`) guarda entre requisições, e o `cache` do React por fora
+ * evita até a consulta ao Data Cache quando layout e página pedem a mesma
+ * coisa no mesmo render. Sem esse `cache`, `missoesDisponiveis` era buscada
+ * literalmente duas vezes em /eventos: uma dentro de `focoAtual()` e outra na
+ * própria página.
+ */
 
-export async function listarCategorias() {
-  return comUsuario(async (tx) =>
-    tx
-      .select({
-        id: categoriasFinanceiras.id,
-        nome: categoriasFinanceiras.nome,
-        tipo: categoriasFinanceiras.tipo,
-      })
-      .from(categoriasFinanceiras)
-      .where(eq(categoriasFinanceiras.ativo, true))
-      .orderBy(asc(categoriasFinanceiras.ordem), asc(categoriasFinanceiras.nome)),
-  );
-}
+/** Global: a policy de select de `tipos_evento` é `ie.autenticado()`. */
+export const listarTiposEvento = cache(
+  leituraGlobal(
+    "tipos-evento",
+    async (tx) =>
+      tx
+        .select({
+          id: tiposEvento.id,
+          nome: tiposEvento.nome,
+          cor: tiposEvento.cor,
+        })
+        .from(tiposEvento)
+        .where(eq(tiposEvento.ativo, true))
+        .orderBy(asc(tiposEvento.ordem), asc(tiposEvento.nome)),
+    { etiquetas: [ETIQUETAS.tipos], revalidar: UMA_HORA },
+  ),
+);
+
+/** Global pelo mesmo motivo: `categorias_leitura` é `ie.autenticado()`. */
+export const listarCategorias = cache(
+  leituraGlobal(
+    "categorias",
+    async (tx) =>
+      tx
+        .select({
+          id: categoriasFinanceiras.id,
+          nome: categoriasFinanceiras.nome,
+          tipo: categoriasFinanceiras.tipo,
+        })
+        .from(categoriasFinanceiras)
+        .where(eq(categoriasFinanceiras.ativo, true))
+        .orderBy(
+          asc(categoriasFinanceiras.ordem),
+          asc(categoriasFinanceiras.nome),
+        ),
+    { etiquetas: [ETIQUETAS.categorias], revalidar: UMA_HORA },
+  ),
+);
 
 /** Missões que o usuário pode escolher ao criar uma ação — o RLS já limita. */
-export async function missoesDisponiveis() {
-  return comUsuario(async (tx) =>
-    tx
-      .select({ id: missoes.id, nome: missoes.nome })
-      .from(missoes)
-      .where(eq(missoes.ativo, true))
-      .orderBy(asc(missoes.nome)),
-  );
-}
+export const missoesDisponiveis = cache(
+  leituraCacheada(
+    "missoes-disponiveis",
+    async (tx) =>
+      tx
+        .select({ id: missoes.id, nome: missoes.nome })
+        .from(missoes)
+        .where(eq(missoes.ativo, true))
+        .orderBy(asc(missoes.nome)),
+    { etiquetas: () => [ETIQUETAS.missoes], revalidar: CINCO_MINUTOS },
+  ),
+);
 
 /**
  * Tudo que o detalhe de uma ação precisa, numa transação só.
@@ -248,79 +293,86 @@ export async function missoesDisponiveis() {
  * a um banco que fica a 200 ms. Aqui são sete, e o `cache` do React faz o
  * layout e a aba dividirem o mesmo resultado.
  */
-export const obterEventoCompleto = cache(async (id: string) => {
-  return comUsuario(async (tx) => {
-    const [evento] = await tx
-      .select({
-        ...colunas,
-        descricao: eventos.descricao,
-        observacoes: eventos.observacoes,
-        endereco: eventos.endereco,
-        criadoEm: eventos.criadoEm,
-        atualizadoEm: eventos.atualizadoEm,
-      })
-      .from(eventos)
-      .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
-      .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .innerJoin(
-        centrosEvangelizacao,
-        eq(centrosEvangelizacao.id, eventos.centroId),
-      )
-      .where(eq(eventos.id, id))
-      .limit(1);
+export const obterEventoCompleto = cache(
+  leituraCacheada(
+    "evento-completo",
+    async (tx, id: string) => {
+      const [evento] = await tx
+        .select({
+          ...colunas,
+          descricao: eventos.descricao,
+          observacoes: eventos.observacoes,
+          endereco: eventos.endereco,
+          criadoEm: emIso(eventos.criadoEm),
+          atualizadoEm: emIso(eventos.atualizadoEm),
+        })
+        .from(eventos)
+        .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
+        .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+        .innerJoin(
+          centrosEvangelizacao,
+          eq(centrosEvangelizacao.id, eventos.centroId),
+        )
+        .where(eq(eventos.id, id))
+        .limit(1);
 
-    if (!evento) return null;
+      if (!evento) return null;
 
-    const lancamentos = await tx
-      .select({
-        id: eventoLancamentos.id,
-        tipo: eventoLancamentos.tipo,
-        categoriaId: eventoLancamentos.categoriaId,
-        categoriaNome: categoriasFinanceiras.nome,
-        descricao: eventoLancamentos.descricao,
-        valor: eventoLancamentos.valor,
-        data: eventoLancamentos.data,
-      })
-      .from(eventoLancamentos)
-      .leftJoin(
-        categoriasFinanceiras,
-        eq(categoriasFinanceiras.id, eventoLancamentos.categoriaId),
-      )
-      .where(eq(eventoLancamentos.eventoId, id))
-      .orderBy(desc(eventoLancamentos.data), asc(eventoLancamentos.descricao));
+      const lancamentos = await tx
+        .select({
+          id: eventoLancamentos.id,
+          tipo: eventoLancamentos.tipo,
+          categoriaId: eventoLancamentos.categoriaId,
+          categoriaNome: categoriasFinanceiras.nome,
+          descricao: eventoLancamentos.descricao,
+          valor: eventoLancamentos.valor,
+          data: eventoLancamentos.data,
+        })
+        .from(eventoLancamentos)
+        .leftJoin(
+          categoriasFinanceiras,
+          eq(categoriasFinanceiras.id, eventoLancamentos.categoriaId),
+        )
+        .where(eq(eventoLancamentos.eventoId, id))
+        .orderBy(desc(eventoLancamentos.data), asc(eventoLancamentos.descricao));
 
-    const documentos = await tx
-      .select({
-        id: eventoDocumentos.id,
-        nome: eventoDocumentos.nome,
-        tipoMime: eventoDocumentos.tipoMime,
-        tamanhoBytes: eventoDocumentos.tamanhoBytes,
-        criadoEm: eventoDocumentos.criadoEm,
-      })
-      .from(eventoDocumentos)
-      .where(eq(eventoDocumentos.eventoId, id))
-      .orderBy(desc(eventoDocumentos.criadoEm));
+      const documentos = await tx
+        .select({
+          id: eventoDocumentos.id,
+          nome: eventoDocumentos.nome,
+          tipoMime: eventoDocumentos.tipoMime,
+          tamanhoBytes: eventoDocumentos.tamanhoBytes,
+          criadoEm: emIso(eventoDocumentos.criadoEm),
+        })
+        .from(eventoDocumentos)
+        .where(eq(eventoDocumentos.eventoId, id))
+        .orderBy(desc(eventoDocumentos.criadoEm));
 
-    const links = await tx
-      .select({
-        id: eventoLinks.id,
-        titulo: eventoLinks.titulo,
-        url: eventoLinks.url,
-        descricao: eventoLinks.descricao,
-      })
-      .from(eventoLinks)
-      .where(eq(eventoLinks.eventoId, id))
-      .orderBy(asc(eventoLinks.ordem), asc(eventoLinks.titulo));
+      const links = await tx
+        .select({
+          id: eventoLinks.id,
+          titulo: eventoLinks.titulo,
+          url: eventoLinks.url,
+          descricao: eventoLinks.descricao,
+        })
+        .from(eventoLinks)
+        .where(eq(eventoLinks.eventoId, id))
+        .orderBy(asc(eventoLinks.ordem), asc(eventoLinks.titulo));
 
-    // Já temos os lançamentos: somar em memória evita mais uma ida ao banco.
-    return {
-      evento: { ...evento, financeiro: somarLancamentos(lancamentos) },
-      lancamentos,
-      documentos,
-      links,
-    };
-  });
-});
+      // Já temos os lançamentos: somar em memória evita mais uma ida ao banco.
+      return {
+        evento: { ...evento, financeiro: somarLancamentos(lancamentos) },
+        lancamentos,
+        documentos,
+        links,
+      };
+    },
+    {
+      etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
+      revalidar: CINCO_MINUTOS,
+    },
+  ),
+);
 
 export type EventoCompleto = NonNullable<
   Awaited<ReturnType<typeof obterEventoCompleto>>
