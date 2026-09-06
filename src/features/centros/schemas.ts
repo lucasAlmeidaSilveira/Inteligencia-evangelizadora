@@ -38,6 +38,33 @@ export function lerFiltroDeCentro(valor: unknown) {
   return z.uuid().safeParse(valor).success ? valor : undefined;
 }
 
+/** Igual ao de cima, para `?missao=` — o que não é id possível vira "todas". */
+export function lerFiltroDeMissao(valor: unknown) {
+  return lerFiltroDeCentro(valor);
+}
+
+/**
+ * Filtros da tela /centros, que atravessa missões.
+ *
+ * Não confundir com `lerFiltroDeCentro` acima, que lê um `?centro=` isolado:
+ * esta lê a barra de filtros inteira daquela tela.
+ */
+export function lerFiltrosDeCentros(
+  parametros: Record<string, string | string[] | undefined>,
+) {
+  const texto = (chave: string) => {
+    const valor = parametros[chave];
+    return typeof valor === "string" && valor ? valor : undefined;
+  };
+
+  const tipo = texto("tipo");
+
+  return {
+    missaoId: lerFiltroDeMissao(texto("missao")),
+    tipo: TIPOS_CENTRO.map((t) => t.valor).find((t) => t === tipo),
+  };
+}
+
 export const centroSchema = z.object({
   nome: z
     .string()

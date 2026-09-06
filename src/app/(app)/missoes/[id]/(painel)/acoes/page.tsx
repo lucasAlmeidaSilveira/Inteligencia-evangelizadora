@@ -28,7 +28,7 @@ export default async function PaginaAcoesDaMissao({
 
   const filtros = lerFiltrosDeEvento(parametros);
   const temFiltro = Boolean(
-    filtros.tipoEventoId || filtros.status || filtros.destaque,
+    filtros.tipoEventoId || filtros.status || filtros.destaque || filtros.de,
   );
 
   /* Ao contrário de /eventos, a missão vem da rota e não de `focoAtual()`:

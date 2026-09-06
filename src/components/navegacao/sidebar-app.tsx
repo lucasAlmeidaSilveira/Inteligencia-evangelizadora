@@ -12,7 +12,9 @@ import {
   LayoutDashboard,
   Settings,
   Sparkles,
+  UserCog,
   UsersRound,
+  Waypoints,
 } from "lucide-react";
 
 import {
@@ -52,9 +54,14 @@ import {
 const ITEM_MENU =
   "transition-[width,height,padding,background-color,color,transform] duration-150 ease-out active:translate-y-px [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-out hover:[&_svg]:scale-110";
 
+/* Na ordem em que o domínio se aninha: a missão contém centros, o centro contém
+   grupos, e as ações acontecem neles. Quem percorre a barra de cima para baixo
+   percorre a estrutura da missão. */
 const ACOMPANHAMENTO = [
   { titulo: "Painel", href: "/", Icone: LayoutDashboard },
   { titulo: "Missões", href: "/missoes", Icone: Church },
+  { titulo: "Centros de evangelização", href: "/centros", Icone: Waypoints },
+  { titulo: "Grupos de oração", href: "/grupos", Icone: UsersRound },
   { titulo: "Ações apostólicas", href: "/eventos", Icone: Sparkles },
   { titulo: "Calendário", href: "/calendario", Icone: CalendarDays },
   { titulo: "Relatórios", href: "/relatorios", Icone: ChartColumnIncreasing },
@@ -153,8 +160,13 @@ export function SidebarApp({
                     tooltip="Equipe"
                     className={ITEM_MENU}
                   >
+                    {/* `UserCog` e não `UsersRound`: este agora é o ícone dos
+                        grupos de oração, e com a barra recolhida só o ícone
+                        aparece — dois iguais seriam dois destinos
+                        indistinguíveis. E gerir acesso é mesmo o que se faz
+                        aqui. */}
                     <Link href="/equipe">
-                      <UsersRound aria-hidden />
+                      <UserCog aria-hidden />
                       <span>Equipe</span>
                     </Link>
                   </SidebarMenuButton>

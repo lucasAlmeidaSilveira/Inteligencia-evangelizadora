@@ -1,6 +1,20 @@
 import { z } from "zod";
 
-import { centroIdObrigatorio } from "@/features/centros/schemas";
+import {
+  centroIdObrigatorio,
+  lerFiltroDeCentro,
+  lerFiltroDeMissao,
+} from "@/features/centros/schemas";
+
+/** Filtros da tela /grupos, que atravessa missões. */
+export function lerFiltrosDeGrupos(
+  parametros: Record<string, string | string[] | undefined>,
+) {
+  return {
+    missaoId: lerFiltroDeMissao(parametros.missao),
+    centroId: lerFiltroDeCentro(parametros.centro),
+  };
+}
 
 /** Idempotente: aceita "" do formulário e null da revalidação no servidor. */
 const opcional = (max: number) =>

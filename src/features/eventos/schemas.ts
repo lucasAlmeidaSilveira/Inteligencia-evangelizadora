@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { centroIdObrigatorio } from "@/features/centros/schemas";
+import { intervaloDoMes, lerChaveDeMes } from "@/lib/mes";
 
 /** Idempotente: aceita "" do formulário e null da revalidação no servidor. */
 const opcional = (max: number) =>
@@ -78,7 +79,7 @@ export const STATUS_EVENTO = [
 export type StatusEvento = (typeof STATUS_EVENTO)[number]["valor"];
 
 /**
- * Lê `?tipo=`, `?status=` e `?destaque` da URL, que qualquer um edita.
+ * Lê `?tipo=`, `?status=`, `?destaque` e `?mes=` da URL, que qualquer um edita.
  *
  * Vive aqui, e não em cada página, porque duas telas mostram a mesma lista com
  * o mesmo recorte — /eventos e as ações de uma missão. Duas cópias desta
@@ -98,12 +99,20 @@ export function lerFiltrosDeEvento(
 
   const tipo = texto("tipo");
 
+  /* O mês vira `de`/`ate`, que é o que a consulta entende — e ela compara por
+     sobreposição, não por data de início: a ação que atravessa a virada do mês
+     aparece nos dois meses, que é onde ela de fato aconteceu. */
+  const mes = lerChaveDeMes(texto("mes"));
+  const intervalo = mes ? intervaloDoMes(mes) : undefined;
+
   return {
     tipoEventoId:
       tipo && z.uuid().safeParse(tipo).success ? tipo : undefined,
     status: STATUS_EVENTO.map((s) => s.valor).find((s) => s === texto("status")),
     // Presença do parâmetro basta: o filtro só tem "ligado" e "ausente".
     destaque: parametros.destaque !== undefined || undefined,
+    de: intervalo?.de,
+    ate: intervalo?.ate,
   };
 }
 

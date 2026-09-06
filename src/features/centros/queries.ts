@@ -6,7 +6,11 @@ import { and, asc, desc, eq, or } from "drizzle-orm";
 import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { comUsuario } from "@/server/dados";
 import { ETIQUETAS } from "@/server/etiquetas";
-import { centrosEvangelizacao } from "@/server/db/schema";
+import {
+  centrosEvangelizacao,
+  missoes,
+  type TipoCentro,
+} from "@/server/db/schema";
 
 import { SEM_VINCULOS, vinculadosPorCentro } from "./vinculados";
 
@@ -145,7 +149,103 @@ export const centrosDasMissoesVisiveis = cache(
   ),
 );
 
+/* ─── Panorama: centros de todas as missões visíveis ─────────────────────────
+ *
+ * A tela /centros atravessa missões, e por isso a missão é um filtro dela — não
+ * o foco da barra lateral. É a diferença para /eventos: lá o recorte veio junto
+ * do painel e do calendário e vale para a navegação inteira; aqui a pergunta é
+ * "onde estão os centros", e responder só pela missão em foco seria responder
+ * outra pergunta.
+ */
+
+export type FiltrosCentros = { missaoId?: string; tipo?: TipoCentro };
+
+const colunasPanorama = {
+  id: centrosEvangelizacao.id,
+  missaoId: centrosEvangelizacao.missaoId,
+  missaoNome: missoes.nome,
+  nome: centrosEvangelizacao.nome,
+  tipo: centrosEvangelizacao.tipo,
+  principal: centrosEvangelizacao.principal,
+  cidade: centrosEvangelizacao.cidade,
+  regiao: centrosEvangelizacao.regiao,
+  contatoTelefone: centrosEvangelizacao.contatoTelefone,
+  ativo: centrosEvangelizacao.ativo,
+};
+
+export const listarCentrosVisiveis = leituraCacheada(
+  "centros-panorama",
+  async (tx, filtros: FiltrosCentros) => {
+    const centros = await tx
+      .select(colunasPanorama)
+      .from(centrosEvangelizacao)
+      /* `innerJoin` e não busca à parte: o nome da missão muda quando ela é
+         renomeada, e uma cópia guardada aqui ficaria velha em silêncio. */
+      .innerJoin(missoes, eq(missoes.id, centrosEvangelizacao.missaoId))
+      .where(
+        and(
+          filtros.missaoId
+            ? eq(centrosEvangelizacao.missaoId, filtros.missaoId)
+            : undefined,
+          filtros.tipo ? eq(centrosEvangelizacao.tipo, filtros.tipo) : undefined,
+        ),
+      )
+      // Agrupado por missão, e dentro dela o principal encabeça — a mesma
+      // ordem da aba da missão, para quem vem de lá não se perder.
+      .orderBy(
+        asc(missoes.nome),
+        desc(centrosEvangelizacao.principal),
+        asc(centrosEvangelizacao.nome),
+      );
+
+    const vinculados = await vinculadosPorCentro(
+      tx,
+      centros.map((c) => c.id),
+    );
+
+    return centros.map((centro) => ({
+      ...centro,
+      ...(vinculados.get(centro.id) ?? SEM_VINCULOS),
+    }));
+  },
+  {
+    /* Três etiquetas porque o cartão mostra três coisas: o centro, quantos
+       grupos pendem dele e quantas ações. Só `centros` deixaria a contagem de
+       grupos velha por cinco minutos depois de cadastrar um. Atravessa missões,
+       então só as etiquetas gerais alcançam esta entrada. */
+    etiquetas: () => [ETIQUETAS.centros, ETIQUETAS.grupos, ETIQUETAS.eventos],
+    revalidar: CINCO_MINUTOS,
+  },
+);
+
+/** Centros para o select de filtro da tela de grupos, com a missão de cada um. */
+export const centrosParaFiltro = cache(
+  leituraCacheada(
+    "centros-filtro",
+    async (tx) =>
+      tx
+        .select({
+          id: centrosEvangelizacao.id,
+          missaoId: centrosEvangelizacao.missaoId,
+          missaoNome: missoes.nome,
+          nome: centrosEvangelizacao.nome,
+          principal: centrosEvangelizacao.principal,
+          ativo: centrosEvangelizacao.ativo,
+        })
+        .from(centrosEvangelizacao)
+        .innerJoin(missoes, eq(missoes.id, centrosEvangelizacao.missaoId))
+        .orderBy(...ordemDeSelecao),
+    { etiquetas: () => [ETIQUETAS.centros], revalidar: CINCO_MINUTOS },
+  ),
+);
+
 export type CentroListado = Awaited<ReturnType<typeof listarCentros>>[number];
+export type CentroVisivel = Awaited<
+  ReturnType<typeof listarCentrosVisiveis>
+>[number];
+export type CentroParaFiltro = Awaited<
+  ReturnType<typeof centrosParaFiltro>
+>[number];
 export type CentroParaSelecao = Awaited<
   ReturnType<typeof centrosParaSelecao>
 >[number];

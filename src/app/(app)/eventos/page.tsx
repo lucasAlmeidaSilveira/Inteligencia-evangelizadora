@@ -43,7 +43,7 @@ export default async function PaginaEventos({
   ]);
 
   const temFiltro = Boolean(
-    filtros.tipoEventoId || filtros.status || filtros.destaque,
+    filtros.tipoEventoId || filtros.status || filtros.destaque || filtros.de,
   );
   const podeCriar = missoes.length > 0;
 

@@ -16,24 +16,14 @@ import {
 } from "@/server/db/schema";
 import { membrosDaMissao } from "@/features/missoes/agregados";
 import { calcularFinanceiro } from "@/features/eventos/financeiro";
+import { fimDoMes, inicioDoMes } from "@/lib/mes";
 
 /* ─── Períodos ───────────────────────────────────────────────────────────── */
 
-export function inicioDoMes(referencia = new Date()) {
-  return new Date(referencia.getFullYear(), referencia.getMonth(), 1);
-}
-
-export function fimDoMes(referencia = new Date()) {
-  return new Date(
-    referencia.getFullYear(),
-    referencia.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  );
-}
+/* O mês vem de `lib/mes.ts` e não daqui: o cartão "Ações neste mês" leva a
+   /eventos com `?mes=` aplicado, e as duas pontas precisam concordar sobre
+   onde o mês começa e termina. Duas contas iguais hoje divergiriam na primeira
+   correção feita em só uma delas. */
 
 function inicioDoAno(referencia = new Date()) {
   return new Date(referencia.getFullYear(), 0, 1);

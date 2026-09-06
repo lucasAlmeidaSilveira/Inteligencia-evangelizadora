@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { lerChaveDeMes, mesesDoFiltro, rotuloDoMes } from "@/lib/mes";
 
 import { STATUS_EVENTO } from "../schemas";
 
@@ -51,10 +52,19 @@ export function FiltrosEventos({
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
-  const temFiltro = ["tipo", "status", "destaque"].some((c) =>
+  const temFiltro = ["tipo", "status", "destaque", "mes"].some((c) =>
     parametros.has(c),
   );
   const soDestaques = parametros.has("destaque");
+
+  /* A janela é montada em torno de hoje, mas um link guardado pode apontar
+     para fora dela — o mês de março de dois anos atrás, mandado por e-mail. Ele
+     entra na lista para que o gatilho mostre o recorte em vigor em vez de ficar
+     em branco dizendo que não há filtro nenhum. */
+  const mesAtual = lerChaveDeMes(parametros.get("mes"));
+  const janela = mesesDoFiltro();
+  const meses =
+    mesAtual && !janela.includes(mesAtual) ? [mesAtual, ...janela] : janela;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -74,6 +84,25 @@ export function FiltrosEventos({
                 />
                 {t.nome}
               </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* O mês vem primeiro: é o recorte que os coordenadores usam ao fechar o
+          mês, e é o que o cartão "Ações neste mês" do painel já traz aplicado. */}
+      <Select
+        value={mesAtual ?? TODOS}
+        onValueChange={(v) => definir("mes", v)}
+      >
+        <SelectTrigger className="w-auto min-w-40" aria-label="Filtrar por mês">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TODOS}>Todo o período</SelectItem>
+          {meses.map((mes) => (
+            <SelectItem key={mes} value={mes}>
+              {rotuloDoMes(mes)}
             </SelectItem>
           ))}
         </SelectContent>

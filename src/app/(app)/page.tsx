@@ -43,6 +43,7 @@ import {
   formatarNumero,
   formatarRelativo,
 } from "@/lib/format";
+import { chaveDoMes } from "@/lib/mes";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Painel" };
@@ -74,12 +75,14 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
             Icone={Sparkles}
             rotulo={`Ações em ${ano}`}
             valor={formatarNumero(r.acoesNoAno)}
+            href="/eventos"
           />
         ) : (
           <CartaoMetrica
             Icone={Church}
             rotulo="Missões"
             valor={formatarNumero(r.missoesAtivas)}
+            href="/missoes"
           />
         )}
         <CartaoMetrica
@@ -92,10 +95,14 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
               : undefined
           }
         />
+        {/* A missão em foco viaja como filtro para a tela de destino: sem isso
+            o cartão mostraria o número de uma missão e abriria a lista de
+            todas. As duas telas recortam por `?missao=`, não pelo foco. */}
         <CartaoMetrica
           Icone={Waypoints}
           rotulo="Centros de evangelização"
           valor={formatarNumero(r.centrosAtivos)}
+          href={missaoId ? `/centros?missao=${missaoId}` : "/centros"}
         />
         {/* "Pessoas em grupos" era um cartão inteiro para um número que só faz
             sentido ao lado da contagem de grupos — como detalhe ele fica junto
@@ -109,14 +116,20 @@ async function Indicadores({ missaoId }: { missaoId?: string }) {
               ? `${formatarNumero(r.pessoasEmGrupos)} pessoas reunidas`
               : undefined
           }
+          href={missaoId ? `/grupos?missao=${missaoId}` : "/grupos"}
         />
       </div>
 
       <div className="cascata grid gap-4 [--cascata-inicio:140ms] sm:grid-cols-2 xl:grid-cols-4">
+        {/* Leva a /eventos já recortado neste mês: sem o `?mes=`, o cartão
+            diria um número e a tela de destino mostraria outro — a lista
+            inteira, de todos os meses. É a mesma conta dos dois lados, vinda de
+            `lib/mes.ts`. */}
         <CartaoMetrica
           Icone={Sparkles}
           rotulo="Ações neste mês"
           valor={formatarNumero(r.acoesNoMes)}
+          href={`/eventos?mes=${chaveDoMes()}`}
         />
         <CartaoMetrica
           Icone={Users}
