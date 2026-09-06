@@ -10,6 +10,10 @@ export default async function PaginaNovaMissao() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <CabecalhoPagina
+        trilha={[
+          { rotulo: "Missões", href: "/missoes" },
+          { rotulo: "Nova missão", href: "/missoes/nova" },
+        ]}
         titulo="Nova missão"
         descricao="Aqui vai só o cadastro da missão. O responsável é definido em Equipe, e os grupos de oração e as ações apostólicas são cadastrados depois, dentro da missão."
       />

@@ -27,7 +27,21 @@ export default async function PaginaEditarEvento({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <CabecalhoPagina titulo="Editar ação" descricao={evento.titulo} />
+      {/* Fora do grupo `(painel)`: sem o cabeçalho e as abas da ação, é a
+          trilha que preserva o nome e o caminho de volta. */}
+      <CabecalhoPagina
+        trilha={[
+          { rotulo: "Ações apostólicas", href: "/eventos" },
+          {
+            rotulo: evento.titulo,
+            href: `/eventos/${evento.id}`,
+            dinamico: true,
+          },
+          { rotulo: "Editar ação", href: `/eventos/${evento.id}/editar` },
+        ]}
+        titulo="Editar ação"
+        descricao={evento.titulo}
+      />
       <FormularioEvento
         eventoId={evento.id}
         missoes={missoes}

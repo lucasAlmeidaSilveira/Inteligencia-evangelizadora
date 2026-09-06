@@ -40,6 +40,10 @@ export default async function PaginaNovoEvento({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <CabecalhoPagina
+        trilha={[
+          { rotulo: "Ações apostólicas", href: "/eventos" },
+          { rotulo: "Nova ação apostólica", href: "/eventos/novo" },
+        ]}
         titulo="Nova ação apostólica"
         descricao="Financeiro, documentos e links são adicionados depois de criada."
       />

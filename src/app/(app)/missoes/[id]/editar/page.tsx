@@ -27,7 +27,18 @@ export default async function PaginaEditarMissao({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <CabecalhoPagina titulo="Editar missão" descricao={missao.nome} />
+      {/* Esta rota fica fora do grupo `(painel)`, então não herda o cabeçalho
+          nem as abas da missão. A trilha é o que preserva o nome e o caminho
+          de volta. */}
+      <CabecalhoPagina
+        trilha={[
+          { rotulo: "Missões", href: "/missoes" },
+          { rotulo: missao.nome, href: `/missoes/${missao.id}`, dinamico: true },
+          { rotulo: "Editar missão", href: `/missoes/${missao.id}/editar` },
+        ]}
+        titulo="Editar missão"
+        descricao={missao.nome}
+      />
       <FormularioMissao
         missaoId={missao.id}
         podeArquivar={usuario.ehAdmin}

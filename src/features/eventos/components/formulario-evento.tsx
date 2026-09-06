@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -494,14 +495,20 @@ export function FormularioEvento({
       </Card>
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {/* Destino fixo, não `router.back()`: aberta por link ou URL digitada,
+            a tela não tem página anterior dentro do sistema, e o botão levava
+            para fora dele. */}
+        {/* `disabled` é pseudo-classe de CSS e não pega em `<a>`: enquanto
+            salva, o bloqueio vem de `aria-disabled`. */}
         <Button
-          type="button"
+          asChild
           variant="ghost"
-          className="cursor-pointer"
-          onClick={() => router.back()}
-          disabled={isSubmitting}
+          className="cursor-pointer aria-disabled:pointer-events-none aria-disabled:opacity-50"
+          aria-disabled={isSubmitting}
         >
-          Cancelar
+          <Link href={eventoId ? `/eventos/${eventoId}` : "/eventos"}>
+            Cancelar
+          </Link>
         </Button>
         <Button type="submit" className="cursor-pointer" disabled={isSubmitting}>
           {isSubmitting ? (

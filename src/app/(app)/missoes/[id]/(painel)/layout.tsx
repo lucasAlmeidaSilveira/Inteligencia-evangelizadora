@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { MapPin, Pencil } from "lucide-react";
 
 import { EsqueletoAbas } from "@/components/padroes/esqueletos";
+import { Trilha } from "@/components/padroes/trilha";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,30 +51,45 @@ async function CabecalhoMissao({ id }: { id: string }) {
 
   return (
     <>
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {missao.nome}
-            </h1>
-            {!missao.ativo ? <Badge variant="secondary">Inativa</Badge> : null}
+      <header className="space-y-2">
+        {/* Nas abas nenhum elo casa com o caminho, então o nome da missão vira
+            link para a visão geral; aqui ele é a página atual. */}
+        <Trilha
+          elos={[
+            { rotulo: "Missões", href: "/missoes" },
+            {
+              rotulo: missao.nome,
+              href: `/missoes/${missao.id}`,
+              dinamico: true,
+            },
+          ]}
+        />
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {missao.nome}
+              </h1>
+              {!missao.ativo ? <Badge variant="secondary">Inativa</Badge> : null}
+            </div>
+            {local ? (
+              <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                <MapPin className="size-3.5" aria-hidden />
+                {local}
+              </p>
+            ) : null}
           </div>
-          {local ? (
-            <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
-              <MapPin className="size-3.5" aria-hidden />
-              {local}
-            </p>
+
+          {usuario.podeEditarMissao ? (
+            <Button asChild variant="outline" className="shrink-0">
+              <Link href={`/missoes/${missao.id}/editar`}>
+                <Pencil aria-hidden />
+                Editar
+              </Link>
+            </Button>
           ) : null}
         </div>
-
-        {usuario.podeEditarMissao ? (
-          <Button asChild variant="outline" className="shrink-0">
-            <Link href={`/missoes/${missao.id}/editar`}>
-              <Pencil aria-hidden />
-              Editar
-            </Link>
-          </Button>
-        ) : null}
       </header>
 
       <NavAbas missaoId={missao.id} />
@@ -84,12 +100,15 @@ async function CabecalhoMissao({ id }: { id: string }) {
 function CabecalhoCarregando() {
   return (
     <>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-56" />
-          <Skeleton className="h-4 w-40" />
+      <div className="space-y-2">
+        <Skeleton className="my-1 h-4 w-44" />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <Skeleton className="h-9 w-24 shrink-0" />
         </div>
-        <Skeleton className="h-9 w-24 shrink-0" />
       </div>
       <EsqueletoAbas quantidade={4} />
     </>

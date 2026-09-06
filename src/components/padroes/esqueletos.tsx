@@ -9,14 +9,31 @@ import { cn } from "@/lib/utils";
  * quando os dados chegam, e o olho perde o ponto onde estava lendo.
  */
 
-export function EsqueletoCabecalho({ comAcao = true }: { comAcao?: boolean }) {
+export function EsqueletoCabecalho({
+  comAcao = true,
+  comTrilha = false,
+  larguraTrilha = "w-44",
+}: {
+  comAcao?: boolean;
+  comTrilha?: boolean;
+  /** Trilha de três elos precisa de mais que a de dois. */
+  larguraTrilha?: string;
+}) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-52" />
-        <Skeleton className="h-4 w-72" />
+    <div className="space-y-2">
+      {/* 16px de barra mais 4px acima e abaixo dão os mesmos 24px do link da
+          trilha. Altura diferente aqui faz a página saltar quando o nome
+          chega. */}
+      {comTrilha ? (
+        <Skeleton className={cn("my-1 h-4", larguraTrilha)} />
+      ) : null}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        {comAcao ? <Skeleton className="h-9 w-32 shrink-0" /> : null}
       </div>
-      {comAcao ? <Skeleton className="h-9 w-32 shrink-0" /> : null}
     </div>
   );
 }

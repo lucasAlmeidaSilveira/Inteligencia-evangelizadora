@@ -4,16 +4,9 @@ import { notFound } from "next/navigation";
 import { CalendarDays, Pencil, Star, UserRound, Waypoints } from "lucide-react";
 
 import { EsqueletoAbas } from "@/components/padroes/esqueletos";
+import { Trilha } from "@/components/padroes/trilha";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SeloTipoCentro } from "@/features/centros/components/selo-tipo-centro";
@@ -64,30 +57,25 @@ async function CabecalhoEvento({ id }: { id: string }) {
   return (
     <>
       {/* Todo degrau é rota real — um caminho que não leva a lugar nenhum
-          ensina o coordenador a não clicar no caminho. */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/eventos">Ações apostólicas</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href={`/missoes/${evento.missaoId}`}>
-                {evento.missaoNome}
-              </Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage className="truncate">
-              {evento.titulo}
-            </BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+          ensina o coordenador a não clicar no caminho.
+
+          A missão fica no meio porque, desde que a linha da igreja saiu do
+          cabeçalho, este é o único lugar da tela que diz de quem é a ação. */}
+      <Trilha
+        elos={[
+          { rotulo: "Ações apostólicas", href: "/eventos" },
+          {
+            rotulo: evento.missaoNome,
+            href: `/missoes/${evento.missaoId}`,
+            dinamico: true,
+          },
+          {
+            rotulo: evento.titulo,
+            href: `/eventos/${evento.id}`,
+            dinamico: true,
+          },
+        ]}
+      />
 
       <header className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -170,7 +158,8 @@ async function CabecalhoEvento({ id }: { id: string }) {
 function CabecalhoCarregando() {
   return (
     <>
-      <Skeleton className="h-5 w-72" />
+      {/* Mesma altura do link da trilha: 16px de barra e 4px de folga. */}
+      <Skeleton className="my-1 h-4 w-72" />
       <div className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
