@@ -75,6 +75,38 @@ export const STATUS_EVENTO = [
   { valor: "cancelado", rotulo: "Cancelado" },
 ] as const;
 
+export type StatusEvento = (typeof STATUS_EVENTO)[number]["valor"];
+
+/**
+ * Lê `?tipo=`, `?status=` e `?destaque` da URL, que qualquer um edita.
+ *
+ * Vive aqui, e não em cada página, porque duas telas mostram a mesma lista com
+ * o mesmo recorte — /eventos e as ações de uma missão. Duas cópias desta
+ * leitura divergiriam na primeira vez que um status novo entrasse.
+ *
+ * O que não é valor possível vira `undefined`, e a tela mostra tudo: um `tipo`
+ * inventado chegaria ao banco como comparação com coluna `uuid` e derrubaria a
+ * página com "invalid input syntax for type uuid".
+ */
+export function lerFiltrosDeEvento(
+  parametros: Record<string, string | string[] | undefined>,
+) {
+  const texto = (chave: string) => {
+    const valor = parametros[chave];
+    return typeof valor === "string" && valor ? valor : undefined;
+  };
+
+  const tipo = texto("tipo");
+
+  return {
+    tipoEventoId:
+      tipo && z.uuid().safeParse(tipo).success ? tipo : undefined,
+    status: STATUS_EVENTO.map((s) => s.valor).find((s) => s === texto("status")),
+    // Presença do parâmetro basta: o filtro só tem "ligado" e "ausente".
+    destaque: parametros.destaque !== undefined || undefined,
+  };
+}
+
 /* ─── Grupos de campos ──────────────────────────────────────────────────────
  *
  * A ação se edita por dois caminhos: o formulário inteiro, em /editar, e cada

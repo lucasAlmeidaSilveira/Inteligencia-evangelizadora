@@ -21,13 +21,20 @@ const TODOS = "__todos__";
  * Filtros na URL, não em estado de componente: o recorte fica compartilhável,
  * sobrevive ao recarregar e ao botão voltar.
  *
- * A missão não está aqui: quem escolhe é o seletor da barra lateral, que vale
- * para o acompanhamento inteiro. Dois controles para a mesma dimensão dariam
- * duas verdades na tela.
+ * A missão não é um controle daqui. Em /eventos quem escolhe é o seletor da
+ * barra lateral, que vale para o acompanhamento inteiro; dentro de uma missão
+ * ela é a própria rota. Nos dois casos, um select de missão ao lado destes
+ * daria duas verdades na tela.
+ *
+ * Daí `base`: o recorte se escreve na tela onde se está. Sem ela, filtrar
+ * dentro de uma missão jogaria o usuário para fora dela, em /eventos.
  */
 export function FiltrosEventos({
+  base,
   tipos,
 }: {
+  /** Caminho da tela que exibe a lista — para onde os filtros escrevem. */
+  base: string;
   tipos: { id: string; nome: string; cor: string }[];
 }) {
   // `aplicar` é o `router.push` dentro de uma transição: é o que faz a lista
@@ -40,7 +47,7 @@ export function FiltrosEventos({
     const novos = new URLSearchParams(parametros.toString());
     if (valor === TODOS) novos.delete(chave);
     else novos.set(chave, valor);
-    aplicar(`/eventos${novos.size ? `?${novos}` : ""}`);
+    aplicar(`${base}${novos.size ? `?${novos}` : ""}`);
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
@@ -106,7 +113,7 @@ export function FiltrosEventos({
           variant="ghost"
           size="sm"
           className="cursor-pointer"
-          onClick={() => aplicar("/eventos")}
+          onClick={() => aplicar(base)}
         >
           <X aria-hidden />
           Limpar

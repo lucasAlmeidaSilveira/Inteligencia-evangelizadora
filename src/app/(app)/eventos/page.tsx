@@ -16,29 +16,16 @@ import {
   missoesDisponiveis,
   type FiltrosEvento,
 } from "@/features/eventos/queries";
+import { lerFiltrosDeEvento } from "@/features/eventos/schemas";
 import { focoAtual } from "@/features/missoes/foco";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Ações apostólicas" };
 
-const STATUS_VALIDOS = [
-  "planejado",
-  "em_andamento",
-  "realizado",
-  "cancelado",
-] as const;
-
 export default async function PaginaEventos({
   searchParams,
 }: PageProps<"/eventos">) {
   const parametros = await searchParams;
-
-  const texto = (chave: string) => {
-    const valor = parametros[chave];
-    return typeof valor === "string" && valor ? valor : undefined;
-  };
-
-  const status = STATUS_VALIDOS.find((s) => s === texto("status"));
 
   // A missão vem do seletor da barra lateral, não da URL: é o mesmo recorte
   // que vale para o painel, o calendário e os relatórios.
@@ -46,10 +33,7 @@ export default async function PaginaEventos({
 
   const filtros: FiltrosEvento = {
     missaoId: foco.missaoId,
-    tipoEventoId: texto("tipo"),
-    status,
-    // Presença do parâmetro basta: o filtro só tem "ligado" e "ausente".
-    destaque: parametros.destaque !== undefined || undefined,
+    ...lerFiltrosDeEvento(parametros),
   };
 
   const [eventos, missoes, tipos] = await Promise.all([
@@ -89,7 +73,7 @@ export default async function PaginaEventos({
           esmaecer enquanto o servidor responde. A lista continua renderizada
           no servidor — chega aqui como `children`. */}
       <AreaFiltrada className="space-y-6">
-        <FiltrosEventos tipos={tipos} />
+        <FiltrosEventos base="/eventos" tipos={tipos} />
 
         <ResultadosFiltrados>
           {eventos.length === 0 ? (

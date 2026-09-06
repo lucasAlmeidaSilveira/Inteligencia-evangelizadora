@@ -94,11 +94,15 @@ export default async function PaginaVisaoGeral({
         />
         {/* Centros toma o lugar de "Próxima ação", que desceu para o card de
             dados: é uma data, não uma contagem, e ali fica entre iguais. Um
-            quinto cartão abriria uma fileira com um item só. */}
+            quinto cartão abriria uma fileira com um item só.
+
+            Estes três levam à tela que detalha o número — Membros não, porque
+            não há tela de membros: o total é um campo do cadastro da missão. */}
         <CartaoMetrica
           Icone={Waypoints}
           rotulo="Centros de evangelização"
           valor={formatarNumero(missao.centrosAtivos)}
+          href={`/missoes/${id}/centros`}
         />
         <CartaoMetrica
           Icone={UsersRound}
@@ -109,11 +113,13 @@ export default async function PaginaVisaoGeral({
               ? `${formatarNumero(missao.pessoasEmGrupos)} pessoas reunidas`
               : undefined
           }
+          href={`/missoes/${id}/grupos`}
         />
         <CartaoMetrica
           Icone={Sparkles}
           rotulo="Ações apostólicas"
           valor={formatarNumero(missao.eventosTotal)}
+          href={`/missoes/${id}/acoes`}
         />
       </div>
 
