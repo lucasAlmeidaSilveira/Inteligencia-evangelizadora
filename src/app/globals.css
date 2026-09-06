@@ -149,14 +149,28 @@
   --chart-4: oklch(0.64 0.17 325);
   --chart-5: oklch(0.64 0.17 80);
 
-  --sidebar: oklch(0.975 0.008 250);
-  --sidebar-foreground: oklch(0.3 0.03 250);
-  --sidebar-primary: oklch(0.42 0.135 250);
-  --sidebar-primary-foreground: oklch(0.99 0.005 250);
-  --sidebar-accent: oklch(0.94 0.022 250);
-  --sidebar-accent-foreground: oklch(0.33 0.1 250);
-  --sidebar-border: oklch(0.905 0.014 250);
-  --sidebar-ring: oklch(0.42 0.135 250);
+  /* A barra lateral é a âncora da marca no sistema: a superfície é o próprio
+     --marca-azul, não uma variação dele. Como a marca, não muda com o tema —
+     o bloco correspondente em .dark foi removido de propósito, não esquecido.
+     Os tokens abaixo são a paleta invertida: o que no resto do sistema é
+     tinta escura sobre superfície clara, aqui é tinta clara sobre o azul. */
+  --sidebar: oklch(0.42 0.135 250); /* = --marca-azul */
+  --sidebar-foreground: oklch(0.96 0.015 250); /* 7,5:1 — AAA */
+  /* Invertido em relação ao resto do sistema: sobre o azul, quem faz papel de
+     `primary` é a tinta clara. */
+  --sidebar-primary: oklch(0.99 0.005 250);
+  --sidebar-primary-foreground: oklch(0.42 0.135 250);
+  /* Item ativo e hover. 0,55 é o teto: acima disso a tinta branca por cima
+     cai abaixo de 4,5:1 (aqui dá 4,7:1). O preço é que o fundo do item ativo
+     separa só 1,7:1 da superfície — abaixo dos 3:1 de componente. Por isso o
+     `data-active:font-medium` que o shadcn aplica junto não é enfeite: é ele
+     que cumpre "cor nunca é o único diferenciador". Não remover. */
+  --sidebar-accent: oklch(0.55 0.14 250);
+  --sidebar-accent-foreground: oklch(0.99 0.005 250);
+  --sidebar-border: oklch(1 0 0 / 18%);
+  /* O anel de foco precisa clarear: o azul de 42% sumiria dentro do próprio
+     azul de 42%. */
+  --sidebar-ring: oklch(0.9 0.06 250);
 }
 
 .dark {
@@ -207,14 +221,8 @@
   --chart-4: oklch(0.64 0.17 325);
   --chart-5: oklch(0.64 0.17 80);
 
-  --sidebar: oklch(0.215 0.03 250);
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: oklch(0.7 0.15 250);
-  --sidebar-primary-foreground: oklch(0.19 0.04 250);
-  --sidebar-accent: oklch(0.32 0.05 250);
-  --sidebar-accent-foreground: oklch(0.94 0.015 250);
-  --sidebar-border: oklch(1 0 0 / 13%);
-  --sidebar-ring: oklch(0.7 0.15 250);
+  /* Os `--sidebar-*` não aparecem aqui de propósito: a barra é superfície de
+     marca e vale igual nos dois temas, pelo mesmo motivo de --marca-azul. */
 }
 
 @layer base {
@@ -236,6 +244,27 @@
      não decisão estética. Nunca remover. */
   :focus-visible {
     @apply outline-ring outline-2 outline-offset-2;
+  }
+
+  /* A barra é uma ilha de azul dentro de uma superfície clara. Tudo que cai
+     dentro dela — o seletor de missão, o anel de foco da regra acima, a borda
+     da direita — herdaria tokens calibrados para fundo claro e sumiria.
+     Redefinir as superfícies no escopo da barra resolve de uma vez, em vez de
+     exigir classe de exceção em cada componente que entrar ali.
+     `[data-slot="sidebar"]` marca as três variantes do shadcn: desktop,
+     Sheet no mobile e `collapsible="none"`.
+
+     `--popover` fica de fora porque o conteúdo do Select abre em portal, fora
+     desta árvore: ele deve continuar com a paleta normal. */
+  [data-slot="sidebar"] {
+    --background: var(--sidebar);
+    --foreground: var(--sidebar-foreground);
+    --border: var(--sidebar-border);
+    --input: oklch(1 0 0 / 24%);
+    --muted-foreground: oklch(0.86 0.03 250); /* 5,5:1 sobre o azul */
+    --accent: var(--sidebar-accent);
+    --accent-foreground: var(--sidebar-accent-foreground);
+    --ring: var(--sidebar-ring);
   }
 
   /* Números de métrica não podem mudar de largura ao atualizar — o layout

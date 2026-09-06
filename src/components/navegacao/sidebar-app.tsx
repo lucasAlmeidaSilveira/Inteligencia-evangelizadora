@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { SimboloBloco } from "@/components/marca";
+import { Simbolo } from "@/components/marca";
 import { SeletorMissao } from "@/components/navegacao/seletor-missao";
 import { usePathname } from "next/navigation";
 import {
@@ -66,7 +66,11 @@ export function SidebarApp({
           aria-label="Inteligência Evangelizadora — ir para o painel"
           className="flex items-center gap-2.5 overflow-hidden rounded-md group-data-[collapsible=icon]:justify-center"
         >
-          <SimboloBloco />
+          {/* Sem o bloco azul do SimboloBloco: a própria barra já é o azul da
+              marca, e o quadrado desapareceria dentro dela. O E segue a cor do
+              texto; o I recebe o laranja clareado, que é o que rende como luz
+              sobre o azul profundo. */}
+          <Simbolo className="size-8 shrink-0 [--marca-acento:var(--marca-luz)]" />
           <span className="font-brand truncate text-base leading-none tracking-tight group-data-[collapsible=icon]:hidden">
             Inteligência
             <br />

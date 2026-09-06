@@ -57,8 +57,8 @@ arredondamento total, que transformaria as hastes em cápsulas soltas.
 
 | Componente | Onde usar |
 |---|---|
-| `Simbolo` | Sobre fundo próprio. O E segue `currentColor`; o I usa `--marca-acento`, com fallback no laranja. |
-| `SimboloBloco` | Barra lateral, ícone de app, favicon. O monograma dentro do azul da marca, porque barra, aba e tela inicial não garantem fundo nenhum. Símbolo a 1/φ do quadrado, canto a 32/φ³. |
+| `Simbolo` | Sobre fundo próprio. O E segue `currentColor`; o I usa `--marca-acento`, com fallback no laranja. É o que a barra lateral usa, com `--marca-acento` no `--marca-luz`: o azul já vem da barra. |
+| `SimboloBloco` | O monograma dentro do azul da marca, para superfície que não garante fundo nenhum. Símbolo a 1/φ do quadrado, canto a 32/φ³. Hoje **sem uso em tela** — desde que a barra virou azul, ela mesma dá o fundo. Fica como a referência da geometria que `icon.svg` repete em hexadecimal. |
 | `Marca` | Assinatura completa — símbolo e nome. Login e cabeçalho. |
 
 `src/app/icon.svg` é a mesma geometria em hexadecimal fixo — favicon não
@@ -109,9 +109,25 @@ não escolhidos a olho.
   4,5:1 sobre fundo escuro; a versão `.dark` usa 70%. A paleta escura é
   redefinida token a token — não é inversão da clara.
 - **O fundo é levemente azulado, não creme.** A temperatura acompanha a marca.
+- **A barra lateral é superfície de marca.** `--sidebar` é o próprio
+  `--marca-azul` e, como ele, vale igual nos dois temas — por isso os
+  `--sidebar-*` não têm bloco em `.dark`. Os demais tokens da barra são a
+  paleta invertida (tinta clara sobre azul), não a paleta clara com outro
+  fundo. Como a barra é uma ilha escura numa superfície clara, `@layer base`
+  redefine `--background`, `--foreground`, `--border`, `--input`,
+  `--muted-foreground`, `--accent` e `--ring` no escopo
+  `[data-slot="sidebar"]`: qualquer componente que entre ali herda as
+  superfícies certas sem precisar de classe de exceção. `--popover` fica de
+  fora porque popovers e tooltips abrem em portal, fora da barra.
 
 **Contrastes medidos:** texto principal 17,3:1 (AAA), azul sobre branco 8,4:1
-(AAA), texto secundário 5,8:1 (AA).
+(AAA), texto da barra sobre o azul da marca 7,5:1 (AAA), texto secundário
+5,8:1 (AA).
+
+Na barra, o item ativo é a exceção conhecida: o fundo clareado separa 1,7:1 da
+superfície, abaixo dos 3:1 exigidos de um componente. O peso de fonte que o
+acompanha é o que fecha o requisito — mexer num sem o outro quebra a regra de
+que cor nunca é o único diferenciador.
 
 ## Gráficos
 
