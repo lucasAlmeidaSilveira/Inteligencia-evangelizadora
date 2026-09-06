@@ -45,7 +45,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <BarraProgresso />
           </Suspense>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-          <Toaster richColors closeButton position="top-right" />
+          <Toaster richColors closeButton position="bottom-right" />
         </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
