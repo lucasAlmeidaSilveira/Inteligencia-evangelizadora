@@ -1,14 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { and, eq, sql } from "drizzle-orm";
 
+import { missoesDisponiveis } from "@/features/eventos/queries";
 import { gerarSlug } from "@/lib/slug";
+import { requerUsuario } from "@/server/auth/sessao";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
 import { gruposOracao, missaoIndicadores, missoes, usuarios } from "@/server/db/schema";
 import { adminAuth } from "@/server/firebase/admin";
 
+import { COOKIE_FOCO, DURACAO_FOCO_S } from "./foco";
 import { competenciaSchema, criacaoMissaoSchema, missaoSchema } from "./schemas";
 
 /** Só admin cria missão — o RLS já barra, mas a mensagem aqui é legível. */
@@ -256,6 +260,42 @@ export async function registrarCompetencia(entrada: unknown) {
   } catch (erro) {
     return falha(traduzirErroDeBanco(erro));
   }
+}
+
+/**
+ * Escolhe a missão em foco — o recorte que a barra lateral aplica ao painel,
+ * ao calendário, às ações e aos relatórios. `null` volta para "todas".
+ *
+ * Esconder o seletor de quem não é admin não é permissão: a conferência de
+ * papel acontece aqui. E o id é validado contra as missões que o usuário
+ * enxerga, para o cookie nunca virar um `where` que ele não poderia pedir.
+ */
+export async function definirFoco(missaoId: string | null) {
+  const usuario = await requerUsuario();
+  if (!usuario.ehAdmin) return falha(APENAS_ADMIN);
+
+  const jar = await cookies();
+
+  if (missaoId === null) {
+    jar.delete(COOKIE_FOCO);
+  } else {
+    const opcoes = await missoesDisponiveis();
+    if (!opcoes.some((m) => m.id === missaoId)) {
+      return falha("Missão não encontrada.");
+    }
+
+    jar.set(COOKIE_FOCO, missaoId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: DURACAO_FOCO_S,
+    });
+  }
+
+  // O recorte vale para a árvore inteira, e o rótulo do seletor mora no layout.
+  revalidatePath("/", "layout");
+  return sucesso();
 }
 
 /** Achata os erros do zod em `{ campo: mensagem }` para o formulário. */

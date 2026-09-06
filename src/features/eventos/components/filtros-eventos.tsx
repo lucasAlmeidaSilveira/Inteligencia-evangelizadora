@@ -19,12 +19,14 @@ const TODOS = "__todos__";
 /**
  * Filtros na URL, não em estado de componente: o recorte fica compartilhável,
  * sobrevive ao recarregar e ao botão voltar.
+ *
+ * A missão não está aqui: quem escolhe é o seletor da barra lateral, que vale
+ * para o acompanhamento inteiro. Dois controles para a mesma dimensão dariam
+ * duas verdades na tela.
  */
 export function FiltrosEventos({
-  missoes,
   tipos,
 }: {
-  missoes: { id: string; nome: string }[];
   tipos: { id: string; nome: string; cor: string }[];
 }) {
   const router = useRouter();
@@ -38,31 +40,10 @@ export function FiltrosEventos({
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
-  const temFiltro = ["missao", "tipo", "status"].some((c) =>
-    parametros.has(c),
-  );
+  const temFiltro = ["tipo", "status"].some((c) => parametros.has(c));
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {missoes.length > 1 ? (
-        <Select
-          value={ativo("missao")}
-          onValueChange={(v) => definir("missao", v)}
-        >
-          <SelectTrigger className="w-auto min-w-40" aria-label="Filtrar por missão">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todas as missões</SelectItem>
-            {missoes.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null}
-
       <Select value={ativo("tipo")} onValueChange={(v) => definir("tipo", v)}>
         <SelectTrigger className="w-auto min-w-36" aria-label="Filtrar por tipo">
           <SelectValue />

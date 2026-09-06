@@ -45,6 +45,7 @@ export type Resumo = {
   gruposAtivos: number;
   pessoasEmGrupos: number;
   acoesNoMes: number;
+  acoesNoAno: number;
   participantesNoAno: number;
   servosNoAno: number;
   receitasNoAno: number;
@@ -55,17 +56,27 @@ export type Resumo = {
 /**
  * Números do topo do painel.
  *
+ * `missaoId` é a missão em foco (ver `features/missoes/foco.ts`) e chega por
+ * parâmetro, não lido do cookie aqui dentro: consulta que muda de resultado
+ * sem a assinatura dizer nada é armadilha para quem for reusá-la. Basta
+ * estreitar esta primeira lista — todo o resto já parte dos ids dela.
+ *
  * Cada consulta tem uma única tabela no FROM. Subconsulta correlacionada
  * escrita em `sql` bruto referencia a tabela externa sem qualificar o schema,
  * e o Postgres resolve o nome para a coluna homônima da tabela interna —
  * todos os totais voltam zerados sem erro algum.
  */
-export async function obterResumo(): Promise<Resumo> {
+export async function obterResumo(missaoId?: string): Promise<Resumo> {
   return comUsuario(async (tx) => {
     const lista = await tx
       .select({ id: missoes.id, membrosTotal: missoes.membrosTotal })
       .from(missoes)
-      .where(eq(missoes.ativo, true));
+      .where(
+        and(
+          eq(missoes.ativo, true),
+          missaoId ? eq(missoes.id, missaoId) : undefined,
+        ),
+      );
 
     const ids = lista.map((m) => m.id);
 
@@ -77,6 +88,7 @@ export async function obterResumo(): Promise<Resumo> {
         gruposAtivos: 0,
         pessoasEmGrupos: 0,
         acoesNoMes: 0,
+        acoesNoAno: 0,
         participantesNoAno: 0,
         servosNoAno: 0,
         receitasNoAno: 0,
@@ -134,6 +146,7 @@ export async function obterResumo(): Promise<Resumo> {
 
     const [doAno] = await tx
       .select({
+        acoes: sql<number>`count(*)`.mapWith(Number),
         participantes: sql<number>`coalesce(sum(participantes_total), 0)`.mapWith(Number),
         servos: sql<number>`coalesce(sum(servos_engajados), 0)`.mapWith(Number),
       })
@@ -178,6 +191,7 @@ export async function obterResumo(): Promise<Resumo> {
       gruposAtivos: grupos.total,
       pessoasEmGrupos: grupos.pessoas,
       acoesNoMes: doMes.total,
+      acoesNoAno: doAno.acoes,
       participantesNoAno: doAno.participantes,
       servosNoAno: doAno.servos,
       receitasNoAno: financeiro.receitas,
@@ -204,7 +218,10 @@ export type Evolucao = {
  * pode vir vazia, e a interface precisa dizer isso em vez de desenhar um
  * gráfico de um ponto só.
  */
-export async function obterEvolucao(meses = 12): Promise<Evolucao> {
+export async function obterEvolucao(
+  meses = 12,
+  missaoId?: string,
+): Promise<Evolucao> {
   return comUsuario(async (tx) => {
     const corte = new Date();
     corte.setMonth(corte.getMonth() - meses);
@@ -219,7 +236,12 @@ export async function obterEvolucao(meses = 12): Promise<Evolucao> {
       })
       .from(missaoIndicadores)
       .innerJoin(missoes, eq(missoes.id, missaoIndicadores.missaoId))
-      .where(gte(missaoIndicadores.competencia, corte.toISOString().slice(0, 10)))
+      .where(
+        and(
+          gte(missaoIndicadores.competencia, corte.toISOString().slice(0, 10)),
+          missaoId ? eq(missaoIndicadores.missaoId, missaoId) : undefined,
+        ),
+      )
       .orderBy(asc(missaoIndicadores.competencia));
 
     const competencias = [...new Set(linhas.map((l) => l.competencia))];
@@ -324,19 +346,29 @@ const colunasAgenda = {
 };
 
 /** Eventos que tocam o intervalo — inclusive os que atravessam a virada. */
-export async function obterEventosDoPeriodo(de: Date, ate: Date) {
+export async function obterEventosDoPeriodo(
+  de: Date,
+  ate: Date,
+  missaoId?: string,
+) {
   return comUsuario(async (tx) =>
     tx
       .select(colunasAgenda)
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
-      .where(and(lte(eventos.dataInicio, ate), gte(eventos.dataFim, de)))
+      .where(
+        and(
+          lte(eventos.dataInicio, ate),
+          gte(eventos.dataFim, de),
+          missaoId ? eq(eventos.missaoId, missaoId) : undefined,
+        ),
+      )
       .orderBy(asc(eventos.dataInicio)),
   );
 }
 
-export async function obterProximosEventos(limite = 5) {
+export async function obterProximosEventos(limite = 5, missaoId?: string) {
   return comUsuario(async (tx) =>
     tx
       .select(colunasAgenda)
@@ -347,6 +379,7 @@ export async function obterProximosEventos(limite = 5) {
         and(
           gte(eventos.dataFim, new Date()),
           sql`${eventos.status} <> 'cancelado'`,
+          missaoId ? eq(eventos.missaoId, missaoId) : undefined,
         ),
       )
       .orderBy(asc(eventos.dataInicio))

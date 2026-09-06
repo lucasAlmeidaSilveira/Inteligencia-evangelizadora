@@ -7,11 +7,13 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { focoAtual } from "@/features/missoes/foco";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export default async function LayoutApp({ children }: LayoutProps<"/">) {
   // Verificação real da sessão. O middleware só olha se o cookie existe.
   const usuario = await requerUsuario();
+  const foco = await focoAtual();
 
   return (
     <SidebarProvider>
@@ -24,7 +26,12 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
         Ir para o conteúdo
       </a>
 
-      <SidebarApp ehAdmin={usuario.ehAdmin} podeConvidar={usuario.podeConvidar} />
+      <SidebarApp
+        ehAdmin={usuario.ehAdmin}
+        podeConvidar={usuario.podeConvidar}
+        missaoEmFoco={foco.missaoId}
+        missoesDoFoco={foco.opcoes}
+      />
 
       <SidebarInset>
         <header className="bg-background/80 sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-sm">

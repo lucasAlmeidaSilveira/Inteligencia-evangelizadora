@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { SimboloBloco } from "@/components/marca";
+import { SeletorMissao } from "@/components/navegacao/seletor-missao";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
@@ -38,10 +39,15 @@ const ACOMPANHAMENTO = [
 export function SidebarApp({
   ehAdmin,
   podeConvidar,
+  missaoEmFoco,
+  missoesDoFoco,
 }: {
   ehAdmin: boolean;
   /** Admin master ou responsável de missão: os dois gerem acessos. */
   podeConvidar: boolean;
+  missaoEmFoco?: string;
+  /** Vazio para quem não escolhe missão — o seletor nem aparece. */
+  missoesDoFoco: { id: string; nome: string }[];
 }) {
   const caminho = usePathname();
 
@@ -70,6 +76,20 @@ export function SidebarApp({
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Recolhida, a barra tem 3rem — um select não cabe nem faz sentido
+            sem o rótulo ao lado. Some junto com os demais textos. */}
+        {missoesDoFoco.length > 0 ? (
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+            <SidebarGroupLabel>Missão em foco</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SeletorMissao
+                missaoId={missaoEmFoco}
+                opcoes={missoesDoFoco}
+              />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+
         <SidebarGroup>
           <SidebarGroupLabel>Acompanhamento</SidebarGroupLabel>
           <SidebarGroupContent>

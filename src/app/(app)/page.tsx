@@ -35,6 +35,7 @@ import {
   obterProximosEventos,
   obterResumo,
 } from "@/features/painel/queries";
+import { focoAtual } from "@/features/missoes/foco";
 import { listarMissoes } from "@/features/missoes/queries";
 import {
   formatarMoeda,
@@ -54,18 +55,28 @@ function saudacao() {
 
 /* ─── Seções ─────────────────────────────────────────────────────────────── */
 
-async function Indicadores() {
-  const r = await obterResumo();
+async function Indicadores({ missaoId }: { missaoId?: string }) {
+  const r = await obterResumo(missaoId);
   const ano = new Date().getFullYear();
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <CartaoMetrica
-          Icone={Church}
-          rotulo="Missões ativas"
-          valor={formatarNumero(r.missoesAtivas)}
-        />
+        {/* Com uma missão em foco, "Missões ativas" mostraria sempre 1 — um
+            cartão gasto para repetir o que o seletor ao lado já diz. */}
+        {missaoId ? (
+          <CartaoMetrica
+            Icone={Sparkles}
+            rotulo={`Ações em ${ano}`}
+            valor={formatarNumero(r.acoesNoAno)}
+          />
+        ) : (
+          <CartaoMetrica
+            Icone={Church}
+            rotulo="Missões ativas"
+            valor={formatarNumero(r.missoesAtivas)}
+          />
+        )}
         <CartaoMetrica
           Icone={Users}
           rotulo="Membros"
@@ -120,12 +131,15 @@ async function Indicadores() {
   );
 }
 
-async function Evolucao() {
-  const evolucao = await obterEvolucao();
+async function Evolucao({ missaoId }: { missaoId?: string }) {
+  const evolucao = await obterEvolucao(12, missaoId);
   return <GraficoEvolucao evolucao={evolucao} />;
 }
 
-async function Comparativo() {
+/* O ranking não estreita com o foco: a pergunta que ele responde é onde a
+   missão está em relação às outras, e filtrar apagaria justamente a resposta.
+   O recorte vira destaque. */
+async function Comparativo({ destaque }: { destaque?: string }) {
   const missoes = await obterComparativo();
 
   if (missoes.length < 2) {
@@ -136,11 +150,11 @@ async function Comparativo() {
     );
   }
 
-  return <GraficoComparativo missoes={missoes} />;
+  return <GraficoComparativo missoes={missoes} destaque={destaque} />;
 }
 
-async function ProximasAcoes() {
-  const eventos = await obterProximosEventos(6);
+async function ProximasAcoes({ missaoId }: { missaoId?: string }) {
+  const eventos = await obterProximosEventos(6, missaoId);
 
   if (eventos.length === 0) {
     return (
@@ -167,7 +181,8 @@ async function ProximasAcoes() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{evento.titulo}</p>
                 <p className="text-muted-foreground truncate text-xs">
-                  {evento.tipoNome} · {evento.missaoNome}
+                  {evento.tipoNome}
+                  {missaoId ? "" : ` · ${evento.missaoNome}`}
                   {evento.local ? ` · ${evento.local}` : ""}
                 </p>
               </div>
@@ -190,7 +205,10 @@ async function ProximasAcoes() {
 
 export default async function PaginaPainel() {
   const usuario = await requerUsuario();
-  const missoes = await listarMissoes({ incluirInativas: usuario.ehAdmin });
+  const [missoes, foco] = await Promise.all([
+    listarMissoes({ incluirInativas: usuario.ehAdmin }),
+    focoAtual(),
+  ]);
   const primeiroNome = usuario.nome.split(" ")[0];
 
   if (missoes.length === 0) {
@@ -232,11 +250,13 @@ export default async function PaginaPainel() {
             {saudacao()}, {primeiroNome}
           </h1>
           <p className="text-muted-foreground">
-            {usuario.ehAdmin
-              ? "Panorama de todas as missões."
-              : missoes.length === 1
-                ? `Acompanhamento da ${missoes[0].nome}.`
-                : "Acompanhamento das suas missões."}
+            {foco.missaoNome
+              ? `Acompanhamento da ${foco.missaoNome}.`
+              : usuario.ehAdmin
+                ? "Panorama de todas as missões."
+                : missoes.length === 1
+                  ? `Acompanhamento da ${missoes[0].nome}.`
+                  : "Acompanhamento das suas missões."}
           </p>
         </div>
 
@@ -251,7 +271,7 @@ export default async function PaginaPainel() {
       {/* Cada seção carrega em fronteira própria: a mais lenta não segura as
           outras, e o painel vai se preenchendo em vez de esperar por tudo. */}
       <Suspense fallback={<EsqueletoMetricas quantidade={8} />}>
-        <Indicadores />
+        <Indicadores missaoId={foco.missaoId} />
       </Suspense>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -264,7 +284,7 @@ export default async function PaginaPainel() {
           </CardHeader>
           <CardContent>
             <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <Evolucao />
+              <Evolucao missaoId={foco.missaoId} />
             </Suspense>
           </CardContent>
         </Card>
@@ -276,7 +296,7 @@ export default async function PaginaPainel() {
           </CardHeader>
           <CardContent>
             <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-              <Comparativo />
+              <Comparativo destaque={foco.missaoId} />
             </Suspense>
           </CardContent>
         </Card>
@@ -288,7 +308,7 @@ export default async function PaginaPainel() {
         </CardHeader>
         <CardContent>
           <Suspense fallback={<EsqueletoLinhas quantidade={3} />}>
-            <ProximasAcoes />
+            <ProximasAcoes missaoId={foco.missaoId} />
           </Suspense>
         </CardContent>
       </Card>

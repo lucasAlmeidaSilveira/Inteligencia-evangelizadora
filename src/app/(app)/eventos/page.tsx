@@ -12,6 +12,7 @@ import {
   missoesDisponiveis,
   type FiltrosEvento,
 } from "@/features/eventos/queries";
+import { focoAtual } from "@/features/missoes/foco";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Ações apostólicas" };
@@ -35,20 +36,23 @@ export default async function PaginaEventos({
 
   const status = STATUS_VALIDOS.find((s) => s === texto("status"));
 
+  // A missão vem do seletor da barra lateral, não da URL: é o mesmo recorte
+  // que vale para o painel, o calendário e os relatórios.
+  const [usuario, foco] = await Promise.all([requerUsuario(), focoAtual()]);
+
   const filtros: FiltrosEvento = {
-    missaoId: texto("missao"),
+    missaoId: foco.missaoId,
     tipoEventoId: texto("tipo"),
     status,
   };
 
-  const [usuario, eventos, missoes, tipos] = await Promise.all([
-    requerUsuario(),
+  const [eventos, missoes, tipos] = await Promise.all([
     listarEventos(filtros),
     missoesDisponiveis(),
     listarTiposEvento(),
   ]);
 
-  const temFiltro = Object.values(filtros).some(Boolean);
+  const temFiltro = Boolean(filtros.tipoEventoId || filtros.status);
   const podeCriar = missoes.length > 0;
 
   return (
@@ -56,9 +60,11 @@ export default async function PaginaEventos({
       <CabecalhoPagina
         titulo="Ações apostólicas"
         descricao={
-          usuario.ehAdmin
-            ? "Eventos de todas as missões."
-            : "Eventos da sua missão."
+          foco.missaoNome
+            ? `Eventos da ${foco.missaoNome}.`
+            : usuario.ehAdmin
+              ? "Eventos de todas as missões."
+              : "Eventos da sua missão."
         }
       >
         {podeCriar ? (
@@ -71,18 +77,24 @@ export default async function PaginaEventos({
         ) : null}
       </CabecalhoPagina>
 
-      <FiltrosEventos missoes={missoes} tipos={tipos} />
+      <FiltrosEventos tipos={tipos} />
 
       {eventos.length === 0 ? (
-        temFiltro ? (
+        temFiltro || foco.missaoNome ? (
           <EstadoVazio
             Icone={Sparkles}
-            titulo="Nenhuma ação com esses filtros"
-            descricao="Nenhuma ação apostólica corresponde à combinação escolhida. Limpe os filtros para ver todas."
+            titulo="Nenhuma ação com esse recorte"
+            descricao={
+              foco.missaoNome
+                ? `Nenhuma ação apostólica da ${foco.missaoNome} corresponde ao que está selecionado. Troque a missão em foco na barra lateral ou ajuste os filtros.`
+                : "Nenhuma ação apostólica corresponde à combinação escolhida. Limpe os filtros para ver todas."
+            }
           >
-            <Button asChild variant="outline">
-              <Link href="/eventos">Limpar filtros</Link>
-            </Button>
+            {temFiltro ? (
+              <Button asChild variant="outline">
+                <Link href="/eventos">Limpar filtros</Link>
+              </Button>
+            ) : null}
           </EstadoVazio>
         ) : (
           <EstadoVazio
@@ -114,7 +126,9 @@ export default async function PaginaEventos({
             <LinhaEvento
               key={evento.id}
               evento={evento}
-              mostrarMissao={missoes.length > 1}
+              // Com uma missão em foco a coluna repetiria a mesma resposta
+              // em todas as linhas.
+              mostrarMissao={!foco.missaoId && missoes.length > 1}
             />
           ))}
         </div>

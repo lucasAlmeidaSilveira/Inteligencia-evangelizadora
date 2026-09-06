@@ -15,10 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  listarTiposEvento,
-  missoesDisponiveis,
-} from "@/features/eventos/queries";
+import { listarTiposEvento } from "@/features/eventos/queries";
+import { focoAtual } from "@/features/missoes/foco";
 import { FiltrosRelatorio } from "@/features/relatorios/components/filtros-relatorio";
 import { lerFiltros, paraQueryString } from "@/features/relatorios/filtros";
 import {
@@ -139,11 +137,11 @@ export default async function PaginaRelatorios({
   searchParams,
 }: PageProps<"/relatorios">) {
   const parametros = await searchParams;
-  const filtros = lerFiltros(parametros);
+  const foco = await focoAtual();
+  const filtros = lerFiltros(parametros, foco.missaoId);
 
-  const [relatorio, missoes, tipos] = await Promise.all([
+  const [relatorio, tipos] = await Promise.all([
     gerarRelatorio(filtros),
-    missoesDisponiveis(),
     listarTiposEvento(),
   ]);
 
@@ -153,7 +151,7 @@ export default async function PaginaRelatorios({
     <div className="mx-auto max-w-6xl space-y-6">
       <CabecalhoPagina
         titulo="Relatórios"
-        descricao={`De ${formatarData(filtros.de)} a ${formatarData(filtros.ate)}.`}
+        descricao={`De ${formatarData(filtros.de)} a ${formatarData(filtros.ate)}${foco.missaoNome ? ` · ${foco.missaoNome}` : ""}.`}
       >
         {!vazio ? (
           <Button asChild variant="outline">
@@ -167,7 +165,6 @@ export default async function PaginaRelatorios({
       </CabecalhoPagina>
 
       <FiltrosRelatorio
-        missoes={missoes}
         tipos={tipos}
         de={paraInput(filtros.de)}
         ate={paraInput(filtros.ate)}

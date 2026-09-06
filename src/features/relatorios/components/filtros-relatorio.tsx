@@ -18,14 +18,15 @@ import {
 const TODOS = "__todos__";
 
 /** Filtros na URL: o recorte é compartilhável e a exportação lê exatamente o
- *  mesmo que a tela mostra. */
+ *  mesmo que a tela mostra.
+ *
+ *  A missão fica de fora: quem a escolhe é o seletor da barra lateral, e o
+ *  mesmo foco vale para o painel, o calendário e as ações. */
 export function FiltrosRelatorio({
-  missoes,
   tipos,
   de,
   ate,
 }: {
-  missoes: { id: string; nome: string }[];
   tipos: { id: string; nome: string; cor: string }[];
   de: string;
   ate: string;
@@ -72,28 +73,6 @@ export function FiltrosRelatorio({
           className="tabular w-40"
         />
       </div>
-
-      {missoes.length > 1 ? (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Missão</Label>
-          <Select
-            value={ativo("missao")}
-            onValueChange={(v) => definir({ missao: v })}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todas</SelectItem>
-              {missoes.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
 
       <div className="space-y-1.5">
         <Label className="text-xs">Tipo</Label>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarioMensal } from "@/features/painel/components/calendario-mensal";
 import { obterEventosDoPeriodo } from "@/features/painel/queries";
 import { listarTiposEvento } from "@/features/eventos/queries";
+import { focoAtual } from "@/features/missoes/foco";
 
 export const metadata = { title: "Calendário" };
 
@@ -37,8 +38,10 @@ export default async function PaginaCalendario({
   const de = new Date(mes.getFullYear(), mes.getMonth(), -7);
   const ate = new Date(mes.getFullYear(), mes.getMonth() + 1, 7, 23, 59, 59);
 
+  const foco = await focoAtual();
+
   const [eventos, tipos] = await Promise.all([
-    obterEventosDoPeriodo(de, ate),
+    obterEventosDoPeriodo(de, ate, foco.missaoId),
     listarTiposEvento(),
   ]);
 
@@ -57,7 +60,7 @@ export default async function PaginaCalendario({
     <div className="mx-auto max-w-7xl space-y-6">
       <CabecalhoPagina
         titulo="Calendário"
-        descricao={`${noMes.length} ${noMes.length === 1 ? "ação apostólica" : "ações apostólicas"} em ${titulo}.`}
+        descricao={`${noMes.length} ${noMes.length === 1 ? "ação apostólica" : "ações apostólicas"} em ${titulo}${foco.missaoNome ? ` · ${foco.missaoNome}` : ""}.`}
       >
         <div className="flex items-center gap-1">
           <Button asChild variant="outline" size="icon">

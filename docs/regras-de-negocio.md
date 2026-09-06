@@ -37,7 +37,7 @@ Três níveis, do mais amplo ao mais restrito:
 | Convidar pessoas | ✓ (qualquer papel) | ✓ (auxiliares da sua missão) | |
 | Editar e excluir pessoas | ✓ (qualquer uma, menos ele mesmo) | ✓ (auxiliares da sua missão) | |
 | Grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
-| Painel, calendário e relatórios | todas as missões | a sua | a sua |
+| Painel, calendário e relatórios | todas as missões (ou uma, em foco) | a sua | a sua |
 | Trocar a própria senha | ✓ | ✓ | ✓ |
 
 Regras estruturais por trás disso, todas impostas pelo banco:
@@ -53,6 +53,31 @@ Regras estruturais por trás disso, todas impostas pelo banco:
 
 O auxiliar **registra** os dados da missão; ele não altera o cadastro dela nem
 convida ninguém. É a única diferença entre ele e o responsável.
+
+### Missão em foco
+
+Enxergar todas as missões de uma vez é útil para o panorama e atrapalha quando
+a pergunta é sobre uma só. O admin master escolhe uma **missão em foco** no
+seletor da barra lateral, e painel, calendário, ações apostólicas e relatórios
+— inclusive o CSV exportado — passam a mostrar só ela até que ele volte a
+"Todas as missões". A única exceção é o ranking "Missões por membros", que
+segue mostrando todas com a escolhida em destaque: filtrá-lo apagaria
+justamente a comparação que ele existe para fazer.
+
+Três limites definem o que o foco é:
+
+- **É recorte de leitura, não de permissão.** Ele estreita consultas; nunca
+  amplia acesso, e não altera o que se pode escrever. Um admin com foco ativo
+  continua criando missão, convidando pessoa e editando qualquer registro.
+- **É só do admin.** Responsável e auxiliar já enxergam uma missão só, imposto
+  pelo RLS. Para eles o seletor não existe.
+- **Não vale para gestão.** Missões, equipe e configurações ignoram o foco:
+  são o catálogo e a administração do sistema, não acompanhamento. Filtrar a
+  lista de missões esconderia a tela de onde se troca de missão.
+
+O foco vive num cookie, não na URL — os filtros de período, tipo e situação
+continuam na query string, e continuam compartilháveis. A escolha do recorte
+é do coordenador que está trabalhando, não do link que ele manda para alguém.
 
 ## Ciclo de vida do acesso
 
