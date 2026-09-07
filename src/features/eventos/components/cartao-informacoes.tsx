@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MapPin } from "lucide-react";
 import type { z } from "zod";
@@ -26,6 +26,7 @@ import type { TipoCentro } from "@/server/db/schema";
 
 import { atualizarInformacoes } from "../actions";
 import { informacoesSchema, STATUS_EVENTO } from "../schemas";
+import { SeletorQuando } from "./seletor-quando";
 import { SeloStatus } from "./selo-status";
 import { tratarResultado } from "./resultado-edicao";
 
@@ -181,6 +182,7 @@ function Formulario({
     register,
     handleSubmit,
     setError,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<Entrada, unknown, Saida>({
     resolver: zodResolver(informacoesSchema),
@@ -195,6 +197,12 @@ function Formulario({
       status: informacoes.status,
     },
   });
+
+  /* `useWatch` e não `watch`: o segundo devolve uma função, que o React
+     Compiler não consegue memoizar — ele então desiste de otimizar o cartão
+     inteiro, e o ESLint acusa. */
+  const dataInicio = useWatch({ control, name: "dataInicio" });
+  const dataFim = useWatch({ control, name: "dataFim" });
 
   async function enviar(dados: Saida) {
     tratarResultado(await atualizarInformacoes(eventoId, dados), {
@@ -289,27 +297,19 @@ function Formulario({
           )}
         </Campo>
 
-        <Campo rotulo="Início" obrigatorio erro={errors.dataInicio?.message}>
-          {(props) => (
-            <Input
-              {...props}
-              type="datetime-local"
-              className="tabular"
-              {...register("dataInicio")}
-            />
-          )}
-        </Campo>
-
-        <Campo rotulo="Término" obrigatorio erro={errors.dataFim?.message}>
-          {(props) => (
-            <Input
-              {...props}
-              type="datetime-local"
-              className="tabular"
-              {...register("dataFim")}
-            />
-          )}
-        </Campo>
+        <SeletorQuando
+          className="sm:col-span-2"
+          inicio={dataInicio ?? ""}
+          fim={dataFim ?? ""}
+          onChange={({ inicio, fim }) => {
+            /* `shouldValidate` para a regra de período responder ao mesmo
+               gesto que a quebrou, em vez de só ao salvar. */
+            setValue("dataInicio", inicio, { shouldValidate: true });
+            setValue("dataFim", fim, { shouldValidate: true });
+          }}
+          erroInicio={errors.dataInicio?.message}
+          erroFim={errors.dataFim?.message}
+        />
 
         <Campo rotulo="Local" erro={errors.local?.message}>
           {(props) => (

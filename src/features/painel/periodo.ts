@@ -1,4 +1,5 @@
-import { chaveDoMes, lerChaveDeMes } from "@/lib/mes";
+import { inicioDoMes, fimDoMes } from "@/lib/mes";
+import { lerPeriodo, type Periodo } from "@/lib/periodo";
 
 /**
  * O recorte de período do painel.
@@ -9,22 +10,18 @@ import { chaveDoMes, lerChaveDeMes } from "@/lib/mes";
  * padrão daria um número grande que não responde a nada.
  *
  * Como o padrão é um recorte, "todo o período" precisa de um valor próprio na
- * URL — daí `TODO_O_PERIODO`. Sem ele não haveria como pedir o acumulado: tirar
- * o parâmetro traria o mês de volta.
+ * URL — daí o `?periodo=tudo` que `lib/periodo.ts` entende. Sem ele não haveria
+ * como pedir o acumulado: tirar os parâmetros traria o mês de volta.
  *
  * Vive fora de `queries.ts` porque atravessa a fronteira: a página lê no
- * servidor e a barra de filtros monta as opções no navegador.
+ * servidor e o seletor de período escreve no navegador.
  */
-export const TODO_O_PERIODO = "tudo";
-
-/**
- * Lê `?mes=` da URL, que qualquer um edita.
- *
- * Devolve `undefined` para "todo o período" — é o que as consultas esperam
- * como ausência de recorte. O que não é mês possível cai no padrão em vez de
- * virar `Invalid Date` numa comparação com coluna `timestamp`.
- */
-export function lerPeriodoDoPainel(valor: unknown) {
-  if (valor === TODO_O_PERIODO) return undefined;
-  return lerChaveDeMes(valor) ?? chaveDoMes();
+export function lerPeriodoDoPainel(
+  parametros: Record<string, string | string[] | undefined>,
+): Periodo | undefined {
+  const referencia = new Date();
+  return lerPeriodo(parametros, {
+    de: inicioDoMes(referencia),
+    ate: fimDoMes(referencia),
+  });
 }

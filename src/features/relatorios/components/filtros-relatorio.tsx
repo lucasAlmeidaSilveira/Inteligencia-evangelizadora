@@ -4,9 +4,9 @@ import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
 import { useFiltro } from "@/components/padroes/area-filtrada";
+import { SeletorPeriodo } from "@/components/padroes/seletor-periodo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -25,16 +25,15 @@ const TODOS = "__todos__";
  *  mesmo foco vale para o painel, o calendário e as ações. */
 export function FiltrosRelatorio({
   tipos,
-  de,
-  ate,
+  periodo,
+  hoje,
 }: {
   tipos: { id: string; nome: string; cor: string }[];
-  de: string;
-  ate: string;
+  periodo: { de: string; ate: string } | undefined;
+  hoje: string;
 }) {
   // Dentro de uma transição, para os números e as tabelas esmaecerem enquanto
-  // o novo período não chega. Aqui vale ainda mais que na lista de ações: uma
-  // data digitada dispara a consulta a cada tecla.
+  // o novo período não chega.
   const { aplicar } = useFiltro();
   const parametros = useSearchParams();
 
@@ -53,29 +52,10 @@ export function FiltrosRelatorio({
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border p-4">
       <div className="space-y-1.5">
-        <Label htmlFor="rel-de" className="text-xs">
-          De
-        </Label>
-        <Input
-          id="rel-de"
-          type="date"
-          value={de}
-          onChange={(e) => definir({ de: e.target.value })}
-          className="tabular w-40"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="rel-ate" className="text-xs">
-          Até
-        </Label>
-        <Input
-          id="rel-ate"
-          type="date"
-          value={ate}
-          onChange={(e) => definir({ ate: e.target.value })}
-          className="tabular w-40"
-        />
+        <Label className="text-xs">Período</Label>
+        {/* Sem "Limpar": esta tela sempre soma um intervalo, e o padrão do ano
+            corrente é o recorte da prestação de contas. */}
+        <SeletorPeriodo base="/relatorios" periodo={periodo} hoje={hoje} />
       </div>
 
       <div className="space-y-1.5">

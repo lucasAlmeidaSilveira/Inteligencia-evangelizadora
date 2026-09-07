@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { z } from "zod";
 
 import { Campo } from "@/components/padroes/campo";
+import { SeletorData } from "@/components/padroes/seletor-data";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -225,11 +226,20 @@ export function DialogoCentro({
 
               <Campo rotulo="Fundação" erro={errors.dataFundacao?.message}>
                 {(props) => (
-                  <Input
-                    {...props}
-                    type="date"
-                    className="tabular"
-                    {...register("dataFundacao")}
+                  <Controller
+                    control={control}
+                    name="dataFundacao"
+                    render={({ field }) => (
+                      <SeletorData
+                        {...props}
+                        valor={field.value ?? ""}
+                        onChange={field.onChange}
+                        // Opcional: centro antigo pode não ter a data.
+                        permiteVazio
+                        inicioEm={new Date(1980, 0, 1)}
+                        fimEm={new Date()}
+                      />
+                    )}
                   />
                 )}
               </Campo>

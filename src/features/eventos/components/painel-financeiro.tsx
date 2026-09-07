@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
+import { SeletorData } from "@/components/padroes/seletor-data";
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
 import { Presenca } from "@/components/padroes/presenca";
 import { CURVA, DURACAO } from "@/lib/movimento";
@@ -169,12 +170,15 @@ function DialogoLancamento({
 
               <Campo rotulo="Data" obrigatorio erro={erros.data}>
                 {(props) => (
-                  <Input
+                  <SeletorData
                     {...props}
-                    type="date"
-                    value={data}
-                    onChange={(e) => setData(e.target.value)}
-                    className="tabular"
+                    valor={data}
+                    onChange={setData}
+                    /* Lançamento se registra depois que o dinheiro se move; a
+                       janela para trás é generosa porque prestação de contas
+                       atrasa, mas o futuro não tem o que lançar. */
+                    inicioEm={new Date(new Date().getFullYear() - 3, 0, 1)}
+                    fimEm={new Date()}
                   />
                 )}
               </Campo>

@@ -6,6 +6,7 @@ import { CalendarPlus, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/padroes/campo";
+import { SeletorMes } from "@/components/padroes/seletor-mes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,7 +18,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { registrarCompetencia } from "@/features/missoes/actions";
 
@@ -84,14 +84,11 @@ export function DialogoCompetencia({ missaoId }: { missaoId: string }) {
           <div className="space-y-5 py-5">
             <Campo rotulo="Mês de referência" obrigatorio>
               {(props) => (
-                <Input
+                <SeletorMes
                   {...props}
-                  type="month"
-                  required
-                  max={mesAtual()}
-                  value={competencia}
-                  onChange={(e) => setCompetencia(e.target.value)}
-                  className="tabular"
+                  valor={competencia}
+                  onChange={setCompetencia}
+                  maximo={mesAtual()}
                 />
               )}
             </Campo>

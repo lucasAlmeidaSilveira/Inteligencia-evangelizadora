@@ -16,24 +16,20 @@ import {
 } from "@/server/db/schema";
 import { membrosDaMissao } from "@/features/missoes/agregados";
 import { calcularFinanceiro } from "@/features/eventos/financeiro";
-import { intervaloDoMes } from "@/lib/mes";
+import { competenciaDoFim, lerChaveDePeriodo } from "@/lib/periodo";
 
 /* ─── Períodos ───────────────────────────────────────────────────────────── */
 
 /*
- * O mês vem de `lib/mes.ts` e não daqui: o painel e /eventos falam o mesmo
- * `?mes=`, e as duas pontas precisam concordar sobre onde o mês começa e
- * termina. Duas contas iguais hoje divergiriam na primeira correção feita em
- * só uma delas.
+ * O período vem de `lib/periodo.ts` e não daqui: o painel e /eventos falam o
+ * mesmo `?de=`/`?ate=`, e as duas pontas precisam concordar sobre onde o
+ * recorte começa e termina. Duas contas iguais hoje divergiriam na primeira
+ * correção feita em só uma delas.
  *
- * Ele viaja como chave (`"2026-09"`), não como `Date`: o argumento compõe a
- * chave do cache, e a de um `Date` seria o instante em que a página montou —
- * uma entrada nova a cada visita, nenhum acerto.
+ * Ele viaja como chave (`"2026-09-01..2026-09-30"`), não como par de `Date`: o
+ * argumento compõe a chave do cache, e a de um `Date` seria o instante em que a
+ * página montou — uma entrada nova a cada visita, nenhum acerto.
  */
-function recorteDoMes(mes?: string) {
-  if (!mes) return undefined;
-  return intervaloDoMes(mes);
-}
 
 /* Um evento entra no período se qualquer parte dele o intersecta — o mesmo
    critério de `listarEventos`. Ação que atravessa a virada conta nos dois
@@ -230,7 +226,7 @@ const SEM_ACOES: ResumoDeAcoes = {
  */
 export const obterAcoes = leituraCacheada(
   "painel-acoes",
-  async (tx, missaoId?: string, mes?: string): Promise<ResumoDeAcoes> => {
+  async (tx, missaoId?: string, periodo?: string): Promise<ResumoDeAcoes> => {
     const lista = await tx
       .select({ id: missoes.id })
       .from(missoes)
@@ -244,7 +240,7 @@ export const obterAcoes = leituraCacheada(
     const ids = lista.map((m) => m.id);
     if (ids.length === 0) return SEM_ACOES;
 
-    const intervalo = recorteDoMes(mes);
+    const intervalo = lerChaveDePeriodo(periodo);
     const doRecorte = and(inArray(eventos.missaoId, ids), noPeriodo(intervalo));
 
     const [totais] = await tx
@@ -353,18 +349,24 @@ export type Evolucao = {
   competencias: number;
 };
 
-/** Competência (o dia 1) do mês escolhido, ou o mês corrente. */
-function competenciaDe(mes?: string) {
-  const referencia = mes ? intervaloDoMes(mes).de : new Date();
-  return new Date(referencia.getFullYear(), referencia.getMonth(), 1);
+/**
+ * Competência (o dia 1) do mês em que o recorte termina, ou o mês corrente.
+ *
+ * Ancora no fim, e não no início, porque a competência é registro mensal: um
+ * recorte de março a setembro pergunta pelo estado da missão em setembro, que é
+ * o mais recente que ele alcança. Ancorar no início mostraria a foto de março e
+ * ignoraria seis meses do que o próprio filtro pediu.
+ */
+function competenciaDe(periodo?: string) {
+  return competenciaDoFim(lerChaveDePeriodo(periodo));
 }
 
 /**
  * Série histórica para a linha de evolução.
  *
- * A janela termina no mês escolhido em vez de hoje: com o painel recortado em
- * março, uma linha que segue até dezembro mostraria o que ainda não tinha
- * acontecido. Continua com doze pontos — só muda onde está ancorada.
+ * A janela termina onde o recorte termina, e não em hoje: com o painel
+ * recortado até março, uma linha que segue até dezembro mostraria o que ainda
+ * não tinha acontecido. Continua com doze pontos — só muda onde está ancorada.
  *
  * Depende do registro de competência, que é opcional por decisão de produto —
  * pode vir vazia, e a interface precisa dizer isso em vez de desenhar um
@@ -376,9 +378,9 @@ export const obterEvolucao = leituraCacheada(
     tx,
     meses: number = 12,
     missaoId?: string,
-    mes?: string,
+    periodo?: string,
   ): Promise<Evolucao> => {
-    const fim = competenciaDe(mes);
+    const fim = competenciaDe(periodo);
     const corte = new Date(fim);
     corte.setMonth(corte.getMonth() - meses);
 
@@ -453,11 +455,12 @@ export type Comparativo = {
 /**
  * Ranking de missões por membros.
  *
- * Sem mês, compara o valor corrente. Com mês, compara o **último indicador
- * registrado até aquela competência**: perguntar "como estávamos em março" e
- * receber o número de hoje seria responder outra pergunta. O último conhecido,
- * e não só o do próprio mês, porque registrar competência é opcional — exigir
- * o mês exato esvaziaria o gráfico em quase todo recorte.
+ * Sem recorte, compara o valor corrente. Com recorte, compara o **último
+ * indicador registrado até a competência em que ele termina**: perguntar "como
+ * estávamos em março" e receber o número de hoje seria responder outra
+ * pergunta. O último conhecido, e não só o do próprio mês, porque registrar
+ * competência é opcional — exigir o mês exato esvaziaria o gráfico em quase
+ * todo recorte.
  *
  * Missão sem nenhum registro até ali fica de fora e é contada em
  * `semRegistro`: pôr o valor de hoje ao lado de valores históricos daria um
@@ -466,7 +469,7 @@ export type Comparativo = {
  */
 export const obterComparativo = leituraCacheada(
   "painel-comparativo",
-  async (tx, mes?: string): Promise<Comparativo> => {
+  async (tx, periodo?: string): Promise<Comparativo> => {
     const lista = await tx
       .select({
         id: missoes.id,
@@ -478,8 +481,8 @@ export const obterComparativo = leituraCacheada(
 
     if (lista.length === 0) return { missoes: [], semRegistro: 0 };
 
-    if (mes) {
-      const fim = competenciaDe(mes);
+    if (periodo) {
+      const fim = competenciaDe(periodo);
       const ate = `${fim.getFullYear()}-${String(fim.getMonth() + 1).padStart(2, "0")}-01`;
 
       // `distinct on` pela missão, ordenado por competência decrescente: o

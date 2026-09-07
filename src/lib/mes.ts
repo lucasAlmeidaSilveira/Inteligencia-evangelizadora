@@ -1,19 +1,19 @@
-import { formatarCompetencia } from "./format";
-
 /**
- * Mês como recorte de leitura, numa definição só.
+ * Mês como intervalo, numa definição só.
  *
- * Vive em `lib/` porque atravessa a fronteira: o painel monta o link no
- * servidor, a barra de filtros monta as opções no navegador e a consulta
- * converte a chave em intervalo. Três lugares com a própria conta de "primeiro
- * e último instante do mês" acabariam discordando na virada — o cartão diria
- * 7 ações e a tela de destino mostraria 6, sem erro em lugar nenhum.
+ * Deixou de ser o vocabulário de recorte da aplicação — quem faz esse papel é
+ * `lib/periodo.ts`, desde que o filtro passou a ser um intervalo livre. O que
+ * sobrou aqui é a aritmética de mês, que continua tendo dois clientes reais:
+ * o padrão do painel (que abre no mês corrente), o atalho "Último mês" e a
+ * leitura dos links antigos, que ainda chegam com `?mes=2026-09`.
  *
- * É a mesma conta que o cartão "Ações neste mês" já fazia em
- * `features/painel/queries.ts`, agora importada de cá pelos dois lados.
+ * Continua em `lib/` porque atravessa a fronteira: o servidor resolve o recorte
+ * e o navegador monta os atalhos. Duas contas de "primeiro e último instante do
+ * mês" acabariam discordando na virada — o cartão diria 7 ações e a tela de
+ * destino mostraria 6, sem erro em lugar nenhum.
  */
 
-/** Como o mês viaja na URL: `?mes=2026-09`. */
+/** Como o mês viajava na URL: `?mes=2026-09`. Ainda aceito na leitura. */
 const CHAVE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export function inicioDoMes(referencia = new Date()) {
@@ -35,18 +35,12 @@ export function fimDoMes(referencia = new Date()) {
   );
 }
 
-/** Mês de uma data, na forma que vai para a URL. */
-export function chaveDoMes(referencia = new Date()) {
-  const mes = String(referencia.getMonth() + 1).padStart(2, "0");
-  return `${referencia.getFullYear()}-${mes}`;
-}
-
 /**
  * Lê `?mes=` da URL, que qualquer um edita.
  *
- * O que não é mês possível vira `undefined`, e a tela mostra todo o período —
- * como faria sem filtro. Sem isto, um "2026-13" viraria `Invalid Date` e a
- * consulta compararia coluna `timestamp` com NaN.
+ * O que não é mês possível vira `undefined`, e quem chama decide o padrão. Sem
+ * isto, um "2026-13" viraria `Invalid Date` numa comparação com coluna
+ * `timestamp`.
  */
 export function lerChaveDeMes(valor: unknown) {
   return typeof valor === "string" && CHAVE.test(valor) ? valor : undefined;
@@ -61,30 +55,4 @@ function primeiroDia(chave: string) {
 export function intervaloDoMes(chave: string) {
   const referencia = primeiroDia(chave);
   return { de: inicioDoMes(referencia), ate: fimDoMes(referencia) };
-}
-
-/** "Setembro de 2026" — maiúscula porque é rótulo de opção, não meio de frase. */
-export function rotuloDoMes(chave: string) {
-  const nome = formatarCompetencia(primeiroDia(chave));
-  return nome.charAt(0).toUpperCase() + nome.slice(1);
-}
-
-/**
- * Os meses oferecidos no filtro, do mais recente para o mais antigo.
- *
- * A janela entra no futuro porque ação apostólica se planeja antes de
- * acontecer: sem os meses à frente não haveria como recortar o que está
- * agendado. Para trás vai um ano, que é o quanto a prestação de contas de uma
- * missão costuma olhar.
- */
-export function mesesDoFiltro(adiante = 2, atras = 12, referencia = new Date()) {
-  const meses: string[] = [];
-  for (let i = adiante; i >= -atras; i--) {
-    meses.push(
-      chaveDoMes(
-        new Date(referencia.getFullYear(), referencia.getMonth() + i, 1),
-      ),
-    );
-  }
-  return meses;
 }

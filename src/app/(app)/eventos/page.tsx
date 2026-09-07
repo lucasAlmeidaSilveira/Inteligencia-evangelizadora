@@ -18,6 +18,7 @@ import {
 } from "@/features/eventos/queries";
 import { lerFiltrosDeEvento } from "@/features/eventos/schemas";
 import { focoAtual } from "@/features/missoes/foco";
+import { chaveDoDia, paraSeletor } from "@/lib/periodo";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Ações apostólicas" };
@@ -73,7 +74,16 @@ export default async function PaginaEventos({
           esmaecer enquanto o servidor responde. A lista continua renderizada
           no servidor — chega aqui como `children`. */}
       <AreaFiltrada className="space-y-6">
-        <FiltrosEventos base="/eventos" tipos={tipos} />
+        {/* `hoje` vem do servidor: os atalhos do seletor são ancorados nele, e
+            o servidor renderiza em UTC enquanto o cliente está em São Paulo —
+            perto da virada do dia os dois montariam atalhos diferentes para o
+            mesmo HTML. */}
+        <FiltrosEventos
+          base="/eventos"
+          tipos={tipos}
+          periodo={paraSeletor(filtros)}
+          hoje={chaveDoDia(new Date())}
+        />
 
         <ResultadosFiltrados>
           {eventos.length === 0 ? (

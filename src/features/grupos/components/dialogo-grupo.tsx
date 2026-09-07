@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { z } from "zod";
 
 import { Campo } from "@/components/padroes/campo";
+import { SeletorHora } from "@/components/padroes/seletor-hora";
 import { ItemPresente, Presenca } from "@/components/padroes/presenca";
 import { Button } from "@/components/ui/button";
 import {
@@ -217,11 +218,16 @@ export function DialogoGrupo({
 
               <Campo rotulo="Horário" erro={errors.horario?.message}>
                 {(props) => (
-                  <Input
-                    {...props}
-                    type="time"
-                    className="tabular"
-                    {...register("horario")}
+                  <Controller
+                    control={control}
+                    name="horario"
+                    render={({ field }) => (
+                      <SeletorHora
+                        {...props}
+                        valor={field.value ?? ""}
+                        onChange={field.onChange}
+                      />
+                    )}
                   />
                 )}
               </Campo>

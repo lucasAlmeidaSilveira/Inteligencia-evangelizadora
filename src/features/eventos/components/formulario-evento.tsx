@@ -33,6 +33,7 @@ import type { CentroParaSelecao } from "@/features/centros/queries";
 
 import { atualizarEvento, criarEvento } from "../actions";
 import { eventoSchema, STATUS_EVENTO } from "../schemas";
+import { SeletorQuando } from "./seletor-quando";
 
 type Entrada = z.input<typeof eventoSchema>;
 type Saida = z.output<typeof eventoSchema>;
@@ -72,6 +73,8 @@ export function FormularioEvento({
      Compiler não consegue memoizar — ele então desiste de otimizar o
      formulário inteiro, e o ESLint acusa. Este hook devolve o valor. */
   const missaoEscolhida = useWatch({ control, name: "missaoId" });
+  const dataInicio = useWatch({ control, name: "dataInicio" });
+  const dataFim = useWatch({ control, name: "dataFim" });
   const centrosDaMissao = centros.filter((c) => c.missaoId === missaoEscolhida);
 
   /** O centro que a missão sempre tem — o padrão ao trocar de missão. */
@@ -315,31 +318,20 @@ export function FormularioEvento({
           <CardTitle>Quando e onde</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
-          <Campo
-            rotulo="Início"
-            obrigatorio
-            erro={errors.dataInicio?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="datetime-local"
-                className="tabular"
-                {...register("dataInicio")}
-              />
-            )}
-          </Campo>
-
-          <Campo rotulo="Término" obrigatorio erro={errors.dataFim?.message}>
-            {(props) => (
-              <Input
-                {...props}
-                type="datetime-local"
-                className="tabular"
-                {...register("dataFim")}
-              />
-            )}
-          </Campo>
+          <SeletorQuando
+            className="sm:col-span-2"
+            inicio={dataInicio ?? ""}
+            fim={dataFim ?? ""}
+            onChange={({ inicio, fim }) => {
+              /* `shouldValidate` para a regra de período responder ao mesmo
+                 gesto que a quebrou: sem isto, "o término não pode ser
+                 anterior ao início" só apareceria ao enviar. */
+              setValue("dataInicio", inicio, { shouldValidate: true });
+              setValue("dataFim", fim, { shouldValidate: true });
+            }}
+            erroInicio={errors.dataInicio?.message}
+            erroFim={errors.dataFim?.message}
+          />
 
           <Campo rotulo="Local" erro={errors.local?.message}>
             {(props) => (

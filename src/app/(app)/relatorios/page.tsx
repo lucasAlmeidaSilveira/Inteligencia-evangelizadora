@@ -28,11 +28,9 @@ import {
   type LinhaRelatorio,
 } from "@/features/relatorios/queries";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/format";
+import { chaveDoDia, paraSeletor } from "@/lib/periodo";
 
 export const metadata = { title: "Relatórios" };
-
-const paraInput = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function Tabela({
   titulo,
@@ -169,10 +167,14 @@ export default async function PaginaRelatorios({
       </CabecalhoPagina>
 
       <AreaFiltrada className="space-y-6">
+        {/* `hoje` vem daqui, e não do navegador: os atalhos do seletor são
+            ancorados nele, e o servidor renderiza em UTC enquanto o cliente
+            está em São Paulo — perto da virada do dia os dois montariam
+            atalhos diferentes para o mesmo HTML. */}
         <FiltrosRelatorio
           tipos={tipos}
-          de={paraInput(filtros.de)}
-          ate={paraInput(filtros.ate)}
+          periodo={paraSeletor(filtros)}
+          hoje={chaveDoDia(new Date())}
         />
 
         <ResultadosFiltrados className="space-y-6">

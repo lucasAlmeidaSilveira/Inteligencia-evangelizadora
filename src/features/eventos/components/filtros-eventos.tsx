@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Star, X } from "lucide-react";
 
 import { useFiltro } from "@/components/padroes/area-filtrada";
+import { SeletorPeriodo } from "@/components/padroes/seletor-periodo";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -12,8 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { lerChaveDeMes, mesesDoFiltro, rotuloDoMes } from "@/lib/mes";
-
 import { STATUS_EVENTO } from "../schemas";
 
 const TODOS = "__todos__";
@@ -29,14 +28,24 @@ const TODOS = "__todos__";
  *
  * Daí `base`: o recorte se escreve na tela onde se está. Sem ela, filtrar
  * dentro de uma missão jogaria o usuário para fora dela, em /eventos.
+ *
+ * O período fala o mesmo `?de=`/`?ate=` do painel, de propósito: os cartões de
+ * lá levam para cá com o recorte aplicado, e um segundo vocabulário faria o
+ * cartão dizer um número e esta lista mostrar outro.
  */
 export function FiltrosEventos({
   base,
   tipos,
+  periodo,
+  hoje,
 }: {
   /** Caminho da tela que exibe a lista — para onde os filtros escrevem. */
   base: string;
   tipos: { id: string; nome: string; cor: string }[];
+  /** O recorte em vigor, já resolvido pelo servidor. */
+  periodo: { de: string; ate: string } | undefined;
+  /** Âncora dos atalhos do seletor. Ver `SeletorPeriodo`. */
+  hoje: string;
 }) {
   // `aplicar` é o `router.push` dentro de uma transição: é o que faz a lista
   // esmaecer enquanto o novo recorte não chega, em vez de ficar parada
@@ -52,19 +61,10 @@ export function FiltrosEventos({
   }
 
   const ativo = (chave: string) => parametros.get(chave) ?? TODOS;
-  const temFiltro = ["tipo", "status", "destaque", "mes"].some((c) =>
-    parametros.has(c),
+  const temFiltro = ["tipo", "status", "destaque", "de", "ate", "mes"].some(
+    (c) => parametros.has(c),
   );
   const soDestaques = parametros.has("destaque");
-
-  /* A janela é montada em torno de hoje, mas um link guardado pode apontar
-     para fora dela — o mês de março de dois anos atrás, mandado por e-mail. Ele
-     entra na lista para que o gatilho mostre o recorte em vigor em vez de ficar
-     em branco dizendo que não há filtro nenhum. */
-  const mesAtual = lerChaveDeMes(parametros.get("mes"));
-  const janela = mesesDoFiltro();
-  const meses =
-    mesAtual && !janela.includes(mesAtual) ? [mesAtual, ...janela] : janela;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -89,24 +89,18 @@ export function FiltrosEventos({
         </SelectContent>
       </Select>
 
-      {/* O mês vem primeiro: é o recorte que os coordenadores usam ao fechar o
-          mês, e é o que o cartão "Ações neste mês" do painel já traz aplicado. */}
-      <Select
-        value={mesAtual ?? TODOS}
-        onValueChange={(v) => definir("mes", v)}
-      >
-        <SelectTrigger className="w-auto min-w-40" aria-label="Filtrar por mês">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={TODOS}>Todo o período</SelectItem>
-          {meses.map((mes) => (
-            <SelectItem key={mes} value={mes}>
-              {rotuloDoMes(mes)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* O período vem logo depois do tipo: é o recorte que os coordenadores
+          usam ao fechar o mês, e é o que os cartões do painel já trazem
+          aplicado ao levarem para cá. */}
+      <SeletorPeriodo
+        base={base}
+        periodo={periodo}
+        hoje={hoje}
+        /* Aqui "Limpar" apenas tira os parâmetros: a URL sem recorte já é todo
+           o período, ao contrário do painel. */
+        permiteVazio
+        rotuloVazio="Todo o período"
+      />
 
       <Select
         value={ativo("status")}

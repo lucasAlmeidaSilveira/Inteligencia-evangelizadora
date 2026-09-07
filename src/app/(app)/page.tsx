@@ -47,12 +47,19 @@ import {
 import { focoAtual } from "@/features/missoes/foco";
 import { listarMissoes } from "@/features/missoes/queries";
 import {
+  formatarData,
   formatarMoeda,
   formatarNumero,
   formatarRelativo,
 } from "@/lib/format";
 import { lerPeriodoDoPainel } from "@/features/painel/periodo";
-import { intervaloDoMes, rotuloDoMes } from "@/lib/mes";
+import {
+  chaveDoDia,
+  chaveDoPeriodo,
+  rotuloDoPeriodo,
+  sufixoDePeriodo,
+  type Periodo,
+} from "@/lib/periodo";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export const metadata = { title: "Painel" };
@@ -64,10 +71,6 @@ function saudacao() {
   return "Boa noite";
 }
 
-/** O recorte como sufixo de URL, para os cartões levarem o mês consigo. */
-function sufixoDeMes(mes?: string) {
-  return mes ? `&mes=${mes}` : "";
-}
 
 /* ─── Seções ─────────────────────────────────────────────────────────────── */
 
@@ -123,9 +126,15 @@ async function Panorama({ missaoId }: { missaoId?: string }) {
   );
 }
 
-async function Acoes({ missaoId, mes }: { missaoId?: string; mes?: string }) {
-  const r = await obterAcoes(missaoId, mes);
-  const sufixo = sufixoDeMes(mes);
+async function Acoes({
+  missaoId,
+  periodo,
+}: {
+  missaoId?: string;
+  periodo?: Periodo;
+}) {
+  const r = await obterAcoes(missaoId, chaveDoPeriodo(periodo));
+  const sufixo = sufixoDePeriodo(periodo);
 
   /* Média por ação, não um segundo número solto: "1.284 participantes" não
      diz se foram muitas ações pequenas ou poucas grandes, e é essa a diferença
@@ -213,33 +222,35 @@ async function Acoes({ missaoId, mes }: { missaoId?: string; mes?: string }) {
 
 async function Evolucao({
   missaoId,
-  mes,
+  periodo,
 }: {
   missaoId?: string;
-  mes?: string;
+  periodo?: Periodo;
 }) {
-  const evolucao = await obterEvolucao(12, missaoId, mes);
+  const evolucao = await obterEvolucao(12, missaoId, chaveDoPeriodo(periodo));
   return <GraficoEvolucao evolucao={evolucao} />;
 }
 
 /* O ranking não estreita com o foco: a pergunta que ele responde é onde a
    missão está em relação às outras, e filtrar apagaria justamente a resposta.
-   O recorte vira destaque. O mês, esse sim, vale — ele muda a régua, não o
+   O recorte vira destaque. O período, esse sim, vale — ele muda a régua, não o
    conjunto comparado. */
 async function Comparativo({
   destaque,
-  mes,
+  periodo,
 }: {
   destaque?: string;
-  mes?: string;
+  periodo?: Periodo;
 }) {
-  const { missoes, semRegistro } = await obterComparativo(mes);
+  const { missoes, semRegistro } = await obterComparativo(
+    chaveDoPeriodo(periodo),
+  );
 
   if (missoes.length < 2) {
     return (
       <p className="text-muted-foreground py-10 text-center text-sm text-pretty">
-        {mes
-          ? "Faltam competências registradas nesse mês para comparar as missões."
+        {periodo
+          ? "Faltam competências registradas até o fim desse período para comparar as missões."
           : "A comparação aparece a partir de duas missões cadastradas."}
       </p>
     );
@@ -253,8 +264,8 @@ async function Comparativo({
       {semRegistro > 0 ? (
         <p className="text-muted-foreground text-xs text-pretty">
           {semRegistro === 1
-            ? "1 missão ficou de fora por não ter competência registrada até esse mês."
-            : `${formatarNumero(semRegistro)} missões ficaram de fora por não terem competência registrada até esse mês.`}
+            ? "1 missão ficou de fora por não ter competência registrada até esse período."
+            : `${formatarNumero(semRegistro)} missões ficaram de fora por não terem competência registrada até esse período.`}
         </p>
       ) : null}
     </div>
@@ -264,22 +275,27 @@ async function Comparativo({
 /**
  * A agenda do recorte.
  *
- * Sem mês, são as próximas — a pergunta de quem abre o painel hoje. Com um mês
- * escolhido, "próximas" não quer dizer nada: em março do ano passado não há
- * nada à frente, e a lista viria vazia como se a missão não tivesse feito
- * nada. Aí passa a listar o que aconteceu naquele mês.
+ * Sem recorte, são as próximas — a pergunta de quem abre o painel hoje. Com um
+ * período escolhido, "próximas" não quer dizer nada: em março do ano passado
+ * não há nada à frente, e a lista viria vazia como se a missão não tivesse
+ * feito nada. Aí passa a listar o que aconteceu naquele período.
  */
-async function Agenda({ missaoId, mes }: { missaoId?: string; mes?: string }) {
-  const intervalo = mes ? intervaloDoMes(mes) : undefined;
-  const eventos = intervalo
-    ? await obterEventosDoPeriodo(intervalo.de, intervalo.ate, missaoId)
+async function Agenda({
+  missaoId,
+  periodo,
+}: {
+  missaoId?: string;
+  periodo?: Periodo;
+}) {
+  const eventos = periodo
+    ? await obterEventosDoPeriodo(periodo.de, periodo.ate, missaoId)
     : await obterProximosEventos(6, missaoId);
 
   if (eventos.length === 0) {
     return (
       <p className="text-muted-foreground py-8 text-center text-sm">
-        {mes
-          ? "Nenhuma ação apostólica nesse mês."
+        {periodo
+          ? "Nenhuma ação apostólica nesse período."
           : "Nenhuma ação apostólica agendada."}
       </p>
     );
@@ -335,11 +351,12 @@ export default async function PaginaPainel({
   ]);
   const primeiroNome = usuario.nome.split(" ")[0];
 
-  /* O mês vem da URL e a missão do cookie: o recorte de período é para ser
+  /* O período vem da URL e a missão do cookie: o recorte de período é para ser
      mandado por mensagem, o de missão é de quem está trabalhando. Sem
      parâmetro o painel abre no mês corrente; `undefined` aqui é "todo o
      período", pedido explicitamente. */
-  const mes = lerPeriodoDoPainel(parametros.mes);
+  const periodo = lerPeriodoDoPainel(parametros);
+  const hoje = new Date();
 
   if (missoes.length === 0) {
     return (
@@ -422,12 +439,23 @@ export default async function PaginaPainel({
           <section className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-muted-foreground text-xs font-medium">
-                {mes ? rotuloDoMes(mes) : "Todo o período"}
+                {rotuloDoPeriodo(periodo, hoje, "Todo o período")}
               </h2>
-              <FiltrosPainel />
+              {/* `hoje` vem do servidor: os atalhos do seletor são ancorados
+                  nele, e o servidor renderiza em UTC enquanto o cliente está em
+                  São Paulo — perto da virada do dia os dois montariam atalhos
+                  diferentes para o mesmo HTML. */}
+              <FiltrosPainel
+                periodo={
+                  periodo
+                    ? { de: chaveDoDia(periodo.de), ate: chaveDoDia(periodo.ate) }
+                    : undefined
+                }
+                hoje={chaveDoDia(hoje)}
+              />
             </div>
             <Suspense fallback={<EsqueletoMetricas quantidade={7} />}>
-              <Acoes missaoId={foco.missaoId} mes={mes} />
+              <Acoes missaoId={foco.missaoId} periodo={periodo} />
             </Suspense>
           </section>
 
@@ -441,7 +469,7 @@ export default async function PaginaPainel({
               </CardHeader>
               <CardContent>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <Evolucao missaoId={foco.missaoId} mes={mes} />
+                  <Evolucao missaoId={foco.missaoId} periodo={periodo} />
                 </Suspense>
               </CardContent>
             </Card>
@@ -450,14 +478,14 @@ export default async function PaginaPainel({
               <CardHeader>
                 <CardTitle className="text-base">Missões por membros</CardTitle>
                 <CardDescription>
-                  {mes
-                    ? `Da maior para a menor, pela competência de ${rotuloDoMes(mes).toLowerCase()}.`
+                  {periodo
+                    ? `Da maior para a menor, pela competência mais recente até ${formatarData(periodo.ate)}.`
                     : "Da maior para a menor."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-                  <Comparativo destaque={foco.missaoId} mes={mes} />
+                  <Comparativo destaque={foco.missaoId} periodo={periodo} />
                 </Suspense>
               </CardContent>
             </Card>
@@ -466,14 +494,17 @@ export default async function PaginaPainel({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {mes
-                  ? `Ações apostólicas de ${rotuloDoMes(mes).toLowerCase()}`
+                {/* Separador, e não "de": o rótulo tanto pode ser um mês
+                    ("Setembro de 2026") quanto um atalho ("Últimos 30 dias"),
+                    e nenhuma preposição serve aos dois. */}
+                {periodo
+                  ? `Ações apostólicas · ${rotuloDoPeriodo(periodo, hoje, "")}`
                   : "Próximas ações apostólicas"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <Suspense fallback={<EsqueletoLinhas quantidade={3} />}>
-                <Agenda missaoId={foco.missaoId} mes={mes} />
+                <Agenda missaoId={foco.missaoId} periodo={periodo} />
               </Suspense>
             </CardContent>
           </Card>

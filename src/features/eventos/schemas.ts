@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { centroIdObrigatorio } from "@/features/centros/schemas";
-import { intervaloDoMes, lerChaveDeMes } from "@/lib/mes";
+import { lerPeriodo } from "@/lib/periodo";
 
 /** Idempotente: aceita "" do formulário e null da revalidação no servidor. */
 const opcional = (max: number) =>
@@ -79,7 +79,8 @@ export const STATUS_EVENTO = [
 export type StatusEvento = (typeof STATUS_EVENTO)[number]["valor"];
 
 /**
- * Lê `?tipo=`, `?status=`, `?destaque` e `?mes=` da URL, que qualquer um edita.
+ * Lê `?tipo=`, `?status=`, `?destaque` e o período da URL, que qualquer um
+ * edita.
  *
  * Vive aqui, e não em cada página, porque duas telas mostram a mesma lista com
  * o mesmo recorte — /eventos e as ações de uma missão. Duas cópias desta
@@ -99,11 +100,11 @@ export function lerFiltrosDeEvento(
 
   const tipo = texto("tipo");
 
-  /* O mês vira `de`/`ate`, que é o que a consulta entende — e ela compara por
-     sobreposição, não por data de início: a ação que atravessa a virada do mês
-     aparece nos dois meses, que é onde ela de fato aconteceu. */
-  const mes = lerChaveDeMes(texto("mes"));
-  const intervalo = mes ? intervaloDoMes(mes) : undefined;
+  /* Sem padrão: aqui a ausência de recorte significa todo o período, ao
+     contrário do painel, que abre no mês corrente. A consulta compara por
+     sobreposição, não por data de início — a ação que atravessa a virada
+     aparece nos dois recortes que a tocam, que é onde ela de fato aconteceu. */
+  const intervalo = lerPeriodo(parametros);
 
   return {
     tipoEventoId:

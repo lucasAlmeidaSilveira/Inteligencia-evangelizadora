@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { z } from "zod";
 
 import { Campo } from "@/components/padroes/campo";
+import { SeletorData } from "@/components/padroes/seletor-data";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -156,7 +157,25 @@ export function FormularioMissao({
             erro={errors.dataFundacao?.message}
           >
             {(props) => (
-              <Input {...props} type="date" {...register("dataFundacao")} />
+              <Controller
+                control={control}
+                name="dataFundacao"
+                render={({ field }) => (
+                  <SeletorData
+                    {...props}
+                    valor={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Escolher data"
+                    // Opcional: missão antiga pode não ter a data registrada.
+                    permiteVazio
+                    /* A Comunidade nasceu em 1982; ninguém funda uma missão no
+                       futuro. Sem estes limites o seletor de ano ofereceria um
+                       século em cada direção. */
+                    inicioEm={new Date(1980, 0, 1)}
+                    fimEm={new Date()}
+                  />
+                )}
+              />
             )}
           </Campo>
         </CardContent>
