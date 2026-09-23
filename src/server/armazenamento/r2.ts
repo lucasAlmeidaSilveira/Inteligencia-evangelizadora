@@ -83,16 +83,31 @@ export async function urlDeUpload(chave: string, tipoMime: string) {
   );
 }
 
-/** URL temporária de download. O bucket permanece privado: sem esta
- *  assinatura, conhecer a chave não dá acesso a nada. */
-export async function urlDeDownload(chave: string, nomeExibicao: string) {
+/** URL temporária de acesso ao arquivo. O bucket permanece privado: sem esta
+ *  assinatura, conhecer a chave não dá acesso a nada.
+ *
+ *  `inline` abre no navegador, `attachment` baixa. Quem decide entre os dois é
+ *  a Server Action, conferindo o tipo do arquivo — nunca o cliente. */
+export async function urlDeDownload(
+  chave: string,
+  nomeExibicao: string,
+  disposicao: "attachment" | "inline" = "attachment",
+  tipoMime?: string,
+) {
   const env = envR2();
   return getSignedUrl(
     obterCliente(),
     new GetObjectCommand({
       Bucket: env.R2_BUCKET,
       Key: chave,
-      ResponseContentDisposition: `attachment; filename="${encodeURIComponent(nomeExibicao)}"`,
+      ResponseContentDisposition: `${disposicao}; filename="${encodeURIComponent(nomeExibicao)}"`,
+      /* Sem reafirmar o tipo, um objeto gravado com `Content-Type` genérico
+         (`application/octet-stream`) baixaria mesmo com `inline` — o navegador
+         decide pelo cabeçalho, não pela extensão. Só no caminho de
+         visualização: no download o tipo não muda nada. */
+      ...(disposicao === "inline" && tipoMime
+        ? { ResponseContentType: tipoMime }
+        : {}),
     }),
     { expiresIn: 300 },
   );

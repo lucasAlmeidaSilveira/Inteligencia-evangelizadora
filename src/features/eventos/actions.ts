@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 
+import { tipoPodeSerVisto } from "@/lib/documentos";
 import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
 import { ETIQUETAS } from "@/server/etiquetas";
 import type { Transacao } from "@/server/db/index";
@@ -472,14 +473,25 @@ export async function registrarDocumento(dados: {
   }
 }
 
-/** URL temporária de download. O bucket é privado: conhecer a chave não basta. */
-export async function urlDoDocumento(documentoId: string) {
+/**
+ * URL temporária de acesso ao documento. O bucket é privado: conhecer a chave
+ * não basta.
+ *
+ * `modo` só diz a intenção — quem decide é o tipo gravado no banco. Um cliente
+ * adulterado pedindo `ver` para um .docx recebe um download, não uma URL
+ * inline: o navegador tentaria renderizar e cairia num arquivo ilegível.
+ */
+export async function urlDoDocumento(
+  documentoId: string,
+  modo: "baixar" | "ver" = "baixar",
+) {
   try {
     const documento = await comUsuario(async (tx) => {
       const [linha] = await tx
         .select({
           nome: eventoDocumentos.nome,
           chave: eventoDocumentos.chaveArmazenamento,
+          tipoMime: eventoDocumentos.tipoMime,
         })
         .from(eventoDocumentos)
         .where(eq(eventoDocumentos.id, documentoId))
@@ -489,11 +501,18 @@ export async function urlDoDocumento(documentoId: string) {
 
     if (!documento) return falha("Documento não encontrado.");
 
-    const url = await urlDeDownload(documento.chave, documento.nome);
+    const inline = modo === "ver" && tipoPodeSerVisto(documento.tipoMime);
+
+    const url = await urlDeDownload(
+      documento.chave,
+      documento.nome,
+      inline ? "inline" : "attachment",
+      documento.tipoMime,
+    );
     return sucesso({ url });
   } catch (erro) {
-    console.error("Falha ao gerar download:", erro);
-    return falha("Não foi possível gerar o link de download.");
+    console.error("Falha ao gerar acesso ao documento:", erro);
+    return falha("Não foi possível gerar o link do documento.");
   }
 }
 

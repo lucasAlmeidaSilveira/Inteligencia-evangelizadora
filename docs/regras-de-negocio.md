@@ -293,6 +293,13 @@ Prestação de contas de cada ação, linha a linha.
   estética — é o que permite auditar e apagar tudo de uma missão de uma vez.
 - O nome do arquivo é normalizado (sem acento, sem espaço, até 120
   caracteres); o UUID evita colisão entre homônimos.
+- Ler um documento também passa por URL assinada, de cinco minutos. **PDF e
+  imagens abrem no navegador** (`inline`), os demais baixam (`attachment`):
+  Word, Excel e CSV o navegador não renderiza, e oferecer "visualizar" neles
+  seria um botão que engana. Quem decide é o tipo gravado no banco, não o
+  cliente — pedir `ver` para um `.docx` devolve um download.
+- Os arquivos aparecem em dois lugares — o cartão da visão geral e a aba
+  Documentos —, com as mesmas ações nos dois. O cartão inteiro leva à aba.
 
 ## Links
 

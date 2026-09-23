@@ -2,7 +2,7 @@
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, LoaderCircle, Trash2, Upload } from "lucide-react";
+import { FileText, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { EstadoVazio } from "@/components/padroes/estado-vazio";
@@ -11,13 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatarDataHora, formatarTamanhoArquivo } from "@/lib/format";
 
-import {
-  excluirDocumento,
-  prepararEnvio,
-  registrarDocumento,
-  urlDoDocumento,
-} from "../actions";
+import { excluirDocumento, prepararEnvio, registrarDocumento } from "../actions";
 import type { Documento } from "../queries";
+import { AcoesDocumento } from "./acoes-documento";
 
 const EXTENSOES_ACEITAS =
   ".pdf,.xls,.xlsx,.doc,.docx,.csv,.png,.jpg,.jpeg,.webp";
@@ -32,7 +28,9 @@ export function PainelDocumentos({
   const router = useRouter();
   const entrada = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
-  const [ocupado, iniciar] = useTransition();
+  /* Sem estado de "ocupado": a remoção é otimista — o item sai da lista no
+     mesmo quadro do clique, então não há espera para sinalizar. */
+  const [, iniciar] = useTransition();
 
   /* O documento sai da lista antes da resposta do servidor — é essa saída que
      a `Presenca` anima. Se a exclusão falhar, o `useOptimistic` devolve o
@@ -97,17 +95,6 @@ export function PainelDocumentos({
       setEnviando(false);
       if (entrada.current) entrada.current.value = "";
     }
-  }
-
-  function baixar(documento: Documento) {
-    iniciar(async () => {
-      const resultado = await urlDoDocumento(documento.id);
-      if (!resultado.ok) {
-        toast.error(resultado.erro);
-        return;
-      }
-      window.location.href = resultado.dados.url;
-    });
   }
 
   function remover(documento: Documento) {
@@ -197,27 +184,17 @@ export function PainelDocumentos({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="cursor-pointer"
-                        aria-label={`Baixar ${documento.nome}`}
-                        /* O download continua bloqueando enquanto assina a URL:
-                           aqui a espera é real e não há o que remover da tela. */
-                        disabled={ocupado}
-                        onClick={() => baixar(documento)}
-                      >
-                        <Download className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-destructive cursor-pointer"
-                        aria-label={`Remover ${documento.nome}`}
-                        onClick={() => remover(documento)}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
+                      <AcoesDocumento documento={documento}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive cursor-pointer"
+                          aria-label={`Remover ${documento.nome}`}
+                          onClick={() => remover(documento)}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </Button>
+                      </AcoesDocumento>
                     </div>
                   </CardContent>
                 </Card>
