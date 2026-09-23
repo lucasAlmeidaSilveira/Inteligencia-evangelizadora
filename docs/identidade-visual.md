@@ -95,6 +95,13 @@ não escolhidos a olho.
 | `--laranja-forte` | Variante para quando há texto branco por cima — 5,9:1. O tom vivo não alcançaria. |
 | `--success`, `--warning`, `--info` | Semântica de estado, cada um com seu `-foreground`. |
 | `--chart-1..5` | Séries de gráfico. |
+| `--vidro-*`, `--ambiente` | O material das superfícies — ver **Vidro**. |
+| `--card-solido`, `--popover-solido` | As mesmas superfícies sem alfa, para quando translucidez não é opção. |
+
+**`--card` e `--popover` têm alfa.** São superfícies translúcidas, não cores
+chapadas: é daí que sai todo o vidro do sistema. Os componentes do shadcn
+continuam escrevendo `bg-card` e `bg-popover` como sempre — quem mudou foi o
+valor do token, não o componente.
 
 **Regras que não se quebram:**
 
@@ -109,25 +116,170 @@ não escolhidos a olho.
   4,5:1 sobre fundo escuro; a versão `.dark` usa 70%. A paleta escura é
   redefinida token a token — não é inversão da clara.
 - **O fundo é levemente azulado, não creme.** A temperatura acompanha a marca.
+  Ele desceu de 0,985 para 0,955 de luminosidade quando o vidro entrou: um
+  cartão de vidro branco sobre um fundo quase branco não tem como parecer
+  vidro. A superfície translúcida só se lê como superfície se for mais clara
+  que o campo em que está apoiada.
 - **A barra lateral é superfície de marca.** `--sidebar` é o próprio
   `--marca-azul` e, como ele, vale igual nos dois temas — por isso os
   `--sidebar-*` não têm bloco em `.dark`. Os demais tokens da barra são a
   paleta invertida (tinta clara sobre azul), não a paleta clara com outro
   fundo. Como a barra é uma ilha escura numa superfície clara, `@layer base`
   redefine `--background`, `--foreground`, `--border`, `--input`,
-  `--muted-foreground`, `--accent` e `--ring` no escopo
-  `[data-slot="sidebar"]`: qualquer componente que entre ali herda as
-  superfícies certas sem precisar de classe de exceção. `--popover` fica de
-  fora porque popovers e tooltips abrem em portal, fora da barra.
+  `--muted-foreground`, `--accent`, `--ring`, `--card`, `--card-solido`,
+  `--vidro-brilho` e `--vidro-aresta` no escopo `[data-slot="sidebar"]`:
+  qualquer componente que entre ali herda as superfícies certas sem precisar de
+  classe de exceção. `--popover` fica de fora porque popovers e tooltips abrem
+  em portal, fora da barra.
 
-**Contrastes medidos:** texto principal 17,3:1 (AAA), azul sobre branco 8,4:1
-(AAA), texto da barra sobre o azul da marca 7,5:1 (AAA), texto secundário
-5,8:1 (AA).
+  **`--card` entrou nessa lista por um bug real, não por simetria.** O seletor
+  de missão é um `select-trigger`, e o vidro pinta o fundo dele com `--card`.
+  Sem a redefinição ele herdava a tinta do tema claro — branco a 70% — e o
+  campo virava uma barra clara com o texto claro da barra por cima: ilegível,
+  e ilegível em silêncio, sem quebrar teste nem tela. Na barra, `--card` é o
+  que uma superfície elevada sobre azul profundo deve ser: um véu de luz, não
+  uma placa branca.
+
+**Contrastes medidos**, todos sobre a superfície composta — o alfa do vidro já
+resolvido contra o que está atrás, não contra o branco teórico:
+
+| | Claro | Escuro |
+|---|---|---|
+| Texto principal sobre o cartão | 17,4:1 (AAA) | 12,7:1 (AAA) |
+| Texto principal sobre o fundo | 15,9:1 (AAA) | — |
+| Texto secundário sobre o cartão | 5,8:1 (AA) | 6,0:1 (AA) |
+| Texto secundário sobre o fundo | 5,3:1 (AA) | — |
+| Azul da marca sobre o cartão | 8,1:1 (AAA) | — |
+| Texto da barra sobre o azul da marca | 8,2:1 (AAA) | igual |
+
+O **pior caso do vidro** é a sobreposição aberta por cima da barra lateral —
+único lugar do sistema em que um popover translúcido cai sobre superfície
+escura. Medido: 17,0:1 no claro e 13,2:1 no escuro. É por isso que `--popover`
+tem muito mais corpo que `--card` (93% e 92% contra 70%): o cartão sabe o que
+tem atrás de si, a sobreposição não.
+
+**O alfa da sobreposição é decidido pelo destaque do item, não pelo texto.** O
+destaque do item de menu (`--accent`) é cor fixa, e quanto mais translúcida a
+superfície, mais ela se aproxima do que passa por baixo. A 85% o popover aberto
+sobre a barra lateral chegava ao próprio tom do `--accent` — separação de
+1,00:1, com o item sob o cursor e o item sob o foco do teclado invisíveis. Com
+os valores atuais a separação é 1,31:1 no escuro (1,21:1 sobre o azul) e 1,14:1
+no claro, que é o patamar do shadcn antes do vidro.
+
+**Esse patamar é baixo e é dívida conhecida, não conquista.** O item de menu
+traz `outline-hidden`, então o realce de fundo é o único sinal de foco de
+teclado — e 1,2:1 não cumpre os 3:1 de estado de componente. É anterior ao
+vidro e vale para toda a família de menus; fechar isso pede um segundo
+diferenciador no item (contorno ou barra lateral), que é trabalho à parte.
 
 Na barra, o item ativo é a exceção conhecida: o fundo clareado separa 1,7:1 da
 superfície, abaixo dos 3:1 exigidos de um componente. O peso de fonte que o
 acompanha é o que fecha o requisito — mexer num sem o outro quebra a regra de
-que cor nunca é o único diferenciador.
+que cor nunca é o único diferenciador. Com o vidro ele ganhou um terceiro
+sinal, também não-cromático: a cápsula tem aresta iluminada e contorno
+visíveis, e não só um fundo mais claro.
+
+## Vidro
+
+As superfícies do sistema são de vidro — translúcidas, com o que está atrás
+desfocado e a aresta pegando luz. A referência é o *liquid glass* do iOS, e a
+razão de ela caber aqui não é moda: o sistema tem uma casca que acompanha o
+usuário em todas as telas (barra lateral, barra de topo) e um conteúdo que
+muda embaixo dela. Material translúcido diz qual dos dois é qual sem precisar
+de borda, linha divisória ou sombra pesada.
+
+**Vidro não é fundo com transparência.** São quatro coisas ao mesmo tempo, e
+tirar qualquer uma faz o resto parecer erro de opacidade:
+
+| | O que faz | Sem isso |
+|---|---|---|
+| **Desfoque** | Separa o plano de cima do de baixo | Texto de trás aparece por baixo do texto da frente |
+| **Saturação a 180%** | Devolve o croma que o desfoque acinzenta | Vidro sujo em vez de límpido |
+| **Aresta clara no topo, escura na base** | O reflexo especular — a espessura da placa | Retângulo chapado; é esta pista, não a transparência, que faz parecer vidro |
+| **Sombra curta + sombra longa** | Contato e altura | Uma só lê como borda borrada |
+
+Os tokens vivem em `globals.css`: `--vidro-desfoque`, `--vidro-desfoque-barra`,
+`--vidro-saturacao`, `--vidro-brilho`, `--vidro-aresta`, `--vidro-sombra-perto`,
+`--vidro-sombra-longe`.
+
+**Dois desfoques, porque há duas situações.** Atrás de um cartão só existe o
+campo de luz do fundo, que já é um gradiente macio — desfocar gradiente macio
+devolve o mesmo gradiente, e ainda assim custa uma passada de composição na GPU
+por cartão, num painel que chega a quatorze. Por isso a placa usa 12px. Atrás
+da barra de topo e das sobreposições passa conteúdo de verdade, e lá o desfoque
+é generoso (28px).
+
+**O campo de luz (`--ambiente`).** Três halos radiais fixos atrás de todo o
+conteúdo, aplicados em `body::before`. Existem porque vidro precisa de algo
+para refratar: sobre fundo chapado, desfoque não tem o que desfocar. São todos
+no azul — o laranja marca a saída, a ação, o envio, e espalhá-lo pelo fundo da
+tela o transformaria na cor decorativa que a identidade proíbe.
+
+**Onde o vidro entra:**
+
+| Superfície | Como |
+|---|---|
+| Cartão | `--card` com alfa, desfoque curto, aresta e sombra |
+| Sobreposição (dialog, popover, select, dropdown, sheet) | `--popover`, bem mais encorpado, desfoque longo, sombra funda |
+| Menu (select, dropdown) | Raio **concêntrico**: externo = raio do item + respiro. Ver abaixo |
+| Barra de topo | Flutuante, desfoque longo — o conteúdo rola por baixo dela |
+| Botão `outline` e `secondary` | Cápsula de vidro |
+| Campo, `textarea`, `select` | Poço: realce embaixo, sombra em cima — o inverso da placa |
+| Controle segmentado (`tabs`) | Trilha de vidro, aba ativa como cápsula |
+
+**Onde o vidro não entra, e por quê:**
+
+- **A barra lateral continua opaca.** Ela é o azul da marca, e os 8,2:1 do
+  texto sobre ele são medidos contra o azul cheio. Translúcida, o contraste
+  passaria a variar com o que rolasse por baixo — um requisito de
+  acessibilidade que mudaria conforme a rolagem. Ela ganha o resto do material
+  (aresta, lustro, sombra, cantos, e agora flutua em vez de encostar nas
+  bordas), só não a transparência.
+- **O botão primário continua preenchido.** Vidro nele tiraria exatamente a
+  presença que o faz ser encontrado.
+- **Vidro dentro de vidro não existe.** Dois `backdrop-filter` empilhados
+  desfocam o desfoque: o resultado é leitoso e custa o dobro. Cartão dentro de
+  sobreposição volta a ser superfície opaca.
+- **Cartão não acende no hover.** Movimento e destaque comunicam estado, nunca
+  decoram — e a maioria dos cartões não faz nada quando clicada. Os que têm
+  ação já dizem, pelo `hover:ring-primary/40` e pelos 2px de elevação.
+
+**Quando translucidez não é opção.** Duas quedas, ambas para superfície opaca
+— nunca para "vidro mais fraco", que entregaria justamente o problema pela
+metade:
+
+1. `prefers-reduced-transparency: reduce` — preferência declarada do sistema.
+2. Navegador sem `backdrop-filter` — sem o desfoque, a tinta translúcida deixa
+   o texto de trás aparecer por baixo do da frente.
+
+**Onde as regras moram.** Em `globals.css`, num bloco **fora de `@layer`** no
+fim do arquivo, penduradas nos `data-slot` que os componentes do shadcn já
+expõem. Sem camada porque precisam vencer `utilities`, que é onde moram o
+`bg-card` e o `shadow-md` que elas substituem. O preço: uma classe Tailwind de
+`box-shadow` ou de fundo passada a um desses componentes **não** vence daquele
+bloco — o caminho é o sufixo `!`, ou, de preferência, trocar o valor de
+`--vidro-*` no escopo do componente, que mantém o vocabulário do material.
+
+**Raio concêntrico.** Um canto interno vale o canto externo **menos o respiro
+entre os dois**. O `SelectContent` do shadcn vem sem respiro nenhum — o item
+encosta na borda —, então qualquer raio externo maior que o do item passa a
+cortar o canto do item, e aparece um degrau entre as duas curvas. O menu
+resolve isso com o respiro que faltava e com o raio externo **derivado** do
+raio do item: `calc(var(--radius-md) + 0.25rem)`. Os dois números são uma conta
+só — mexer num obriga a refazer o outro.
+
+Por isso o menu não usa `--radius-xl` como as demais sobreposições: **o raio
+acompanha o tamanho da superfície**, e uma lista de três linhas com o canto de
+um diálogo lê como cápsula, não como menu.
+
+Dois detalhes que parecem enfeite e são requisito:
+
+- O `box-shadow` do vidro lê `--tw-ring-color`, que é o que o `ring-*` do
+  Tailwind escreve. É por isso que o `hover:ring-primary/40` dos cartões
+  clicáveis continua acendendo: **a aresta do vidro é aquele anel.**
+- Botão, campo e aba ganham uma camada `0 0 0 3px var(--tw-ring-color,
+  transparent)` pelo mesmo motivo: sem ela, redefinir `box-shadow` apagaria em
+  silêncio o anel de `focus-visible` e o de `aria-invalid`.
 
 ## Gráficos
 
@@ -159,6 +311,12 @@ Componentes em `src/components/padroes/` — use-os em vez de recriar:
 | `Presenca`, `ItemPresente` | Entrada e saída de itens de lista. |
 | `AreaFiltrada`, `ResultadosFiltrados` | Filtro que escreve na URL, com a região de resultados esmaecendo enquanto o servidor responde. |
 | `IndicadorAba` | Faixa da aba ativa, que desliza de uma aba para a outra. |
+
+Para superfície escrita à mão — a que não é componente do shadcn e por isso não
+tem `data-slot` onde pendurar a regra — há as classes `.vidro` e `.vidro-barra`
+(a mesma coisa com desfoque longo). Hoje as usam a barra de topo e o painel do
+login. Elas trazem a aresta especular em gradiente, que os cartões não têm por
+exigir pseudo-elemento posicionado.
 
 `src/components/ui/` é shadcn sobre Radix, com ícones lucide-react. Não
 reescreva aqueles arquivos à mão além do que o gerador produz.
@@ -230,6 +388,8 @@ ser removidos**:
 - **Foco sempre visível e sempre na cor de marca** (`:focus-visible` com
   contorno de 2px e deslocamento).
 - **`prefers-reduced-motion`** zera animações e transições.
+- **`prefers-reduced-transparency`** desliga o vidro inteiro e devolve
+  superfície opaca — ver **Vidro**.
 - **Cor nunca sozinha**: todo estado sinalizado por cor tem também texto,
   ícone ou padrão.
 

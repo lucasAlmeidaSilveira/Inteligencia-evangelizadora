@@ -44,9 +44,13 @@ export const metadata: Metadata = {
     "Acompanhamento das missões da Comunidade Católica Shalom: membros, grupos de oração e ações apostólicas.",
 };
 
+/* A cor que o navegador do celular pinta na própria barra. Acompanha
+   `--background`, que desceu quando o vidro entrou — deixada no branco antigo,
+   a barra do sistema apareceria como uma faixa mais clara colada no topo da
+   página, exatamente o degrau que a casca flutuante existe para não ter. */
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7fafe" },
+    { media: "(prefers-color-scheme: light)", color: "#eef1f7" },
     { media: "(prefers-color-scheme: dark)", color: "#0a1520" },
   ],
 };

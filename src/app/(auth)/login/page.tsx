@@ -11,9 +11,14 @@ export const metadata: Metadata = { title: "Entrar" };
 
 export default function PaginaLogin() {
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
+    /* A tela inteira recuada de 12px no desktop: as duas metades viram placas
+       apoiadas sobre o campo de luz do fundo, em vez de dois retângulos
+       coladas nas bordas da janela. É a mesma cena dos cartões e da barra
+       lateral — a página de entrada não pode ser feita de outro material que
+       o sistema que ela abre. */
+    <main className="grid min-h-dvh gap-3 lg:grid-cols-[1.1fr_1fr] lg:p-3">
       {/* Painel de marca — some no mobile, onde a tarefa é entrar, não admirar */}
-      <section className="bg-marca-azul text-marca-tinta relative hidden flex-col justify-between overflow-hidden p-12 lg:flex [--marca-acento:var(--marca-luz)]">
+      <section className="bg-marca-azul text-marca-tinta relative hidden flex-col justify-between overflow-hidden p-12 lg:flex lg:rounded-3xl [--marca-acento:var(--marca-luz)]">
         {/* O fogo missionário atrás do azul da contemplação — a única peça
             decorativa da tela, e por isso ela pode ser generosa.
 
@@ -58,7 +63,9 @@ export default function PaginaLogin() {
       </section>
 
       <section className="flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-sm">
+        {/* O formulário sobre vidro: é a única coisa a fazer nesta tela, e a
+            placa é o que a separa do fundo. */}
+        <div className="vidro w-full max-w-sm p-6 sm:p-8">
           <div className="mb-8 lg:hidden">
             <Marca className="text-primary" />
           </div>

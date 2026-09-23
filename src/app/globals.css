@@ -85,16 +85,58 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  /* 14px. O raio cresceu junto com o vidro: numa superfície translúcida o
+     canto é o que se enxerga primeiro, e canto de 10px sobre material
+     desfocado lê como retângulo recortado, não como placa apoiada. */
+  --radius: 0.875rem;
 
-  /* Fundo levemente azulado, não creme: a temperatura acompanha a marca. */
-  --background: oklch(0.985 0.006 250);
-  --foreground: oklch(0.2 0.035 250); /* 17,3:1 — AAA */
+  /* Fundo levemente azulado, não creme: a temperatura acompanha a marca.
 
-  --card: oklch(1 0 0);
+     Desceu de 0.985 para 0.955 quando o vidro entrou, e a razão é simples: um
+     cartão de vidro branco sobre um fundo quase branco não tem como parecer
+     vidro. A superfície translúcida só se lê como superfície se for mais
+     clara que o campo — a 0.985 a diferença era de três milésimos de
+     luminosidade, e a tela inteira virava um branco só com sombras soltas.
+
+     O texto principal continua em 14,9:1 sobre este fundo (AAA), e os
+     contrastes medidos do cartão não mudam: quem os sustenta é `--card`. */
+  --background: oklch(0.955 0.012 250);
+  --foreground: oklch(0.2 0.035 250); /* 17,3:1 sobre o cartão — AAA */
+
+  /* Superfícies translúcidas: é daqui que todo o vidro do sistema sai.
+     `bg-card` e `bg-popover` continuam sendo as classes que os componentes do
+     shadcn usam — é o valor do token que passou a ter alfa, e não os
+     componentes que mudaram. O desfoque e as arestas entram pelo bloco
+     "Vidro" no fim deste arquivo, por `data-slot`.
+
+     Cartão é bem mais transparente que sobreposição, e a diferença entre os
+     dois alfas tem uma razão que não é estética.
+
+     O cartão flutua sobre o fundo da própria página: ele sabe o que tem atrás
+     de si, e a superfície composta é sempre a mesma. A sobreposição abre sobre
+     conteúdo qualquer — inclusive sobre o azul da barra lateral — e por isso a
+     luminosidade da superfície composta **varia com o que passa por baixo**.
+
+     E é aí que mora o problema que decidiu este número: o destaque do item de
+     menu (`--accent`) é uma cor fixa. Quanto mais translúcida a sobreposição,
+     mais a superfície composta se aproxima do que está atrás — e a 85% o
+     popover aberto por cima da barra lateral chegava exatamente ao tom do
+     `--accent`. Separação de 1,00:1: o item sob o cursor, e o item sob o foco
+     do teclado, ficavam invisíveis. Falha silenciosa clássica: nada quebra,
+     a tela continua desenhada, e quem navega por teclado perde o cursor.
+
+     93% é o ponto em que a superfície volta a depender pouco do fundo e a
+     separação se recupera. O vidro não se perde — ele se lê pelo desfoque,
+     pela saturação e pela aresta, não pelo alfa. */
+  --card: oklch(1 0.003 250 / 70%);
   --card-foreground: oklch(0.2 0.035 250);
-  --popover: oklch(1 0 0);
+  --popover: oklch(1 0.003 250 / 93%);
   --popover-foreground: oklch(0.2 0.035 250);
+
+  /* Opacos, para quando translucidez não é opção: `prefers-reduced-transparency`
+     e navegador sem `backdrop-filter` caem neles no fim do arquivo. */
+  --card-solido: oklch(1 0 0);
+  --popover-solido: oklch(1 0 0);
 
   /* Azul da contemplação — 8,4:1 sobre branco, AAA */
   --primary: oklch(0.42 0.135 250);
@@ -171,16 +213,97 @@
   /* O anel de foco precisa clarear: o azul de 42% sumiria dentro do próprio
      azul de 42%. */
   --sidebar-ring: oklch(0.9 0.06 250);
+
+  /* ─── Vidro ─────────────────────────────────────────────────────────────
+     O material. Vidro não é uma cor de fundo com transparência: são quatro
+     coisas ao mesmo tempo, e tirar qualquer uma faz o resto parecer erro de
+     opacidade.
+
+     1. **Desfoque** do que está atrás — é o que separa o plano de cima do de
+        baixo sem precisar de sombra pesada.
+     2. **Saturação** aumentada. Desfocar mistura cores vizinhas e o resultado
+        acinzenta; sem devolver croma, o vidro fica sujo em vez de límpido.
+     3. **Aresta iluminada no topo, em sombra na base.** É o reflexo especular
+        — a pista que diz "isto tem espessura" — e é ela, não a transparência,
+        que faz a superfície parecer vidro de verdade.
+     4. **Sombra larga e fraca**, de contato curto mais difusão longa: a placa
+        paira, não está colada.
+
+     Os valores de alfa estão baixos de propósito. Vidro carregado vira
+     plástico leitoso, e aqui embaixo dele passa número de prestação de
+     contas — o material nunca pode competir com o dado que carrega. */
+  /* Dois desfoques, e a diferença entre eles é o que há atrás de cada coisa.
+
+     Atrás de um cartão só existe o campo de luz do fundo, que já é um
+     gradiente macio: desfocar um gradiente macio devolve o mesmo gradiente.
+     Ali o desfoque quase não aparece e mesmo assim custa uma passada de
+     composição na GPU por cartão — e o painel chega a quatorze. 12px é o que
+     mantém a saturação e o véu sem pagar por um efeito que ninguém vê.
+
+     Atrás da barra de topo e de qualquer sobreposição passa conteúdo real:
+     texto, número, gráfico. É lá que o desfoque faz o trabalho de separar os
+     planos, e lá ele é generoso. */
+  --vidro-desfoque: 12px;
+  --vidro-desfoque-barra: 28px;
+  --vidro-saturacao: 180%;
+
+  /* Aresta de cima e aresta de baixo. A diferença entre as duas é a espessura
+     aparente da placa: iguais, o vidro achata. */
+  --vidro-brilho: oklch(1 0 0 / 80%);
+  --vidro-aresta: oklch(0.42 0.135 250 / 12%);
+
+  /* Contato curto e difusão longa — a mesma sombra em duas distâncias. Uma só
+     lê como borda borrada; as duas juntas leem como altura. */
+  --vidro-sombra-perto: oklch(0.28 0.06 250 / 10%);
+  --vidro-sombra-longe: oklch(0.28 0.06 250 / 14%);
+
+  /* O campo de luz atrás de tudo.
+
+     Vidro precisa de algo para refratar: sobre um fundo chapado, desfoque não
+     tem o que desfocar e a translucidez não aparece. Estes três halos dão ao
+     fundo a variação de luminosidade que o material revela ao passar por cima.
+
+     Todos no azul. O laranja marca a saída, a ação, o envio — espalhá-lo pelo
+     fundo da tela inteira o transformaria em cor decorativa, que é exatamente
+     o que a identidade proíbe. */
+  --ambiente:
+    radial-gradient(
+      58rem 38rem at 10% -12%,
+      oklch(0.42 0.135 250 / 18%),
+      transparent 62%
+    ),
+    radial-gradient(
+      46rem 34rem at 94% 6%,
+      oklch(0.58 0.11 250 / 15%),
+      transparent 64%
+    ),
+    radial-gradient(
+      50rem 40rem at 46% 112%,
+      oklch(0.5 0.1 250 / 12%),
+      transparent 62%
+    );
 }
 
 .dark {
   --background: oklch(0.19 0.028 250);
   --foreground: oklch(0.95 0.008 250);
 
-  --card: oklch(0.24 0.03 250);
+  /* No escuro o vidro é mais transparente que no claro, não menos: sobre
+     fundo escuro a translucidez não arrisca a legibilidade do texto claro, e
+     o material precisa dela para não virar mais um retângulo cinza. O tom da
+     tinta é mais claro que o fundo — vidro escuro que escurece o que está
+     atrás lê como buraco, não como placa. */
+  --card: oklch(0.32 0.032 250 / 55%);
   --card-foreground: oklch(0.95 0.008 250);
-  --popover: oklch(0.24 0.03 250);
+  /* Mais escuro e mais encorpado que a tinta do cartão, pelo motivo explicado
+     no `:root`: a sobreposição precisa ficar abaixo do `--accent` (0,32) para
+     o item destacado aparecer, e precisa depender pouco do que passa atrás
+     para continuar aparecendo quando ela abre por cima da barra lateral. */
+  --popover: oklch(0.24 0.032 250 / 92%);
   --popover-foreground: oklch(0.95 0.008 250);
+
+  --card-solido: oklch(0.24 0.03 250);
+  --popover-solido: oklch(0.24 0.03 250);
 
   /* Azul clareado: no escuro, o tom de 42% de luminosidade não alcança 4,5:1 */
   --primary: oklch(0.7 0.15 250);
@@ -223,6 +346,34 @@
 
   /* Os `--sidebar-*` não aparecem aqui de propósito: a barra é superfície de
      marca e vale igual nos dois temas, pelo mesmo motivo de --marca-azul. */
+
+  /* Vidro escuro. O brilho da aresta cai muito — no escuro um realce branco a
+     80% não lê como reflexo, lê como risco de giz. E a sombra sobe, porque
+     sombra escura sobre fundo escuro quase não separa: é o realce da aresta
+     que carrega a separação aqui, invertendo os papéis do tema claro. */
+  --vidro-brilho: oklch(1 0 0 / 16%);
+  --vidro-aresta: oklch(0 0 0 / 32%);
+  --vidro-sombra-perto: oklch(0 0 0 / 28%);
+  --vidro-sombra-longe: oklch(0 0 0 / 40%);
+
+  /* Mais presente que no claro: o fundo escuro é quase chapado e sem estes
+     halos o vidro não teria o que refratar. */
+  --ambiente:
+    radial-gradient(
+      58rem 38rem at 10% -12%,
+      oklch(0.62 0.15 250 / 15%),
+      transparent 62%
+    ),
+    radial-gradient(
+      46rem 34rem at 94% 6%,
+      oklch(0.55 0.12 250 / 11%),
+      transparent 64%
+    ),
+    radial-gradient(
+      50rem 40rem at 46% 112%,
+      oklch(0.5 0.1 250 / 9%),
+      transparent 62%
+    );
 }
 
 @layer base {
@@ -238,6 +389,24 @@
   body {
     @apply bg-background text-foreground;
     text-rendering: optimizeLegibility;
+  }
+
+  /* O campo de luz que o vidro refrata.
+
+     Pseudo-elemento fixo, e não `background-attachment: fixed` no body: o
+     `fixed` repinta a cada quadro de rolagem no Safari do iPhone e arrasta a
+     página inteira junto — justamente onde o vidro já custa. Aqui o campo sai
+     da camada de rolagem, fica parado e o conteúdo desliza por cima.
+
+     `z-index: -1` o põe atrás de todo o conteúdo e ainda assim à frente do
+     `--background`, que o body propaga para a tela do navegador. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--ambiente);
+    pointer-events: none;
   }
 
   /* Foco sempre visível e sempre na cor de marca: requisito de acessibilidade,
@@ -265,6 +434,24 @@
     --accent: var(--sidebar-accent);
     --accent-foreground: var(--sidebar-accent-foreground);
     --ring: var(--sidebar-ring);
+
+    /* `--card` precisa entrar na lista junto com os outros.
+
+       O seletor de missão é um `select-trigger`, e o vidro pinta o fundo dele
+       com `--card`. Sem esta linha ele herdaria a tinta do tema claro — um
+       branco a 70% — e o campo apareceria como uma barra clara com o texto
+       claro da barra lateral por cima: ilegível, e ilegível em silêncio, sem
+       quebrar teste nem tela. Aqui `--card` é o que uma superfície elevada
+       sobre azul profundo deve ser: um véu de luz, não uma placa branca. */
+    --card: oklch(1 0 0 / 10%);
+    --card-solido: oklch(0.48 0.13 250);
+
+    /* O vidro dentro da barra é vidro sobre azul profundo, não sobre fundo
+       claro: a aresta de cima clareia mais e a de baixo vira sombra franca.
+       Com os valores do tema claro, o realce sumiria no azul e a "sombra"
+       azulada apareceria como mancha mais clara que a superfície. */
+    --vidro-brilho: oklch(1 0 0 / 22%);
+    --vidro-aresta: oklch(0 0 0 / 22%);
   }
 
   /* Números de métrica não podem mudar de largura ao atualizar — o layout
@@ -335,6 +522,425 @@
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+/* ═══ Vidro ═══════════════════════════════════════════════════════════════
+   O material aplicado às superfícies.
+
+   **Por que fora de `@layer`.** As superfícies do sistema são componentes do
+   shadcn, e `src/components/ui/` não se reescreve à mão — mexer lá quebra
+   toda atualização futura do gerador. Então o material entra por `data-slot`,
+   que é o gancho que aqueles componentes já expõem. E precisa vir sem camada:
+   regra sem `@layer` vence qualquer camada, inclusive `utilities`, que é onde
+   moram o `bg-card` e o `shadow-md` que estas regras substituem.
+
+   O preço é real e está documentado: uma classe Tailwind de `box-shadow` ou
+   de fundo passada a um destes componentes **não** vence daqui. Quando for
+   mesmo necessário, o caminho é o sufixo `!` na classe, ou trocar o valor de
+   `--vidro-*` no escopo do componente — que é o caminho preferido, porque
+   mantém o vocabulário do material.
+
+   **O que a regra preserva.** O `box-shadow` abaixo lê `--tw-ring-color`, que
+   é o que o `ring-*` do Tailwind escreve. É por isso que o
+   `hover:ring-primary/40` dos cartões clicáveis continua acendendo o anel: a
+   aresta do vidro *é* aquele anel, e muda de cor com ele. Sem essa leitura, o
+   sinal de "isto se clica" morreria em silêncio nos sete lugares que o usam.
+--------------------------------------------------------------------------- */
+
+/* A placa. Cartão, e tudo que se apoia direto no fundo da página. */
+[data-slot="card"] {
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque)) saturate(var(--vidro-saturacao));
+  border-radius: var(--radius-xl);
+  box-shadow:
+    /* aresta iluminada no topo e em sombra na base: a espessura da placa */
+    inset 0 1px 0 0 var(--vidro-brilho),
+    inset 0 -1px 0 0 var(--vidro-aresta),
+    /* o contorno — é o `ring-1` do componente, relido aqui */
+    0 0 0 1px var(--tw-ring-color, var(--vidro-aresta)),
+    /* contato curto mais difusão longa: a placa paira */ 0 1px 2px -1px
+      var(--vidro-sombra-perto),
+    0 14px 32px -18px var(--vidro-sombra-longe);
+}
+
+/* Aqui **não** entra realce de hover no cartão.
+
+   Foi a primeira coisa que este arquivo ganhou e a primeira que perdeu:
+   acender o vidro sob o ponteiro é bonito e é exatamente o que a identidade
+   visual proíbe — movimento e destaque comunicam estado, nunca decoram. A
+   maioria dos cartões do sistema não faz nada quando clicada, e um cartão que
+   reage ao ponteiro sem ter ação promete o que não cumpre.
+
+   Os que têm ação já dizem, e no vocabulário que o sistema inteiro usa: o
+   `hover:ring-primary/40` acende a aresta — que a regra acima lê de
+   `--tw-ring-color` — e os 2px de elevação levantam a placa. */
+
+/* A sobreposição. Abre sobre conteúdo qualquer, então é vidro mais espesso e
+   sombra mais funda — a profundidade é o que diz que ela está por cima, e não
+   dentro, da página. */
+[data-slot="popover-content"],
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="select-content"],
+[data-slot="sheet-content"] {
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque-barra))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque-barra))
+    saturate(var(--vidro-saturacao));
+  border-radius: var(--radius-xl);
+  box-shadow:
+    inset 0 1px 0 0 var(--vidro-brilho),
+    inset 0 -1px 0 0 var(--vidro-aresta),
+    0 0 0 1px var(--tw-ring-color, var(--vidro-aresta)),
+    0 2px 6px -2px var(--vidro-sombra-perto),
+    0 24px 56px -20px var(--vidro-sombra-longe);
+}
+
+/* Raio concêntrico nos menus.
+
+   Um canto interno tem de valer o canto externo **menos o respiro entre os
+   dois**. O `SelectContent` do shadcn vem sem respiro nenhum — o item encosta
+   na borda —, então qualquer raio externo maior que o do item passa a cortar o
+   canto do item: era o degrau que aparecia no seletor de missão, entre a curva
+   larga do painel e a curva estreita da linha destacada.
+
+   Duas linhas resolvem, e as duas são a mesma conta: o respiro que faltava, e
+   o raio externo **derivado** do raio do item em vez de escolhido à parte.
+   `--radius-md` é o `rounded-md` que o item já usa; `0.25rem` é o respiro.
+   Mexer num dos dois obriga a refazer a conta — não são valores independentes.
+
+   Menu não usa `--radius-xl` como as demais sobreposições, e isso é decisão:
+   o raio acompanha o tamanho da superfície. Uma lista de três linhas com o
+   canto de um diálogo lê como cápsula, não como menu. */
+[data-slot="select-content"] {
+  padding: 0.25rem;
+}
+
+[data-slot="select-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"] {
+  border-radius: calc(var(--radius-md) + 0.25rem);
+}
+
+/* A gaveta encosta em dois lados da tela: cantos arredondados ali seriam dois
+   cantos soltos no vazio. Só o lado que fica para dentro se arredonda. */
+[data-slot="sheet-content"][data-side="left"] {
+  border-radius: 0 var(--radius-2xl) var(--radius-2xl) 0;
+}
+[data-slot="sheet-content"][data-side="right"] {
+  border-radius: var(--radius-2xl) 0 0 var(--radius-2xl);
+}
+[data-slot="sheet-content"][data-side="top"] {
+  border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+}
+[data-slot="sheet-content"][data-side="bottom"] {
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+}
+
+/* No celular a barra lateral é uma gaveta — e ela substitui o `data-slot` do
+   `SheetContent` pelo próprio, então a regra acima não a alcança. Mesma
+   lógica, mesmo raio: arredonda só o lado virado para dentro da tela. */
+[data-slot="sidebar"][data-mobile="true"][data-side="left"] {
+  border-radius: 0 var(--radius-2xl) var(--radius-2xl) 0;
+}
+[data-slot="sidebar"][data-mobile="true"][data-side="right"] {
+  border-radius: var(--radius-2xl) 0 0 var(--radius-2xl);
+}
+
+/* Vidro dentro de vidro não existe.
+
+   Dois `backdrop-filter` empilhados desfocam o desfoque: o de baixo já
+   entregou uma imagem borrada, e o de cima borra aquilo de novo. O resultado é
+   leitoso, e custa duas passadas de composição na GPU por quadro. Dentro de
+   uma sobreposição o cartão volta a ser superfície opaca comum — que é o
+   certo: ali ele não está mais sobre o fundo da página, está sobre o vidro. */
+[data-slot="dialog-content"] [data-slot="card"],
+[data-slot="alert-dialog-content"] [data-slot="card"],
+[data-slot="popover-content"] [data-slot="card"],
+[data-slot="sheet-content"] [data-slot="card"] {
+  background-color: var(--card-solido);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 0 0 1px var(--tw-ring-color, var(--vidro-aresta));
+}
+
+/* ─── A casca ──────────────────────────────────────────────────────────────
+   Barra lateral e barra de topo: a moldura que acompanha o usuário em todas
+   as telas. */
+
+/* O `bg-background` opaco do `SidebarInset` cobriria o campo de luz do body e
+   o vidro não teria o que refratar. Quem pinta o fundo é o body. */
+[data-slot="sidebar-inset"] {
+  background-color: transparent;
+}
+
+/* A barra lateral continua opaca, e isso é decisão, não esquecimento: ela é o
+   azul da marca, e os 7,5:1 do texto sobre ele são medidos contra o azul
+   cheio. Translucidez faria o contraste variar com o que passasse por baixo —
+   um requisito de acessibilidade que mudaria conforme a rolagem.
+
+   O que ela ganha é o resto do material: o realce da aresta, o lustro de cima
+   para baixo e a sombra que a solta da página. Como `bg-sidebar` pinta só a
+   cor, o lustro entra como `background-image` e os dois convivem. */
+[data-slot="sidebar-inner"] {
+  border-radius: var(--radius-2xl);
+  background-image: linear-gradient(
+    to bottom,
+    oklch(1 0 0 / 8%),
+    transparent 22%
+  );
+  box-shadow:
+    inset 0 1px 0 0 var(--vidro-brilho),
+    inset -1px 0 0 0 var(--vidro-aresta),
+    0 2px 8px -4px var(--vidro-sombra-perto),
+    0 20px 44px -24px var(--vidro-sombra-longe);
+}
+
+/* O item ativo do menu, como cápsula de vidro.
+
+   A identidade visual registra este item como a exceção conhecida de
+   contraste: o fundo clareado separa só 1,7:1 da superfície, e quem fecha o
+   requisito é o peso da fonte. A aresta iluminada acrescenta um segundo
+   diferenciador não-cromático — a cápsula tem borda visível, não só cor. */
+[data-slot="sidebar-menu-button"][data-active="true"] {
+  background-image: linear-gradient(
+    to bottom,
+    oklch(1 0 0 / 10%),
+    transparent 60%
+  );
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0 0 / 28%),
+    inset 0 0 0 1px oklch(1 0 0 / 12%);
+}
+
+/* Vidro para superfície escrita à mão — a que não é um componente do shadcn e
+   por isso não tem `data-slot` para pendurar a regra. Hoje: a barra de topo e
+   o painel do login.
+
+   `.vidro-barra` é a mesma coisa com desfoque maior. A barra de topo é onde a
+   translucidez mais trabalha: o conteúdo rola por baixo dela, e é ver o
+   conteúdo passar desfocado que diz que ela está por cima — em vez de um
+   retângulo opaco que parece cortar a página. */
+.vidro,
+.vidro-barra {
+  position: relative;
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque)) saturate(var(--vidro-saturacao));
+  background-color: var(--card);
+  border-radius: var(--radius-2xl);
+  box-shadow:
+    0 1px 2px -1px var(--vidro-sombra-perto),
+    0 16px 36px -20px var(--vidro-sombra-longe);
+}
+
+.vidro-barra {
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque-barra))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque-barra))
+    saturate(var(--vidro-saturacao));
+}
+
+/* A aresta especular de verdade, em gradiente.
+
+   Nas placas, duas sombras internas bastam. Numa superfície larga não: o
+   realce precisa percorrer o contorno inteiro, claro em cima e escurecendo até
+   a base. É um contorno de 1px pintado com gradiente e recortado pela
+   máscara — `exclude` tira o miolo e deixa só a moldura.
+
+   Só aqui e não nos cartões porque exige pseudo-elemento posicionado, e os
+   cartões são 31 pontos de uso com filhos que dependem do próprio contexto de
+   posicionamento. */
+.vidro::after,
+.vidro-barra::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    to bottom,
+    var(--vidro-brilho),
+    transparent 30%,
+    transparent 62%,
+    var(--vidro-aresta)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ─── Controles ────────────────────────────────────────────────────────────
+
+   O botão preenchido continua preenchido: ele é a ação principal, e vidro num
+   botão primário tira dele exatamente a presença que o faz ser encontrado.
+   Ganha só o realce de cima — o mesmo lustro do resto, que o põe na mesma
+   família material sem enfraquecê-lo. */
+/* O `0 0 0 3px var(--tw-ring-color, transparent)` que aparece daqui para
+   baixo devolve o anel que estas regras substituiriam.
+
+   Campo, botão e aba trazem `focus-visible:ring-3` e `aria-invalid:ring-3` do
+   shadcn, e o Tailwind monta os dois dentro do `box-shadow`. Redefinir
+   `box-shadow` aqui apagaria os dois em silêncio: o anel de foco — que o
+   `:focus-visible` do `@layer base` ainda cobre com um `outline`, mas o de
+   erro não tem segunda rede, e um campo inválido deixaria de se anunciar.
+
+   A camada fica sempre presente e transparente por padrão; quem lhe dá cor é
+   a variante do Tailwind ao escrever `--tw-ring-color`. Assim o anel acende
+   no foco e no erro sem que nenhuma regra daqui precise saber quando. */
+[data-slot="button"][data-variant="default"] {
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0 0 / 18%),
+    0 1px 2px -1px var(--vidro-sombra-perto),
+    0 0 0 3px var(--tw-ring-color, transparent);
+}
+
+/* Os secundários, sim, são vidro: é a cápsula flutuante do iOS. `outline` já
+   nasce com `bg-background` opaco — que aqui vira tinta translúcida. */
+[data-slot="button"][data-variant="outline"],
+[data-slot="button"][data-variant="secondary"] {
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque)) saturate(var(--vidro-saturacao));
+  box-shadow:
+    inset 0 1px 0 0 var(--vidro-brilho),
+    0 1px 2px -1px var(--vidro-sombra-perto),
+    0 0 0 3px var(--tw-ring-color, transparent);
+}
+
+[data-slot="button"][data-variant="outline"] {
+  background-color: var(--card);
+}
+
+/* Campo é poço, não placa: o realce vai para a base e a sombra para o topo —
+   o inverso da placa. É o que faz o campo parecer afundado na superfície em
+   vez de apoiado sobre ela. */
+[data-slot="input"],
+[data-slot="textarea"],
+[data-slot="select-trigger"] {
+  background-color: color-mix(in oklch, var(--card) 78%, transparent);
+  box-shadow:
+    inset 0 1px 2px -1px var(--vidro-aresta),
+    inset 0 -1px 0 0 var(--vidro-brilho),
+    0 0 0 3px var(--tw-ring-color, transparent);
+}
+
+/* O controle segmentado. A trilha é vidro; a aba ativa é a cápsula que
+   desliza por cima dela. */
+[data-slot="tabs-list"][data-variant="default"] {
+  -webkit-backdrop-filter: blur(var(--vidro-desfoque))
+    saturate(var(--vidro-saturacao));
+  backdrop-filter: blur(var(--vidro-desfoque)) saturate(var(--vidro-saturacao));
+  background-color: color-mix(in oklch, var(--muted) 62%, transparent);
+  box-shadow: inset 0 1px 2px -1px var(--vidro-aresta);
+}
+
+[data-slot="tabs-trigger"][data-state="active"],
+[data-slot="tabs-trigger"][data-active] {
+  box-shadow:
+    inset 0 1px 0 0 var(--vidro-brilho),
+    0 0 0 1px var(--vidro-aresta),
+    0 1px 2px -1px var(--vidro-sombra-perto),
+    0 0 0 3px var(--tw-ring-color, transparent);
+}
+
+/* ─── Quando vidro não é opção ─────────────────────────────────────────────
+
+   Dois casos, e os dois são de falha silenciosa: a tela continua desenhada,
+   só que ilegível ou sem a separação entre planos. Por isso as duas quedas
+   são para superfície opaca, e não para "vidro mais fraco".
+
+   1. `prefers-reduced-transparency` — preferência declarada do sistema. Quem
+      a liga costuma fazê-lo por dificuldade de leitura sobre fundo movimentado
+      ou por sensibilidade visual; entregar meio vidro seria entregar
+      exatamente o problema que a pessoa pediu para não ter.
+   2. Navegador sem `backdrop-filter` — sem o desfoque, a tinta translúcida
+      deixa o texto da página aparecer por baixo do texto do cartão.
+
+   A ordem importa: `:root` primeiro, `.dark` depois. As duas têm a mesma
+   especificidade, e é a segunda que vale para quem está no tema escuro. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --card: var(--card-solido);
+    --popover: var(--popover-solido);
+    --ambiente: none;
+  }
+
+  .dark {
+    --card: var(--card-solido);
+    --popover: var(--popover-solido);
+    --ambiente: none;
+  }
+
+  [data-slot="card"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="select-content"],
+  [data-slot="sheet-content"],
+  [data-slot="button"][data-variant="outline"],
+  [data-slot="button"][data-variant="secondary"],
+  [data-slot="tabs-list"][data-variant="default"],
+  .vidro,
+  .vidro-barra {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  [data-slot="button"][data-variant="outline"],
+  .vidro,
+  .vidro-barra {
+    background-color: var(--card-solido);
+  }
+
+  [data-slot="tabs-list"][data-variant="default"] {
+    background-color: var(--muted);
+  }
+
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"] {
+    background-color: var(--card-solido);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --card: var(--card-solido);
+    --popover: var(--popover-solido);
+  }
+
+  .dark {
+    --card: var(--card-solido);
+    --popover: var(--popover-solido);
+  }
+
+  [data-slot="button"][data-variant="outline"],
+  .vidro,
+  .vidro-barra {
+    background-color: var(--card-solido);
+  }
+
+  [data-slot="tabs-list"][data-variant="default"] {
+    background-color: var(--muted);
+  }
+
+  [data-slot="input"],
+  [data-slot="textarea"],
+  [data-slot="select-trigger"] {
+    background-color: var(--card-solido);
   }
 }
 

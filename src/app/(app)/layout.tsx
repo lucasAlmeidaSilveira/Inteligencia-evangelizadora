@@ -38,10 +38,20 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
       <SidebarInset>
         {/* Ancorado na transição de rota: sem nome próprio, o cabeçalho entra
             no instantâneo da página e desliza junto com o conteúdo — e quem
-            navega perde a referência de que continua no mesmo lugar. */}
+            navega perde a referência de que continua no mesmo lugar.
+
+            A barra não encosta mais no topo nem atravessa a tela de ponta a
+            ponta: ela flutua, e o conteúdo rola por baixo e aparece nas
+            frestas dos lados. É a fresta que faz a translucidez significar
+            alguma coisa — sem ela, vidro é só um cinza mais claro.
+
+            `top-3` com `h-14` põe o centro da barra a 40px do topo, que é
+            exatamente onde cai o centro do monograma na barra lateral
+            flutuante (8px de margem + metade dos 64px do cabeçalho dela). O
+            alinhamento é medido, não aproximado. */}
         <header
           style={{ viewTransitionName: "casca-topo" }}
-          className="bg-background/80 sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4 backdrop-blur-sm"
+          className="vidro-barra sticky top-3 z-20 mx-4 mt-3 flex h-14 shrink-0 items-center gap-2 px-3 sm:mx-6"
         >
           <SidebarTrigger className="cursor-pointer" />
           <Separator orientation="vertical" className="mr-1 !h-5" />

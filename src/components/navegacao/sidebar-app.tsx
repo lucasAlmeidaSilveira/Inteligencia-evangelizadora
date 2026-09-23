@@ -87,7 +87,15 @@ export function SidebarApp({
     href === "/" ? caminho === "/" : caminho.startsWith(href);
 
   return (
-    <Sidebar collapsible="icon">
+    /* `floating`: a barra descola das bordas da tela e vira uma placa apoiada
+       sobre o campo de luz do fundo, como a barra de topo. Encostada nos
+       quatro cantos ela seria a moldura da janela; solta, ela é um objeto
+       dentro da mesma cena que os cartões — que é o que o vidro pede.
+
+       A margem vem do próprio shadcn (`p-2` no contêiner) e a largura
+       recolhida já a compensa; o raio, o lustro e a sombra da placa entram por
+       `[data-slot="sidebar-inner"]` no globals.css. */
+    <Sidebar collapsible="icon" variant="floating">
       {/* Recolhida, a barra tem 3rem: o px-4 não deixaria os 2rem do bloco
           caberem. O px-2 é a mesma margem dos itens de menu, então o
           monograma cai no eixo vertical dos ícones de baixo. */}
