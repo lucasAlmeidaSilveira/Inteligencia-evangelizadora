@@ -68,6 +68,7 @@ export default async function PaginaNovoEvento({
           participantesNovos: "",
           participantesPermaneceram: "",
           servosEngajados: "",
+          nps: "",
           orcamentoPrevisto: "",
           status: "planejado",
           destaqueRegional: false,

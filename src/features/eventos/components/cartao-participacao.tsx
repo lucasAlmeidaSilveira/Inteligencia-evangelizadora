@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { formatarNumero } from "@/lib/format";
 
 import { atualizarParticipacao } from "../actions";
+import { formatarNps } from "../impacto";
 import { calcularParticipacao, formatarTaxa } from "../participacao";
 import { participacaoSchema } from "../schemas";
 import { tratarResultado } from "./resultado-edicao";
@@ -58,7 +59,7 @@ function Leitura({ valores }: { valores: NumerosDaParticipacao }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
         <MetricaCompacta
           rotulo="Inscritos"
           valor={formatarNumero(participacao.inscritos)}
@@ -85,6 +86,14 @@ function Leitura({ valores }: { valores: NumerosDaParticipacao }) {
               ? "Sem presentes informados"
               : undefined
           }
+        />
+        {/* Nota de 0 a 10 — a mesma escala que a missão aplicou na pesquisa.
+            Vazia é "sem pesquisa", nunca zero: zero seria a pior nota. */}
+        <MetricaCompacta
+          rotulo="Satisfação (NPS)"
+          valor={formatarNps(valores.nps)}
+          detalhe={valores.nps === null ? "Sem pesquisa" : "de 0 a 10"}
+          tom={valores.nps === null ? "atenuado" : "normal"}
         />
       </div>
 
@@ -121,7 +130,8 @@ function Formulario({
     formState: { errors, isSubmitting },
   } = useForm<Entrada, unknown, Saida>({
     resolver: zodResolver(participacaoSchema),
-    defaultValues: valores,
+    // Vazio, não "0": o input em branco é o que diz "sem pesquisa".
+    defaultValues: { ...valores, nps: valores.nps ?? "" },
   });
 
   async function enviar(dados: Saida) {
@@ -212,6 +222,26 @@ function Formulario({
               min={0}
               className="tabular"
               {...register("servosEngajados")}
+            />
+          )}
+        </Campo>
+
+        <Campo
+          rotulo="Satisfação (NPS)"
+          ajuda="Nota média de 0 a 10. Vazio se não houve pesquisa."
+          erro={errors.nps?.message}
+        >
+          {(props) => (
+            <Input
+              {...props}
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={10}
+              step={0.1}
+              placeholder="0 a 10"
+              className="tabular"
+              {...register("nps")}
             />
           )}
         </Campo>

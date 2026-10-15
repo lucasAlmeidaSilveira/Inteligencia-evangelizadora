@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChartColumnIncreasing, Download } from "lucide-react";
+import { ChartColumnIncreasing, Download, Gauge } from "lucide-react";
 
 import {
   AreaFiltrada,
@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatarIndice, formatarNps } from "@/features/eventos/impacto";
 import { listarTiposEvento } from "@/features/eventos/queries";
 import { focoAtual } from "@/features/missoes/foco";
 import { FiltrosRelatorio } from "@/features/relatorios/components/filtros-relatorio";
@@ -40,7 +41,7 @@ function Tabela({
 }: {
   titulo: string;
   linhas: LinhaRelatorio[];
-  total: { acoes: number; participantes: number; servos: number; saldo: number };
+  total: Omit<LinhaRelatorio, "id" | "nome" | "cor">;
   comCor?: boolean;
 }) {
   return (
@@ -59,6 +60,21 @@ function Tabela({
               <TableHead className="text-right">Receitas</TableHead>
               <TableHead className="text-right">Despesas</TableHead>
               <TableHead className="text-right">Saldo</TableHead>
+              {/* Médias, não somas — e só das ações que têm o dado. O
+                  travessão é "sem informação", nunca zero. */}
+              <TableHead className="text-right">
+                <abbr title="Satisfação média, de 0 a 10" className="no-underline">
+                  NPS
+                </abbr>
+              </TableHead>
+              <TableHead className="text-right">
+                <abbr
+                  title="Índice de Impacto Evangelizador médio, de 0 a 100"
+                  className="no-underline"
+                >
+                  Impacto
+                </abbr>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -101,6 +117,16 @@ function Tabela({
                 >
                   {formatarMoeda(linha.saldo)}
                 </TableCell>
+                <CelulaMedia
+                  valor={formatarNps(linha.nps)}
+                  base={linha.comNps}
+                  de={linha.acoes}
+                />
+                <CelulaMedia
+                  valor={formatarIndice(linha.impacto)}
+                  base={linha.comImpacto}
+                  de={linha.acoes}
+                />
               </TableRow>
             ))}
           </TableBody>
@@ -127,11 +153,50 @@ function Tabela({
               >
                 {formatarMoeda(total.saldo)}
               </TableCell>
+              <CelulaMedia
+                valor={formatarNps(total.nps)}
+                base={total.comNps}
+                de={total.acoes}
+                negrito
+              />
+              <CelulaMedia
+                valor={formatarIndice(total.impacto)}
+                base={total.comImpacto}
+                de={total.acoes}
+                negrito
+              />
             </TableRow>
           </TableFooter>
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Média com a base por baixo: "8,4" sobre "3 de 12" diz que nove ações não
+ * tiveram pesquisa — sem isso, a média de uma ação só pareceria a da missão.
+ */
+function CelulaMedia({
+  valor,
+  base,
+  de,
+  negrito = false,
+}: {
+  valor: string;
+  base: number;
+  de: number;
+  negrito?: boolean;
+}) {
+  return (
+    <TableCell data-numeric className="text-right">
+      <span className={negrito ? "font-medium" : undefined}>{valor}</span>
+      {base > 0 && base < de ? (
+        <span className="text-muted-foreground block text-xs">
+          {base} de {de}
+        </span>
+      ) : null}
+    </TableCell>
   );
 }
 
@@ -190,10 +255,20 @@ export default async function PaginaRelatorios({
             </EstadoVazio>
           ) : (
             <>
-              <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="cascata grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <CartaoMetrica
                   rotulo="Ações apostólicas"
                   valor={formatarNumero(relatorio.total.acoes)}
+                />
+                <CartaoMetrica
+                  rotulo="Impacto evangelizador"
+                  Icone={Gauge}
+                  valor={formatarIndice(relatorio.total.impacto)}
+                  detalhe={
+                    relatorio.total.impacto === null
+                      ? "Nenhuma ação com dados para o índice"
+                      : `Média de ${relatorio.total.comImpacto} de ${relatorio.total.acoes} ações · NPS médio ${formatarNps(relatorio.total.nps)}`
+                  }
                 />
                 <CartaoMetrica
                   rotulo="Participantes"

@@ -76,6 +76,9 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("valor_positivo")) {
       return "O valor precisa ser maior que zero.";
     }
+    if (restricao.includes("nps_entre_zero_e_dez")) {
+      return "A nota de satisfação (NPS) vai de 0 a 10.";
+    }
     if (restricao.includes("papel_e_missao_coerentes")) {
       return "O administrador master não pertence a missão alguma; os demais precisam de uma.";
     }

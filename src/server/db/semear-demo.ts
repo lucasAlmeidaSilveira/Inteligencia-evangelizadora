@@ -321,6 +321,11 @@ async function principal() {
         const orcamento = status === "cancelado" || aleatorio() > 0.65
           ? null
           : (inteiro(2_000, 25_000) + inteiro(0, 99) / 100).toFixed(2);
+        // Pesquisa de satisfação só em parte do que aconteceu: o índice de
+        // impacto precisa aparecer completo, parcial e ausente na demonstração.
+        const nps = status === "realizado" && aleatorio() > 0.4
+          ? (6 + aleatorio() * 4).toFixed(1)
+          : null;
 
         const { rows: [evento] } = await c.query<{ id: string }>(
           `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, descricao,
@@ -328,8 +333,8 @@ async function principal() {
                                 participantes_inscritos, participantes_total,
                                 participantes_novos, participantes_permaneceram,
                                 servos_engajados, orcamento_previsto, status,
-                                destaque_regional)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) returning id`,
+                                destaque_regional, nps)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) returning id`,
           [criada.id, centroSorteado(), escolher(tipos).id,
            `${escolher(TITULOS)} ${inicio.getFullYear()}`,
            aleatorio() > 0.5 ? "Ação voltada à evangelização e ao acolhimento da comunidade." : null,
@@ -337,7 +342,7 @@ async function principal() {
            aleatorio() > 0.6 ? `Av. Central, ${inteiro(100, 2000)}` : null,
            escolher(NOMES),
            inscritos, participantes, novos, permaneceram, servos, orcamento, status,
-           status === "realizado" && aleatorio() > 0.75],
+           status === "realizado" && aleatorio() > 0.75, nps],
         );
         totais.eventos++;
 

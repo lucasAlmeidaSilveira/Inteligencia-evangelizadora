@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Church, MapPin, Star, Users } from "lucide-react";
+import { Church, Gauge, MapPin, Star, ThumbsUp, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatarMoeda, formatarNumero, formatarPeriodo } from "@/lib/format";
 
+import { formatarIndice, formatarNps } from "../impacto";
 import type { EventoListado } from "../queries";
 import { SeloStatus } from "./selo-status";
 
@@ -96,6 +97,25 @@ export function LinhaEvento({
               }
             >
               Saldo {formatarMoeda(saldo)}
+            </span>
+          ) : null}
+
+          {/* NPS e índice só quando existem: a lista é de relance, e um
+              travessão em toda linha antiga seria ruído sem informação. */}
+          {evento.nps !== null ? (
+            <span className="flex items-center gap-1.5">
+              <ThumbsUp className="size-3.5" aria-hidden />
+              NPS {formatarNps(evento.nps)}
+            </span>
+          ) : null}
+
+          {evento.impacto.indice !== null ? (
+            <span className="flex items-center gap-1.5 font-medium">
+              <Gauge className="size-3.5" aria-hidden />
+              Impacto {formatarIndice(evento.impacto.indice)}
+              {evento.impacto.faltam.length > 0 ? (
+                <span className="font-normal">(parcial)</span>
+              ) : null}
             </span>
           ) : null}
         </div>

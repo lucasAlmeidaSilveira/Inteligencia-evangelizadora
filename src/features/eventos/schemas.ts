@@ -69,6 +69,30 @@ const dinheiroOpcional = z
   )
   .transform((n) => (n === null ? null : n.toFixed(2)));
 
+/**
+ * Nota de satisfação (NPS), de 0 a 10, com uma casa decimal.
+ *
+ * Vazio é `null` — "não houve pesquisa" —, nunca zero, que seria a pior nota.
+ * Aceita vírgula ("8,7") porque é assim que se digita aqui, e devolve a forma
+ * canônica com ponto ("8.7"), que é a que o `numeric(3,1)` do Postgres recebe
+ * e devolve. Como `dinheiroOpcional`, roda duas vezes sobre a própria saída, e
+ * a saída precisa reler igual.
+ */
+const notaOpcional = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined || (typeof v === "string" && !v.trim())) {
+      return null;
+    }
+    return typeof v === "number" ? v : Number(v.trim().replace(",", "."));
+  })
+  .refine(
+    (n) => n === null || (Number.isFinite(n) && n >= 0 && n <= 10),
+    "A nota vai de 0 a 10.",
+  )
+  .transform((n) => (n === null ? null : n.toFixed(1)));
+
 export const STATUS_EVENTO = [
   { valor: "planejado", rotulo: "Planejado" },
   { valor: "em_andamento", rotulo: "Em andamento" },
@@ -155,6 +179,9 @@ const camposParticipacao = {
     "permaneceram após a ação",
   ),
   servosEngajados: inteiroNaoNegativo(100_000, "servos engajados"),
+  /** Fica com a participação, e não com o financeiro: é o que os participantes
+   *  disseram da ação, e se preenche no mesmo momento em que se contam. */
+  nps: notaOpcional,
 };
 
 const camposTextos = {

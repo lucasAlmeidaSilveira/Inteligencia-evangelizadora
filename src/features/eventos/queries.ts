@@ -30,6 +30,24 @@ import {
   somarLancamentos,
   type Financeiro,
 } from "./financeiro";
+import { calcularImpacto, type EntradaDoImpacto } from "./impacto";
+
+/**
+ * Anexa financeiro e índice de impacto a uma linha de evento.
+ *
+ * O índice é calculado na leitura, como o saldo: coluna gravada seria estado
+ * que diverge dos lançamentos e da participação na primeira edição.
+ */
+function comImpacto<E extends Omit<EntradaDoImpacto, "financeiro">>(
+  evento: E,
+  financeiro: Financeiro,
+) {
+  return {
+    ...evento,
+    financeiro,
+    impacto: calcularImpacto({ ...evento, financeiro }),
+  };
+}
 
 /**
  * Totais financeiros de vários eventos numa consulta agregada.
@@ -94,6 +112,8 @@ const colunas = {
   participantesNovos: eventos.participantesNovos,
   participantesPermaneceram: eventos.participantesPermaneceram,
   servosEngajados: eventos.servosEngajados,
+  /** String com uma casa ("8.7") ou `null` sem pesquisa — `numeric` do banco. */
+  nps: eventos.nps,
   orcamentoPrevisto: eventos.orcamentoPrevisto,
   status: eventos.status,
   destaqueRegional: eventos.destaqueRegional,
@@ -131,10 +151,9 @@ export const listarEventos = leituraCacheada(
       lista.map((e) => e.id),
     );
 
-    return lista.map((evento) => ({
-      ...evento,
-      financeiro: financeiro.get(evento.id) ?? SEM_MOVIMENTO,
-    }));
+    return lista.map((evento) =>
+      comImpacto(evento, financeiro.get(evento.id) ?? SEM_MOVIMENTO),
+    );
   },
   { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
 );
@@ -165,10 +184,7 @@ export const obterEvento = cache(
       if (!evento) return null;
 
       const financeiro = await financeiroPorEvento(tx, [evento.id]);
-      return {
-        ...evento,
-        financeiro: financeiro.get(evento.id) ?? SEM_MOVIMENTO,
-      };
+      return comImpacto(evento, financeiro.get(evento.id) ?? SEM_MOVIMENTO);
     },
     {
       etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
@@ -371,7 +387,7 @@ export const obterEventoCompleto = cache(
 
       // Já temos os lançamentos: somar em memória evita mais uma ida ao banco.
       return {
-        evento: { ...evento, financeiro: somarLancamentos(lancamentos) },
+        evento: comImpacto(evento, somarLancamentos(lancamentos)),
         lancamentos,
         documentos,
         links,

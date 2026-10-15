@@ -86,6 +86,8 @@ export default async function PaginaEditarEvento({
           participantesNovos: evento.participantesNovos,
           participantesPermaneceram: evento.participantesPermaneceram,
           servosEngajados: evento.servosEngajados,
+          // Vazio, não "0": em branco é "sem pesquisa"; zero é a pior nota.
+          nps: evento.nps ?? "",
           // Vazio, não "0,00": o input em branco é o que diz "não orçado".
           orcamentoPrevisto: evento.orcamentoPrevisto ?? "",
           status: evento.status,

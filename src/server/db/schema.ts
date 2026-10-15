@@ -414,6 +414,16 @@ export const eventos = ie.table(
       .notNull()
       .default(0),
     servosEngajados: integer("servos_engajados").notNull().default(0),
+    /**
+     * Satisfação dos participantes, nota de 0 a 10 (NPS). Nulo é "não houve
+     * pesquisa", diferente de zero, que é a pior nota possível — sem essa
+     * distinção toda ação antiga apareceria como detestada.
+     *
+     * `numeric(3,1)` e não `integer`: a nota que a missão tem em mãos é a média
+     * das respostas, e "8,7" arredondado para 9 some com a diferença entre duas
+     * ações que o índice de impacto existe para comparar.
+     */
+    nps: numeric("nps", { precision: 3, scale: 1 }),
     /** Nulo é "não orçado", diferente de zero, que é "orçado em nada". Sem essa
      *  distinção a tela mostraria R$ 0,00 previsto em toda ação antiga. */
     orcamentoPrevisto: numeric("orcamento_previsto", {
@@ -436,6 +446,8 @@ export const eventos = ie.table(
     check("permaneceram_nao_negativo", sql`${t.participantesPermaneceram} >= 0`),
     check("servos_nao_negativo", sql`${t.servosEngajados} >= 0`),
     check("orcamento_nao_negativo", sql`${t.orcamentoPrevisto} >= 0`),
+    // A escala é do NPS, não nossa: fora de 0..10 a nota não significa nada.
+    check("nps_entre_zero_e_dez", sql`${t.nps} between 0 and 10`),
     /* Não há CHECK relacionando `novos`/`permaneceram` a `participantesTotal`:
        essa regra vive no zod, onde o erro chega no campo certo e em português.
        Vindo do banco, um engano de digitação viraria erro de constraint. */

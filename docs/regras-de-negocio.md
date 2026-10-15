@@ -261,6 +261,56 @@ Detalhes que sustentam esse fluxo:
 - O tipo é identificado pela marca, nunca pelo nome escrito no código: renomear
   "Retiro" para "Retiros" não pode zerar um cartão em silêncio.
 
+### Satisfação (NPS)
+
+- Cada ação pode ter uma **nota de satisfação de 0 a 10**, com uma casa
+  decimal — a média do que os participantes responderam na pesquisa. Guardada
+  em `eventos.nps`, `numeric(3,1)`, com `CHECK nps_entre_zero_e_dez` **e**
+  revalidada no zod, para a mensagem chegar no campo.
+- **Vazio é "não houve pesquisa"; zero é a pior nota.** Nunca se grava zero
+  por omissão: toda ação antiga apareceria como detestada.
+- Preenche-se junto com a participação — no formulário e no card da visão
+  geral — porque é no mesmo momento, depois da ação, que se contam presentes e
+  se lê a pesquisa.
+
+### Índice de Impacto Evangelizador
+
+Uma nota de **0 a 100 por ação**, para o planejamento trienal comparar ações
+e orientar o direcionamento dos CAPs. É **calculado na leitura**, como o
+saldo: não existe coluna de índice, porque ela divergiria da participação e dos
+lançamentos na primeira edição. A fórmula vive em
+`src/features/eventos/impacto.ts`, e os pesos são constantes num lugar só.
+
+Quatro componentes, cada um também de 0 a 100, combinados por média ponderada:
+
+| Componente | Peso | Como se calcula |
+|---|---|---|
+| Permanência | 35% | Permaneceram ÷ presentes. O fruto que a missão mede, por isso o maior peso. |
+| Satisfação | 25% | NPS × 10. |
+| Engajamento | 20% | Presentes ÷ inscritos, limitado a 100% — quem se comprometeu veio. |
+| Financeiro | 20% | A **pior** de duas notas: cobertura (receitas ÷ despesas, 100 se nada foi gasto) e aderência ao orçamento (100 dentro do previsto; perde um ponto por ponto percentual de estouro; sem orçamento, 100). |
+
+Regras que valem para todos os componentes:
+
+- **O que falta não vale zero.** Sem inscritos não há engajamento; sem
+  presentes não há permanência; sem pesquisa não há satisfação; sem nenhum
+  lançamento não há nota financeira — a prestação de contas não foi feita, e
+  isso é ausência de informação, não equilíbrio. O componente fica `null`, os
+  pesos são **redistribuídos sobre o que existe** e o índice sai marcado como
+  **parcial**, dizendo o que faltou. Zerar o que falta puniria justamente a
+  ação cadastrada antes de o NPS existir e inverteria o ranking.
+- Sem componente algum, o índice é `null` e a tela mostra travessão — nunca
+  um número inventado.
+- **Faixas de leitura:** 90 ou mais é *alto*, de 70 a 89 é *médio*, abaixo
+  disso é *baixo*. São as fronteiras do NPS (detrator, neutro, promotor)
+  trazidas para a escala de 100 — a régua que quem faz pesquisa já conhece.
+  A faixa sempre vem com a palavra, não só com a cor.
+- No relatório, NPS e índice são **médias só das ações que têm o dado**, e a
+  tabela diz de quantas ("3 de 12"). No CSV a ausência sai **vazia**, não
+  zero — zero entraria na média do Excel.
+
+`pnpm testar:impacto` confere a fórmula contra números escolhidos a dedo.
+
 ## Financeiro
 
 Prestação de contas de cada ação, linha a linha.

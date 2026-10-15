@@ -17,6 +17,10 @@ function celula(valor: string | number) {
 
 const dinheiro = (v: number) => v.toFixed(2).replace(".", ",");
 const data = (d: Date) => d.toLocaleDateString("pt-BR");
+/* Vazio, não "0", quando não há informação: no Excel, zero entra na média e
+   um "sem pesquisa" viraria nota mínima. */
+const nota = (v: number | null) => (v === null ? "" : v.toFixed(1).replace(".", ","));
+const indice = (v: number | null) => (v === null ? "" : String(Math.round(v)));
 
 export function relatorioParaCsv(relatorio: Relatorio) {
   const linhas: string[] = [];
@@ -36,6 +40,10 @@ export function relatorioParaCsv(relatorio: Relatorio) {
     "Receitas",
     "Despesas",
     "Saldo",
+    "NPS médio",
+    "Ações com NPS",
+    "Índice de impacto",
+    "Ações com índice",
   ];
 
   const secao = (titulo: string, dados: Relatorio["porMissao"]) => {
@@ -51,6 +59,10 @@ export function relatorioParaCsv(relatorio: Relatorio) {
           dinheiro(l.receitas),
           dinheiro(l.despesas),
           dinheiro(l.saldo),
+          nota(l.nps),
+          l.comNps,
+          indice(l.impacto),
+          l.comImpacto,
         ].join(";"),
       );
     }
@@ -71,6 +83,10 @@ export function relatorioParaCsv(relatorio: Relatorio) {
       dinheiro(relatorio.total.receitas),
       dinheiro(relatorio.total.despesas),
       dinheiro(relatorio.total.saldo),
+      nota(relatorio.total.nps),
+      relatorio.total.comNps,
+      indice(relatorio.total.impacto),
+      relatorio.total.comImpacto,
     ].join(";"),
   );
 

@@ -5,6 +5,7 @@ import { ArrowRight, FileText, Link2 } from "lucide-react";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { centrosDasMissoesVisiveis } from "@/features/centros/queries";
 import { CartaoFinanceiro } from "@/features/eventos/components/cartao-financeiro";
+import { CartaoImpacto } from "@/features/eventos/components/cartao-impacto";
 import { CartaoInformacoes } from "@/features/eventos/components/cartao-informacoes";
 import { CartaoParticipacao } from "@/features/eventos/components/cartao-participacao";
 import { CartaoTextos } from "@/features/eventos/components/cartao-textos";
@@ -95,6 +96,7 @@ export default async function PaginaVisaoGeralEvento({
               participantesNovos: evento.participantesNovos,
               participantesPermaneceram: evento.participantesPermaneceram,
               servosEngajados: evento.servosEngajados,
+              nps: evento.nps,
             }}
           />
 
@@ -105,6 +107,10 @@ export default async function PaginaVisaoGeralEvento({
           />
         </div>
       </div>
+
+      {/* Depois dos cards que o alimentam: o índice é derivado deles, e quem
+          vê um componente baixo encontra logo acima onde corrigir o dado. */}
+      <CartaoImpacto impacto={evento.impacto} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Mesmo idioma de cartão clicável do CartaoMetrica e da LinhaEvento:

@@ -449,7 +449,6 @@ export function FormularioEvento({
             rotulo="Servos engajados"
             ajuda="Quantos serviram na realização."
             erro={errors.servosEngajados?.message}
-            className="sm:col-span-2"
           >
             {(props) => (
               <Input
@@ -460,6 +459,26 @@ export function FormularioEvento({
                 placeholder="0"
                 className="tabular"
                 {...register("servosEngajados")}
+              />
+            )}
+          </Campo>
+
+          <Campo
+            rotulo="Satisfação (NPS)"
+            ajuda="Nota média de 0 a 10 dada pelos participantes. Deixe vazio se não houve pesquisa."
+            erro={errors.nps?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={10}
+                step={0.1}
+                placeholder="0 a 10"
+                className="tabular"
+                {...register("nps")}
               />
             )}
           </Campo>

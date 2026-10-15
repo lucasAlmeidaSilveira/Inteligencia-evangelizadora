@@ -11,6 +11,7 @@ import {
   tiposEvento,
 } from "@/server/db/schema";
 import { calcularFinanceiro, paraCentavos } from "@/features/eventos/financeiro";
+import { calcularImpacto } from "@/features/eventos/impacto";
 
 export type FiltrosRelatorio = {
   de: Date;
@@ -30,6 +31,13 @@ export type LinhaRelatorio = {
   receitas: number;
   despesas: number;
   saldo: number;
+  /** Média das notas de 0 a 10, só das ações que tiveram pesquisa. */
+  nps: number | null;
+  comNps: number;
+  /** Média do Índice de Impacto Evangelizador, só das ações que têm índice.
+   *  `comImpacto` diz de quantas: "72" de 3 ações em 40 não é "72". */
+  impacto: number | null;
+  comImpacto: number;
 };
 
 export type Relatorio = {
@@ -75,6 +83,12 @@ const consolidar = leituraCacheada(
         tipoCor: tiposEvento.cor,
         participantes: eventos.participantesTotal,
         servos: eventos.servosEngajados,
+        // O que o índice de impacto precisa além do financeiro.
+        participantesInscritos: eventos.participantesInscritos,
+        participantesNovos: eventos.participantesNovos,
+        participantesPermaneceram: eventos.participantesPermaneceram,
+        nps: eventos.nps,
+        orcamentoPrevisto: eventos.orcamentoPrevisto,
       })
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
@@ -111,6 +125,28 @@ const consolidar = leituraCacheada(
       }
     }
 
+    /* O índice de cada ação sai da mesma função que a tela da ação usa: o
+       relatório nunca pode dizer um número e a ação, outro. Calculado uma vez
+       por evento e reaproveitado nos dois agrupamentos. */
+    const impactoPorEvento = new Map<string, number | null>();
+    for (const evento of lista) {
+      const dinheiro = financeiroPorEvento.get(evento.id);
+      const receitas = (dinheiro?.receitas ?? 0) / 100;
+      const despesas = (dinheiro?.despesas ?? 0) / 100;
+      impactoPorEvento.set(
+        evento.id,
+        calcularImpacto({
+          participantesInscritos: evento.participantesInscritos,
+          participantesTotal: evento.participantes,
+          participantesNovos: evento.participantesNovos,
+          participantesPermaneceram: evento.participantesPermaneceram,
+          nps: evento.nps,
+          orcamentoPrevisto: evento.orcamentoPrevisto,
+          financeiro: { receitas, despesas, saldo: receitas - despesas },
+        }).indice,
+      );
+    }
+
     type Acumulador = {
       nome: string;
       cor?: string;
@@ -119,10 +155,51 @@ const consolidar = leituraCacheada(
       servos: number;
       receitas: number;
       despesas: number;
+      /* Somas e contagens separadas, não médias parciais: a média de médias
+         daria peso igual a uma ação e a dez. */
+      somaNps: number;
+      comNps: number;
+      somaImpacto: number;
+      comImpacto: number;
     };
+
+    const novoAcumulador = (nome: string, cor?: string): Acumulador => ({
+      nome,
+      cor,
+      acoes: 0,
+      participantes: 0,
+      servos: 0,
+      receitas: 0,
+      despesas: 0,
+      somaNps: 0,
+      comNps: 0,
+      somaImpacto: 0,
+      comImpacto: 0,
+    });
 
     const porMissao = new Map<string, Acumulador>();
     const porTipo = new Map<string, Acumulador>();
+    const geral = novoAcumulador("Geral");
+
+    const acumularEm = (atual: Acumulador, evento: (typeof lista)[number]) => {
+      const dinheiro = financeiroPorEvento.get(evento.id);
+      atual.acoes += 1;
+      atual.participantes += evento.participantes;
+      atual.servos += evento.servos;
+      atual.receitas += dinheiro?.receitas ?? 0;
+      atual.despesas += dinheiro?.despesas ?? 0;
+
+      const nps = evento.nps === null ? null : Number(evento.nps);
+      if (nps !== null && Number.isFinite(nps)) {
+        atual.somaNps += nps;
+        atual.comNps += 1;
+      }
+      const impacto = impactoPorEvento.get(evento.id) ?? null;
+      if (impacto !== null) {
+        atual.somaImpacto += impacto;
+        atual.comImpacto += 1;
+      }
+    };
 
     const acumular = (
       mapa: Map<string, Acumulador>,
@@ -131,54 +208,37 @@ const consolidar = leituraCacheada(
       cor: string | undefined,
       evento: (typeof lista)[number],
     ) => {
-      const atual = mapa.get(chave) ?? {
-        nome,
-        cor,
-        acoes: 0,
-        participantes: 0,
-        servos: 0,
-        receitas: 0,
-        despesas: 0,
-      };
-      const dinheiro = financeiroPorEvento.get(evento.id);
-      atual.acoes += 1;
-      atual.participantes += evento.participantes;
-      atual.servos += evento.servos;
-      atual.receitas += dinheiro?.receitas ?? 0;
-      atual.despesas += dinheiro?.despesas ?? 0;
+      const atual = mapa.get(chave) ?? novoAcumulador(nome, cor);
+      acumularEm(atual, evento);
       mapa.set(chave, atual);
     };
 
     for (const evento of lista) {
       acumular(porMissao, evento.missaoId, evento.missaoNome, undefined, evento);
       acumular(porTipo, evento.tipoId, evento.tipoNome, evento.tipoCor, evento);
+      acumularEm(geral, evento);
     }
+
+    const fechar = (a: Acumulador) => ({
+      acoes: a.acoes,
+      participantes: a.participantes,
+      servos: a.servos,
+      ...calcularFinanceiro(a.receitas / 100, a.despesas / 100),
+      nps: a.comNps > 0 ? a.somaNps / a.comNps : null,
+      comNps: a.comNps,
+      impacto: a.comImpacto > 0 ? a.somaImpacto / a.comImpacto : null,
+      comImpacto: a.comImpacto,
+    });
 
     const finalizar = (mapa: Map<string, Acumulador>): LinhaRelatorio[] =>
       [...mapa.entries()]
-        .map(([id, a]) => ({
-          id,
-          nome: a.nome,
-          cor: a.cor,
-          acoes: a.acoes,
-          participantes: a.participantes,
-          servos: a.servos,
-          ...calcularFinanceiro(a.receitas / 100, a.despesas / 100),
-        }))
+        .map(([id, a]) => ({ id, nome: a.nome, cor: a.cor, ...fechar(a) }))
         .sort((x, y) => y.participantes - x.participantes || y.acoes - x.acoes);
-
-    const totalReceitas = [...porMissao.values()].reduce((s, a) => s + a.receitas, 0);
-    const totalDespesas = [...porMissao.values()].reduce((s, a) => s + a.despesas, 0);
 
     return {
       porMissao: finalizar(porMissao),
       porTipo: finalizar(porTipo),
-      total: {
-        acoes: lista.length,
-        participantes: lista.reduce((s, e) => s + e.participantes, 0),
-        servos: lista.reduce((s, e) => s + e.servos, 0),
-        ...calcularFinanceiro(totalReceitas / 100, totalDespesas / 100),
-      },
+      total: fechar(geral),
     };
   },
   { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },

@@ -170,6 +170,7 @@ const acaoBase = {
   participantesNovos: "",
   participantesPermaneceram: "",
   servosEngajados: "",
+  nps: "",
   orcamentoPrevisto: "",
   status: "planejado",
   destaqueRegional: false,
@@ -203,11 +204,51 @@ verificar(
     participantesNovos: "58",
     participantesPermaneceram: "37",
     servosEngajados: "24",
+    // Com vírgula, como se digita: a saída canônica "8.7" precisa reler igual.
+    nps: "8,7",
     orcamentoPrevisto: "12.400,50",
     status: "realizado",
     destaqueRegional: true,
   },
   "formulário completo",
+);
+
+/* O NPS tem a mesma armadilha do orçamento — roda duas vezes — e mais uma: a
+   nota 0 é legítima e diferente de vazio. Um schema que tratasse 0 como
+   "falsy → null" apagaria a pior avaliação possível sem erro nenhum. */
+verificar(
+  "Ação apostólica — NPS zero é nota, não ausência",
+  eventoSchema,
+  { ...acaoBase, nps: "0" },
+  "nota mínima",
+);
+
+verificar(
+  "Ação apostólica — NPS no formato canônico",
+  eventoSchema,
+  { ...acaoBase, nps: "10.0" },
+  "nota máxima, como volta do banco",
+);
+
+recusar(
+  "Ação apostólica — NPS acima de 10",
+  eventoSchema,
+  { ...acaoBase, nps: "11" },
+  "nps",
+);
+
+recusar(
+  "Ação apostólica — NPS negativo",
+  eventoSchema,
+  { ...acaoBase, nps: "-1" },
+  "nps",
+);
+
+recusar(
+  "Ação apostólica — NPS que não é número",
+  eventoSchema,
+  { ...acaoBase, nps: "ótimo" },
+  "nps",
 );
 
 verificar(
@@ -248,8 +289,23 @@ verificar(
     participantesNovos: "58",
     participantesPermaneceram: "37",
     servosEngajados: "24",
+    nps: "9",
   },
   "card de participação preenchido",
+);
+
+recusar(
+  "Seção Participação — NPS fora da escala",
+  participacaoSchema,
+  {
+    participantesInscritos: "0",
+    participantesTotal: "40",
+    participantesNovos: "0",
+    participantesPermaneceram: "0",
+    servosEngajados: "0",
+    nps: "10,5",
+  },
+  "nps",
 );
 
 verificar(
@@ -435,6 +491,10 @@ const csv = relatorioParaCsv({
       receitas: 1500.5,
       despesas: 300.25,
       saldo: 1200.25,
+      nps: 8.75,
+      comNps: 2,
+      impacto: 71.6,
+      comImpacto: 3,
     },
     {
       // Nome com aspas e ponto e vírgula: os dois caracteres que quebram CSV.
@@ -446,6 +506,10 @@ const csv = relatorioParaCsv({
       receitas: 0,
       despesas: 45.9,
       saldo: -45.9,
+      nps: null,
+      comNps: 0,
+      impacto: null,
+      comImpacto: 0,
     },
   ],
   porTipo: [],
@@ -456,6 +520,10 @@ const csv = relatorioParaCsv({
     receitas: 1500.5,
     despesas: 346.15,
     saldo: 1154.35,
+    nps: 8.75,
+    comNps: 2,
+    impacto: 71.6,
+    comImpacto: 3,
   },
   periodo: { de: new Date(2026, 0, 1), ate: new Date(2026, 11, 31) },
 });
@@ -471,6 +539,11 @@ ok(
   csv.includes('"Missão ""Aparecida""; Zona Leste"'),
 );
 ok("quebra de linha CRLF", csv.split("\r\n").length > 4);
+ok("NPS médio com uma casa e vírgula", csv.includes(";8,8;2;72;3"));
+ok(
+  "sem pesquisa e sem índice ficam vazios, não zero",
+  csv.includes("-45,90;;0;;0"),
+);
 
 /* O `?centro=` da lista de grupos vem da URL, que qualquer um edita. Um valor
    que não é uuid nem o sentinela chegaria ao banco como comparação com coluna
