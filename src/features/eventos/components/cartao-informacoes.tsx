@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { SeloTipoCentro } from "@/features/centros/components/selo-tipo-centro";
 import { formatarData, formatarPeriodo, paraDatetimeLocal } from "@/lib/format";
+import { paraInstante } from "@/lib/fuso";
 import type { TipoCentro } from "@/server/db/schema";
 
 import { atualizarInformacoes } from "../actions";
@@ -205,7 +206,14 @@ function Formulario({
   const dataFim = useWatch({ control, name: "dataFim" });
 
   async function enviar(dados: Saida) {
-    tratarResultado(await atualizarInformacoes(eventoId, dados), {
+    // Instante no relógio de São Paulo — ver `paraInstante`. É este cartão
+    // que se salva para marcar a ação como realizada, depois dela.
+    const comInstantes = {
+      ...dados,
+      dataInicio: paraInstante(dados.dataInicio),
+      dataFim: paraInstante(dados.dataFim),
+    };
+    tratarResultado(await atualizarInformacoes(eventoId, comInstantes), {
       setError,
       fechar,
       atualizar: () => router.refresh(),

@@ -16,11 +16,13 @@ import {
 } from "@/components/ui/popover";
 import {
   atalhosDePeriodo,
+  chaveLocal,
+  dataLocal,
   escreverPeriodo,
-  lerChaveDeDia,
+  lerDia,
   mesDeAbertura,
   rotuloDoPeriodo,
-  type Periodo,
+  type DiasDoPeriodo,
 } from "@/lib/periodo";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +39,10 @@ const classesPadrao = getDefaultClassNames();
  *
  * Os atalhos existem porque quase toda pergunta de coordenador é um deles. O
  * calendário fica para o resto, que é minoria.
+ *
+ * Trabalha em chaves de dia (`"2026-09-06"`) de ponta a ponta; `Date` só
+ * aparece na conversa com o calendário, que fala no fuso do navegador — ver
+ * `dataLocal` e `chaveLocal` em `lib/periodo.ts`.
  */
 export function SeletorPeriodo({
   base,
@@ -52,7 +58,7 @@ export function SeletorPeriodo({
   base: string;
   /** O recorte em vigor, em `YYYY-MM-DD`. Vem do servidor já resolvido: é ele
    *  quem conhece o padrão de cada tela. */
-  periodo: { de: string; ate: string } | undefined;
+  periodo: DiasDoPeriodo | undefined;
   /** A data de hoje, também do servidor. Ver `atalhosDePeriodo`: calcular isto
    *  no cliente faria o HTML do servidor e o do navegador discordarem. */
   hoje: string;
@@ -79,18 +85,19 @@ export function SeletorPeriodo({
      de pedir. */
   const [rascunho, setRascunho] = useState<DateRange | undefined>();
 
-  const referencia = lerChaveDeDia(hoje) ?? new Date();
-  const atual: Periodo | undefined = periodo
+  const referencia = lerDia(hoje) ?? chaveLocal(new Date());
+  const atual: DiasDoPeriodo | undefined = periodo
     ? {
-        de: lerChaveDeDia(periodo.de) ?? referencia,
-        ate: lerChaveDeDia(periodo.ate) ?? referencia,
+        de: lerDia(periodo.de) ?? referencia,
+        ate: lerDia(periodo.ate) ?? referencia,
       }
     : undefined;
 
   const selecionado: DateRange | undefined =
-    rascunho ?? (atual ? { from: atual.de, to: atual.ate } : undefined);
+    rascunho ??
+    (atual ? { from: dataLocal(atual.de), to: dataLocal(atual.ate) } : undefined);
 
-  function definir(novo: Periodo | undefined) {
+  function definir(novo: DiasDoPeriodo | undefined) {
     const novos = new URLSearchParams(parametros.toString());
     escreverPeriodo(novos, novo, { vazioEhTudo: vazioExplicito });
     setRascunho(undefined);
@@ -132,9 +139,7 @@ export function SeletorPeriodo({
           <div className="flex flex-col gap-1 p-2 max-sm:order-1 max-sm:border-t sm:border-e">
             {atalhos.map((atalho) => {
               const ativo =
-                !!atual &&
-                chaveIgual(atual.de, atalho.de) &&
-                chaveIgual(atual.ate, atalho.ate);
+                !!atual && atual.de === atalho.de && atual.ate === atalho.ate;
 
               return (
                 <Button
@@ -179,7 +184,10 @@ export function SeletorPeriodo({
             resetOnSelect
             onSelect={(intervalo) => {
               if (intervalo?.from && intervalo.to) {
-                definir({ de: intervalo.from, ate: intervalo.to });
+                definir({
+                  de: chaveLocal(intervalo.from),
+                  ate: chaveLocal(intervalo.to),
+                });
                 return;
               }
               setRascunho(intervalo);
@@ -205,15 +213,5 @@ export function SeletorPeriodo({
         </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-/* Compara pelo dia, não pelo instante: o recorte em vigor termina em
-   23:59:59.999 e o atalho, à meia-noite — o mesmo dia com relógios diferentes. */
-function chaveIgual(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
   );
 }

@@ -105,7 +105,7 @@ export function SeletorMes({
           <CalendarDays aria-hidden />
           <span className={cn(!atual && "text-muted-foreground")}>
             {atual
-              ? capitalizar(formatarCompetencia(new Date(atual.ano, atual.mes, 1)))
+              ? capitalizar(formatarCompetencia(valor))
               : "Escolher mês"}
           </span>
         </Button>

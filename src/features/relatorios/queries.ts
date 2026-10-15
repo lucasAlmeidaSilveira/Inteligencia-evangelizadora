@@ -248,9 +248,9 @@ const consolidar = leituraCacheada(
  * O `periodo` é eco da entrada, não resultado de consulta — por isso é
  * reanexado aqui fora, depois do cache.
  *
- * Assim ele continua sendo `Date`, que é o que `csv.ts` espera para chamar
- * `toLocaleDateString` e `toISOString`. Dentro do escopo cacheado ele voltaria
- * como string no segundo acesso, e o nome do arquivo exportado quebraria.
+ * Assim ele continua sendo `Date`, que é o que `csv.ts` espera para formatar
+ * no relógio de São Paulo. Dentro do escopo cacheado ele voltaria como string
+ * no segundo acesso, e o tipo diria outra coisa.
  */
 export async function gerarRelatorio(
   filtros: FiltrosRelatorio,

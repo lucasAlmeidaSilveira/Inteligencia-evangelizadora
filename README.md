@@ -140,6 +140,7 @@ pnpm dev
 | `pnpm admin:criar` | Cria o primeiro administrador |
 | `pnpm db:testar` · `db:testar-rls` · `db:testar-regras` | Conexão, isolamento e regras de domínio |
 | `pnpm testar:schemas` · `testar:consultas` | Validação e consultas, contra números conhecidos |
+| `pnpm testar:calendario` | Calendário e relatório anual, iguais em qualquer fuso de servidor |
 | `pnpm firebase:testar` · `firebase:importar` · `r2:testar` | Credenciais dos serviços externos |
 | `pnpm ambiente` | Mostra a qual banco o `.env.local` aponta |
 | `pnpm ambiente demo` · `ambiente producao` | Alterna entre os dois |

@@ -53,9 +53,10 @@ import {
   formatarRelativo,
 } from "@/lib/format";
 import { lerPeriodoDoPainel } from "@/features/painel/periodo";
+import { diaNoFuso, horaNoFuso } from "@/lib/fuso";
 import {
-  chaveDoDia,
   chaveDoPeriodo,
+  paraSeletor,
   rotuloDoPeriodo,
   sufixoDePeriodo,
   type Periodo,
@@ -65,7 +66,8 @@ import { requerUsuario } from "@/server/auth/sessao";
 export const metadata = { title: "Painel" };
 
 function saudacao() {
-  const hora = new Date().getHours();
+  // A hora de São Paulo, não a do servidor: em UTC, "Boa tarde" começaria às 9h.
+  const hora = Number(horaNoFuso(new Date()).slice(0, 2));
   if (hora < 12) return "Bom dia";
   if (hora < 18) return "Boa tarde";
   return "Boa noite";
@@ -356,7 +358,7 @@ export default async function PaginaPainel({
      parâmetro o painel abre no mês corrente; `undefined` aqui é "todo o
      período", pedido explicitamente. */
   const periodo = lerPeriodoDoPainel(parametros);
-  const hoje = new Date();
+  const hoje = diaNoFuso(new Date());
 
   if (missoes.length === 0) {
     return (
@@ -439,20 +441,13 @@ export default async function PaginaPainel({
           <section className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-muted-foreground text-xs font-medium">
-                {rotuloDoPeriodo(periodo, hoje, "Todo o período")}
+                {rotuloDoPeriodo(paraSeletor(periodo), hoje, "Todo o período")}
               </h2>
               {/* `hoje` vem do servidor: os atalhos do seletor são ancorados
                   nele, e o servidor renderiza em UTC enquanto o cliente está em
                   São Paulo — perto da virada do dia os dois montariam atalhos
                   diferentes para o mesmo HTML. */}
-              <FiltrosPainel
-                periodo={
-                  periodo
-                    ? { de: chaveDoDia(periodo.de), ate: chaveDoDia(periodo.ate) }
-                    : undefined
-                }
-                hoje={chaveDoDia(hoje)}
-              />
+              <FiltrosPainel periodo={paraSeletor(periodo)} hoje={hoje} />
             </div>
             <Suspense fallback={<EsqueletoMetricas quantidade={7} />}>
               <Acoes missaoId={foco.missaoId} periodo={periodo} />
@@ -498,7 +493,7 @@ export default async function PaginaPainel({
                     ("Setembro de 2026") quanto um atalho ("Últimos 30 dias"),
                     e nenhuma preposição serve aos dois. */}
                 {periodo
-                  ? `Ações apostólicas · ${rotuloDoPeriodo(periodo, hoje, "")}`
+                  ? `Ações apostólicas · ${rotuloDoPeriodo(paraSeletor(periodo), hoje, "")}`
                   : "Próximas ações apostólicas"}
               </CardTitle>
             </CardHeader>

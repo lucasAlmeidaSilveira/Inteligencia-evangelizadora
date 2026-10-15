@@ -15,6 +15,7 @@ import {
 import { grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
+import { fimDoDia, inicioDoDia } from "@/lib/fuso";
 
 /**
  * Os schemas rodam duas vezes: no cliente, antes de enviar, e no servidor,
@@ -525,7 +526,9 @@ const csv = relatorioParaCsv({
     impacto: 71.6,
     comImpacto: 3,
   },
-  periodo: { de: new Date(2026, 0, 1), ate: new Date(2026, 11, 31) },
+  // Instantes de São Paulo, como `lerPeriodo` produz: `new Date(2026, 0, 1)`
+  // seria meia-noite do fuso do processo, e em UTC ainda é 31/12/2025 lá.
+  periodo: { de: inicioDoDia("2026-01-01")!, ate: fimDoDia("2026-12-31")! },
 });
 
 // Sem o BOM, o Excel lê UTF-8 como Latin-1 e "Ação" vira "AÃ§Ã£o".

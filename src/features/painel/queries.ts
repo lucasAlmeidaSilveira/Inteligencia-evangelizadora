@@ -16,6 +16,7 @@ import {
 } from "@/server/db/schema";
 import { membrosDaMissao } from "@/features/missoes/agregados";
 import { calcularFinanceiro } from "@/features/eventos/financeiro";
+import { deslocarMes } from "@/lib/mes";
 import { competenciaDoFim, lerChaveDePeriodo } from "@/lib/periodo";
 
 /* ─── Períodos ───────────────────────────────────────────────────────────── */
@@ -350,15 +351,20 @@ export type Evolucao = {
 };
 
 /**
- * Competência (o dia 1) do mês em que o recorte termina, ou o mês corrente.
+ * Competência (o dia 1) do mês em que o recorte termina, ou o mês corrente,
+ * na forma da coluna `date`: `"2026-09-01"`.
  *
  * Ancora no fim, e não no início, porque a competência é registro mensal: um
  * recorte de março a setembro pergunta pelo estado da missão em setembro, que é
  * o mais recente que ele alcança. Ancorar no início mostraria a foto de março e
  * ignoraria seis meses do que o próprio filtro pediu.
+ *
+ * Montada da chave do mês, nunca por `toISOString()` de um `Date`: a
+ * competência é dia do calendário, e o UTC de um instante de São Paulo pode
+ * cair no último dia do mês anterior.
  */
 function competenciaDe(periodo?: string) {
-  return competenciaDoFim(lerChaveDePeriodo(periodo));
+  return `${competenciaDoFim(lerChaveDePeriodo(periodo))}-01`;
 }
 
 /**
@@ -381,15 +387,7 @@ export const obterEvolucao = leituraCacheada(
     periodo?: string,
   ): Promise<Evolucao> => {
     const fim = competenciaDe(periodo);
-    const corte = new Date(fim);
-    corte.setMonth(corte.getMonth() - meses);
-
-    /* Montada pelos componentes locais, não por `toISOString()`: a competência
-       é o dia 1 no fuso de quem registrou, e o UTC de um horário negativo cai
-       no último dia do mês anterior — a janela pegaria uma competência a mais
-       de um lado e perderia o mês escolhido do outro. */
-    const emIsoData = (data: Date) =>
-      `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-01`;
+    const corte = `${deslocarMes(fim.slice(0, 7), -meses)}-01`;
 
     const linhas = await tx
       .select({
@@ -402,8 +400,8 @@ export const obterEvolucao = leituraCacheada(
       .innerJoin(missoes, eq(missoes.id, missaoIndicadores.missaoId))
       .where(
         and(
-          gte(missaoIndicadores.competencia, emIsoData(corte)),
-          lte(missaoIndicadores.competencia, emIsoData(fim)),
+          gte(missaoIndicadores.competencia, corte),
+          lte(missaoIndicadores.competencia, fim),
           missaoId ? eq(missaoIndicadores.missaoId, missaoId) : undefined,
         ),
       )
@@ -482,8 +480,7 @@ export const obterComparativo = leituraCacheada(
     if (lista.length === 0) return { missoes: [], semRegistro: 0 };
 
     if (periodo) {
-      const fim = competenciaDe(periodo);
-      const ate = `${fim.getFullYear()}-${String(fim.getMonth() + 1).padStart(2, "0")}-01`;
+      const ate = competenciaDe(periodo);
 
       // `distinct on` pela missão, ordenado por competência decrescente: o
       // Postgres guarda a primeira linha de cada grupo, que é a mais recente.
@@ -577,6 +574,10 @@ const colunasAgenda = {
   dataFim: emIso(eventos.dataFim),
   local: eventos.local,
   status: eventos.status,
+  /* O calendário marca a ação levada ao regional, e continua marcando depois
+     que ela acontece: o destaque é sobre a ação, não sobre a data — é
+     justamente a realizada que o regional consolida. */
+  destaqueRegional: eventos.destaqueRegional,
   missaoId: eventos.missaoId,
   missaoNome: missoes.nome,
   tipoNome: tiposEvento.nome,

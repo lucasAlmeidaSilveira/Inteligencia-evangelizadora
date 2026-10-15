@@ -15,7 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatarData } from "@/lib/format";
-import { chaveDoDia, lerChaveDeDia } from "@/lib/periodo";
+import { chaveLocal, dataLocal } from "@/lib/periodo";
 import { cn } from "@/lib/utils";
 
 const classesPadrao = getDefaultClassNames();
@@ -57,8 +57,12 @@ export function SeletorQuando({
      um dia só custe um clique. Ver `escolher`. */
   const [primeiroClique, setPrimeiroClique] = useState<Date | undefined>();
 
-  const de = lerChaveDeDia(inicio.slice(0, 10));
-  const ate = lerChaveDeDia(fim.slice(0, 10));
+  // Dias como chave; o `Date` é só para o calendário, que fala no fuso do
+  // navegador — ver `dataLocal` em `lib/periodo.ts`.
+  const diaDe = inicio.slice(0, 10);
+  const diaAte = fim.slice(0, 10);
+  const de = dataLocal(diaDe);
+  const ate = dataLocal(diaAte);
   const horaDe = inicio.slice(11, 16);
   const horaAte = fim.slice(11, 16);
 
@@ -80,8 +84,8 @@ export function SeletorQuando({
     const hAte = novo.horaAte ?? horaAte;
 
     onChange({
-      inicio: dataDe ? `${chaveDoDia(dataDe)}T${hDe}` : "",
-      fim: dataAte ? `${chaveDoDia(dataAte)}T${hAte}` : "",
+      inicio: dataDe ? `${chaveLocal(dataDe)}T${hDe}` : "",
+      fim: dataAte ? `${chaveLocal(dataAte)}T${hAte}` : "",
     });
   }
 
@@ -121,9 +125,9 @@ export function SeletorQuando({
      faria o campo parecer mais complicado do que a ação é. */
   const rotulo = !de
     ? "Escolher data"
-    : !ate || chaveDoDia(de) === chaveDoDia(ate)
-      ? formatarData(de)
-      : `${formatarData(de)} a ${formatarData(ate)}`;
+    : !ate || diaDe === diaAte
+      ? formatarData(diaDe)
+      : `${formatarData(diaDe)} a ${formatarData(diaAte)}`;
 
   const diasDeDiferenca =
     de && ate

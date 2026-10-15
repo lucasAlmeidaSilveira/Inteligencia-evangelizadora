@@ -12,7 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatarData } from "@/lib/format";
-import { chaveDoDia, lerChaveDeDia } from "@/lib/periodo";
+import { chaveLocal, dataLocal } from "@/lib/periodo";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +25,8 @@ import { cn } from "@/lib/utils";
  *
  * O valor entra e sai como `"AAAA-MM-DD"`, a mesma forma que o
  * `<input type="date">` usava. É o que mantém os schemas zod e as Server
- * Actions intocados: para eles nada mudou.
+ * Actions intocados: para eles nada mudou. O `Date` só existe na conversa com
+ * o calendário, que fala no fuso do navegador — ver `dataLocal`.
  */
 export function SeletorData({
   valor,
@@ -53,7 +54,7 @@ export function SeletorData({
 }) {
   const [aberto, setAberto] = useState(false);
 
-  const data = lerChaveDeDia(valor);
+  const data = dataLocal(valor);
 
   /* Montado como lista porque os limites são independentes: `{ before:
      undefined }` não é "sem limite" para o react-day-picker, é uma
@@ -64,7 +65,7 @@ export function SeletorData({
   ];
 
   function definir(nova: Date | undefined) {
-    onChange(nova ? chaveDoDia(nova) : "");
+    onChange(nova ? chaveLocal(nova) : "");
     setAberto(false);
   }
 
@@ -86,7 +87,7 @@ export function SeletorData({
         >
           <CalendarDays aria-hidden />
           <span className={cn("tabular", !data && "text-muted-foreground")}>
-            {data ? formatarData(data) : placeholder}
+            {data ? formatarData(valor) : placeholder}
           </span>
         </Button>
       </PopoverTrigger>

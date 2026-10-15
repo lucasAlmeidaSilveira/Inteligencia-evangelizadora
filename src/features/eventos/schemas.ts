@@ -154,8 +154,9 @@ const camposInformacoes = {
    *  banco ainda impõe, por FK composta, que o centro seja daquela missão. */
   centroId: centroIdObrigatorio,
   tipoEventoId: z.uuid("Escolha o tipo da ação."),
-  // `datetime-local` entrega "2026-03-12T09:00" — sem fuso. Interpretamos no
-  // fuso do navegador, que é o de quem está cadastrando.
+  // `datetime-local` entrega "2026-03-12T09:00" — sem fuso. O formulário o
+  // converte em instante no relógio de São Paulo antes de enviar
+  // (`paraInstante`, em `lib/fuso.ts`); aqui já chega em ISO.
   dataInicio: z
     .string()
     .min(1, "Informe a data de início.")

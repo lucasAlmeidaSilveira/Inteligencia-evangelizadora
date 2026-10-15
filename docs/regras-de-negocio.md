@@ -250,6 +250,21 @@ Detalhes que sustentam esse fluxo:
 - Excluir um tipo de ação em uso é **bloqueado** — apagaria o histórico junto.
 - O calendário mensal é a consulta mais frequente do sistema; há índice
   dedicado sobre o período (`idx_eventos_periodo`).
+- **O calendário mostra toda ação que tocou o dia, em qualquer situação —
+  inclusive as já realizadas.** Não há corte por data relativa a hoje: o
+  calendário é também o histórico, e é nele que o coordenador volta a um mês
+  passado para achar o que aconteceu. A ação marcada para o regional leva a
+  estrela (★) na grade e no detalhe do dia antes e depois de acontecer — o
+  destaque é sobre a ação, não sobre a data.
+- **O dia de uma ação é o dia em São Paulo**, decidido do mesmo jeito no
+  servidor e no navegador (`src/lib/fuso.ts`). A ação das 22h de 5 de setembro
+  é de 5 de setembro, ainda que em UTC já seja dia 6.
+- **Data e hora digitadas valem no relógio de São Paulo**, e saem do navegador
+  já como instante (`paraInstante`). Enviado como `"2026-09-06T08:00"`, sem
+  fuso, o horário seria lido no relógio do servidor — UTC —, e cada salvamento
+  deslocaria a ação em três horas. O formulário de edição abre no mesmo
+  relógio (`paraDatetimeLocal`), ainda que o valor inicial seja montado no
+  servidor.
 - **Até quatro tipos de ação ganham cartão próprio no painel**
   (`tipos_evento.destacar_no_painel`, marcado em Configurações). Nasce marcado
   o SVES — Seminário de Vida no Espírito Santo —, que é o número que as missões
@@ -361,6 +376,31 @@ Prestação de contas de cada ação, linha a linha.
 - Cada papel vê o escopo que já enxerga no resto do sistema: o admin
   consolida todas as missões; os demais, a sua.
 - Exportação em CSV pela rota `/relatorios/exportar`.
+
+### Relatório anual
+
+`/relatorios/anual?ano=2026` lista toda ação apostólica do ano, uma por linha
+e agrupada por mês, com nome, categoria (o tipo de ação), período e os dias
+exatos em que aconteceu, além da situação e do destaque regional. O CSV, pela
+rota `/relatorios/anual/exportar`, tem exatamente o que está na tela. O
+consolidado soma; este lista — é o que a coordenação regional usa para
+conferir que nenhuma ação ficou de fora.
+
+- **Entra toda ação que tocou o ano**, pelo mesmo critério de sobreposição do
+  calendário: a que atravessa a virada aparece nos dois anos. O ano é contado
+  no relógio de São Paulo — a vigília das 22h de 31 de dezembro é do ano que
+  termina, mesmo já sendo 1º de janeiro em UTC.
+- **Nenhuma situação fica de fora, exceto as canceladas**, que entram só com a
+  opção marcada. A ação que aconteceu e continua "planejada" por falta de
+  atualização é justamente a que o relatório existe para não omitir; a
+  situação vai na linha, e o cartão de realizadas conta quantas faltam fechar.
+- **Os dias exatos vão listados um a um até uma semana de ação**, com o dia da
+  semana; acima disso, a faixa e a contagem. O cadastro guarda início e fim, não
+  encontros avulsos: um seminário em encontros semanais cadastrado como uma
+  ação só sai como dias seguidos. Para os dias saírem exatos, cada encontro é
+  uma ação.
+- **Os meses já encerrados sem nenhuma ação são ditos na tela.** Um mês vazio
+  é o primeiro lugar onde procurar um registro esquecido.
 
 ## Mensagens de erro
 

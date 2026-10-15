@@ -1,3 +1,6 @@
+import { formatarData } from "@/lib/format";
+import { diaNoFuso } from "@/lib/fuso";
+
 import type { Relatorio } from "./queries";
 
 /**
@@ -8,15 +11,18 @@ import type { Relatorio } from "./queries";
  * decimal com vírgula, e um BOM no início — sem ele o Excel lê UTF-8 como
  * Latin-1 e "Ação" vira "AÃ§Ã£o".
  */
-const BOM = "\uFEFF";
+export const BOM = "\uFEFF";
 
-function celula(valor: string | number) {
+/* Exportada, com o BOM, para o relat\u00F3rio anual (`anual.ts`) escrever no mesmo
+   dialeto: duas c\u00F3pias da regra de aspas divergiriam na primeira corre\u00E7\u00E3o. */
+export function celula(valor: string | number) {
   const texto = String(valor);
   return /[";\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
 }
 
 const dinheiro = (v: number) => v.toFixed(2).replace(".", ",");
-const data = (d: Date) => d.toLocaleDateString("pt-BR");
+// No relógio de São Paulo, como a tela: o arquivo sai do servidor, em UTC.
+const data = (d: Date) => formatarData(d);
 /* Vazio, não "0", quando não há informação: no Excel, zero entra na média e
    um "sem pesquisa" viraria nota mínima. */
 const nota = (v: number | null) => (v === null ? "" : v.toFixed(1).replace(".", ","));
@@ -94,6 +100,8 @@ export function relatorioParaCsv(relatorio: Relatorio) {
 }
 
 export function nomeDoArquivo(relatorio: Relatorio) {
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return `relatorio-${iso(relatorio.periodo.de)}-a-${iso(relatorio.periodo.ate)}.csv`;
+  /* Pelo dia em São Paulo, não por `toISOString`: o recorte termina em
+     23:59:59.999 de lá, que em UTC já é o dia seguinte — o arquivo de
+     setembro se chamaria "a-2026-10-01". */
+  return `relatorio-${diaNoFuso(relatorio.periodo.de)}-a-${diaNoFuso(relatorio.periodo.ate)}.csv`;
 }

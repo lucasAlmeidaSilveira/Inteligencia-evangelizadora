@@ -79,6 +79,18 @@ tela.
 9. **Foco visível nunca é removido, e cor nunca é o único diferenciador.**
    Ambos são requisito de acessibilidade, não estética.
 
+10. **Dia se decide no fuso de São Paulo, nunca no da máquina.** O servidor
+    roda em UTC e o navegador em São Paulo: um `Date` passado a um Client
+    Component é lido três horas antes — foi assim que o calendário de setembro
+    desenhou agosto, só em produção. Dia viaja como chave (`"2026-09-06"`) e se
+    calcula por `src/lib/fuso.ts`; limite de consulta é instante de São Paulo
+    (`inicioDoDia`, `fimDoDia`); tela e CSV formatam por `src/lib/format.ts`,
+    que lê o relógio de São Paulo e trata `"2026-09-01"` sem hora como dia, não
+    instante; data digitada vale no relógio de São Paulo nas duas pontas do
+    formulário (`paraDatetimeLocal` e `paraInstante`). `new Date(ano, mes,
+    dia)` e `getHours()` só no diálogo com o `react-day-picker` (`dataLocal`).
+    `pnpm testar:calendario` confere em quatro fusos.
+
 ## Convenções
 
 - **Ler em Server Component, escrever em Server Action.** Não há camada REST:

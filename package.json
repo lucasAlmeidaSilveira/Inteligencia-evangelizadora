@@ -25,6 +25,7 @@
     "db:testar-regras": "tsx src/server/db/testar-regras.ts",
     "testar:schemas": "tsx src/features/__testes__/schemas.ts",
     "testar:consultas": "tsx src/features/__testes__/consultas.ts",
+    "testar:calendario": "tsx src/features/__testes__/calendario.ts",
     "testar:impacto": "tsx src/features/__testes__/impacto.ts",
     "db:copiar": "tsx src/server/db/copiar.ts",
     "db:criar-papel": "tsx src/server/db/criar-papel.ts",

@@ -1,4 +1,4 @@
-import { inicioDoMes, fimDoMes } from "@/lib/mes";
+import { intervaloDoMes, mesNoFuso } from "@/lib/mes";
 import { lerPeriodo, type Periodo } from "@/lib/periodo";
 
 /**
@@ -19,9 +19,7 @@ import { lerPeriodo, type Periodo } from "@/lib/periodo";
 export function lerPeriodoDoPainel(
   parametros: Record<string, string | string[] | undefined>,
 ): Periodo | undefined {
-  const referencia = new Date();
-  return lerPeriodo(parametros, {
-    de: inicioDoMes(referencia),
-    ate: fimDoMes(referencia),
-  });
+  // O mês corrente é o de São Paulo: no servidor em UTC, a partir das 21h do
+  // último dia `new Date()` já estaria no mês seguinte.
+  return lerPeriodo(parametros, intervaloDoMes(mesNoFuso(new Date())));
 }

@@ -30,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { CentroParaSelecao } from "@/features/centros/queries";
+import { paraInstante } from "@/lib/fuso";
 
 import { atualizarEvento, criarEvento } from "../actions";
 import { eventoSchema, STATUS_EVENTO } from "../schemas";
@@ -84,9 +85,16 @@ export function FormularioEvento({
   }
 
   async function enviar(dados: Saida) {
+    // As datas saem como instante, no relógio de São Paulo — ver
+    // `paraInstante`. Sem isso o servidor as leria em UTC.
+    const comInstantes = {
+      ...dados,
+      dataInicio: paraInstante(dados.dataInicio),
+      dataFim: paraInstante(dados.dataFim),
+    };
     const resultado = eventoId
-      ? await atualizarEvento(eventoId, dados)
-      : await criarEvento(dados);
+      ? await atualizarEvento(eventoId, comInstantes)
+      : await criarEvento(comInstantes);
 
     if (!resultado.ok) {
       for (const [campo, mensagem] of Object.entries(resultado.campos ?? {})) {

@@ -2,21 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  eachDayOfInterval,
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  isSameDay,
-  isSameMonth,
-  isToday,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { Star } from "lucide-react";
 import * as m from "motion/react-m";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -24,32 +13,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SeloStatus } from "@/features/eventos/components/selo-status";
 import { formatarPeriodo } from "@/lib/format";
 import { CURVA, DURACAO } from "@/lib/movimento";
 import { cn } from "@/lib/utils";
 
+import { diasDaAcao, diasDaGrade, ocorreNoDia, rotuloDoDia } from "../grade";
 import type { EventoAgenda } from "../queries";
 
 const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const MAXIMO_VISIVEL = 3;
 
-/** Um evento ocupa todos os dias entre início e fim, inclusive a virada do mês. */
-function ocorreNoDia(evento: EventoAgenda, dia: Date) {
-  return (
-    new Date(evento.dataInicio) <= endOfDay(dia) &&
-    new Date(evento.dataFim) >= startOfDay(dia)
-  );
-}
-
 export function CalendarioMensal({
   mes,
+  hoje,
   eventos,
 }: {
-  /** Primeiro dia do mês exibido. */
-  mes: Date;
+  /** O mês exibido, como `"2026-09"`. Chave e não `Date`: ver `lib/fuso.ts`. */
+  mes: string;
+  /** Hoje em São Paulo, como `"2026-10-14"`. Vem do servidor pelo mesmo
+   *  motivo dos atalhos de período: perto da meia-noite, servidor e navegador
+   *  discordariam sobre qual célula acender. */
+  hoje: string;
   eventos: EventoAgenda[];
 }) {
-  const [diaAberto, setDiaAberto] = useState<Date | null>(null);
+  const [diaAberto, setDiaAberto] = useState<string | null>(null);
 
   /*
    * Direção da viagem entre meses.
@@ -57,7 +45,8 @@ export function CalendarioMensal({
    * O título muda mas a forma da grade é idêntica, então entrar pelo lado
    * certo é a única pista de que se avançou ou voltou. A direção sai da
    * comparação entre o mês novo e o anterior, e não de qual botão foi clicado:
-   * o botão voltar do navegador também troca o mês.
+   * o botão voltar do navegador também troca o mês. Chaves `"AAAA-MM"` se
+   * comparam como texto na ordem do calendário.
    *
    * Estado ajustado durante a renderização, que é o padrão para "valor
    * anterior" — em efeito, isto seria o antipadrão `set-state-in-effect` que a
@@ -67,22 +56,19 @@ export function CalendarioMensal({
    * a Motion não escreve `opacity: 0` no HTML do servidor, e a grade aparece
    * mesmo que o JavaScript não chegue.
    */
-  const [mesAnterior, setMesAnterior] = useState(mes.getTime());
+  const [mesAnterior, setMesAnterior] = useState(mes);
   const [direcao, setDirecao] = useState(0);
 
-  if (mes.getTime() !== mesAnterior) {
-    setDirecao(mes.getTime() > mesAnterior ? 1 : -1);
-    setMesAnterior(mes.getTime());
+  if (mes !== mesAnterior) {
+    setDirecao(mes > mesAnterior ? 1 : -1);
+    setMesAnterior(mes);
   }
 
-  // A grade sempre começa no domingo e termina no sábado, para as semanas
-  // ficarem completas — dias vizinhos entram esmaecidos.
-  const dias = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(mes), { locale: ptBR }),
-    end: endOfWeek(endOfMonth(mes), { locale: ptBR }),
-  });
+  const dias = diasDaGrade(mes);
 
-  const doDia = (dia: Date) => eventos.filter((e) => ocorreNoDia(e, dia));
+  // O dia de cada ação se calcula uma vez, não a cada uma das 42 células.
+  const comDias = eventos.map(diasDaAcao);
+  const doDia = (chave: string) => comDias.filter((e) => ocorreNoDia(e, chave));
   const eventosAbertos = diaAberto ? doDia(diaAberto) : [];
 
   return (
@@ -90,7 +76,7 @@ export function CalendarioMensal({
       {/* A grade inteira entra, nunca célula por célula: 42 células escalonadas
           viram uma onda atravessando a tela. */}
       <m.div
-        key={mes.toISOString()}
+        key={mes}
         initial={direcao === 0 ? false : { opacity: 0, x: 8 * direcao }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: DURACAO.chegada, ease: CURVA.chegada }}
@@ -109,34 +95,33 @@ export function CalendarioMensal({
 
         <div className="grid grid-cols-7">
           {dias.map((dia) => {
-            const doMes = isSameMonth(dia, mes);
-            const hoje = isToday(dia);
-            const lista = doDia(dia);
+            const ehHoje = dia.chave === hoje;
+            const lista = doDia(dia.chave);
             const visiveis = lista.slice(0, MAXIMO_VISIVEL);
             const restantes = lista.length - visiveis.length;
 
             return (
               <div
-                key={dia.toISOString()}
+                key={dia.chave}
                 className={cn(
                   "min-h-24 border-r border-b p-1.5 last:border-r-0 sm:min-h-28",
-                  !doMes && "bg-muted/30",
+                  !dia.doMes && "bg-muted/30",
                 )}
               >
                 <button
                   type="button"
-                  onClick={() => lista.length > 0 && setDiaAberto(dia)}
+                  onClick={() => lista.length > 0 && setDiaAberto(dia.chave)}
                   disabled={lista.length === 0}
-                  aria-label={`${dia.getDate()} — ${lista.length} ação(ões)`}
+                  aria-label={`${dia.numero} — ${lista.length} ação(ões)`}
                   className={cn(
                     "mb-1 flex size-6 items-center justify-center rounded-full text-xs tabular-nums transition-colors",
                     lista.length > 0 && "hover:bg-accent cursor-pointer",
-                    hoje && "bg-primary text-primary-foreground font-semibold",
-                    !hoje && !doMes && "text-muted-foreground/60",
-                    !hoje && doMes && "text-foreground",
+                    ehHoje && "bg-primary text-primary-foreground font-semibold",
+                    !ehHoje && !dia.doMes && "text-muted-foreground/60",
+                    !ehHoje && dia.doMes && "text-foreground",
                   )}
                 >
-                  {dia.getDate()}
+                  {dia.numero}
                 </button>
 
                 <div className="space-y-1">
@@ -144,7 +129,11 @@ export function CalendarioMensal({
                     <Link
                       key={evento.id}
                       href={`/eventos/${evento.id}`}
-                      title={evento.titulo}
+                      title={
+                        evento.destaqueRegional
+                          ? `${evento.titulo} · Destaque regional`
+                          : evento.titulo
+                      }
                       className="hover:bg-accent flex items-center gap-1 rounded px-1 py-0.5 text-left"
                     >
                       {/* A cor identifica o tipo, mas o título vem junto —
@@ -163,13 +152,26 @@ export function CalendarioMensal({
                       >
                         {evento.titulo}
                       </span>
+                      {/* A estrela, e não só o laranja, é o que distingue o
+                          destaque — e ela fica depois da data passar: a ação
+                          realizada é a que o regional consolida. Fica no fim
+                          da linha para o título truncar antes dela. */}
+                      {evento.destaqueRegional ? (
+                        <>
+                          <Star
+                            aria-hidden
+                            className="text-laranja size-2.5 shrink-0 fill-current"
+                          />
+                          <span className="sr-only">(destaque regional)</span>
+                        </>
+                      ) : null}
                     </Link>
                   ))}
 
                   {restantes > 0 ? (
                     <button
                       type="button"
-                      onClick={() => setDiaAberto(dia)}
+                      onClick={() => setDiaAberto(dia.chave)}
                       className="text-muted-foreground hover:text-foreground w-full cursor-pointer px-1 text-left text-[11px]"
                     >
                       +{restantes} {restantes === 1 ? "outra" : "outras"}
@@ -189,13 +191,7 @@ export function CalendarioMensal({
         <DialogContent className="max-h-[80dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="capitalize">
-              {diaAberto
-                ? new Intl.DateTimeFormat("pt-BR", {
-                    weekday: "long",
-                    day: "2-digit",
-                    month: "long",
-                  }).format(diaAberto)
-                : ""}
+              {diaAberto ? rotuloDoDia(diaAberto) : ""}
             </DialogTitle>
             <DialogDescription>
               {eventosAbertos.length}{" "}
@@ -238,6 +234,20 @@ export function CalendarioMensal({
                           {evento.local}
                         </p>
                       ) : null}
+                      {/* A situação diz se a ação já aconteceu; o destaque,
+                          que ela segue indo ao regional depois disso. */}
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
+                        <SeloStatus status={evento.status} />
+                        {evento.destaqueRegional ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-laranja/10 text-laranja border-laranja/25"
+                          >
+                            <Star className="fill-current" aria-hidden />
+                            Destaque regional
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -249,5 +259,3 @@ export function CalendarioMensal({
     </>
   );
 }
-
-export { isSameDay };

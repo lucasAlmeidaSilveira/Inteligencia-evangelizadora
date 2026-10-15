@@ -1,3 +1,4 @@
+import { diaNoFuso, fimDoDia, inicioDoDia } from "@/lib/fuso";
 import { chaveDoDia, lerPeriodo } from "@/lib/periodo";
 
 import type { FiltrosRelatorio } from "./queries";
@@ -10,20 +11,13 @@ const texto = (p: Parametros, chave: string) => {
 };
 
 /** O ano corrente até hoje: a prestação de contas que a tela existe para
- *  responder. Um recorte menor por padrão esconderia ações já realizadas. */
+ *  responder. Um recorte menor por padrão esconderia ações já realizadas.
+ *  Hoje e o ano são os de São Paulo — ver `lib/fuso.ts`. */
 function padraoDoAno() {
-  const hoje = new Date();
+  const hoje = diaNoFuso(new Date());
   return {
-    de: new Date(hoje.getFullYear(), 0, 1),
-    ate: new Date(
-      hoje.getFullYear(),
-      hoje.getMonth(),
-      hoje.getDate(),
-      23,
-      59,
-      59,
-      999,
-    ),
+    de: inicioDoDia(`${hoje.slice(0, 4)}-01-01`)!,
+    ate: fimDoDia(hoje)!,
   };
 }
 

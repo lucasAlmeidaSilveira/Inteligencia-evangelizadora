@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { ChartColumnIncreasing, Download, Gauge } from "lucide-react";
+import {
+  ChartColumnIncreasing,
+  ClipboardList,
+  Download,
+  Gauge,
+} from "lucide-react";
 
 import {
   AreaFiltrada,
@@ -220,6 +225,14 @@ export default async function PaginaRelatorios({
         titulo="Relatórios"
         descricao={`De ${formatarData(filtros.de)} a ${formatarData(filtros.ate)}${foco.missaoNome ? ` · ${foco.missaoNome}` : ""}.`}
       >
+        {/* Sempre visível, mesmo com o recorte vazio: o relatório anual lista
+            ação por ação e tem o próprio filtro de ano. */}
+        <Button asChild variant="outline">
+          <Link href="/relatorios/anual">
+            <ClipboardList aria-hidden />
+            Relatório anual
+          </Link>
+        </Button>
         {!vazio ? (
           <Button asChild variant="outline">
             {/* Route Handler: a mesma consulta da tela, servida como arquivo. */}

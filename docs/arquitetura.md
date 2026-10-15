@@ -156,6 +156,51 @@ build, que é o objetivo.
   página alterada deixaria as outras servindo o número anterior. O padrão é
   `revalidatePath("/missoes", "layout")` mais a raiz.
 
+## Fuso horário
+
+**O servidor roda em UTC e o navegador em São Paulo.** Em desenvolvimento as
+duas pontas estão no mesmo fuso, então o que depende disso só quebra em
+produção — sem erro, com o dado no dia errado. Foi assim que o calendário de
+setembro chegou a desenhar a grade de agosto: a página montava "1º de
+setembro, meia-noite" como `Date` no servidor, o navegador lia o mesmo instante
+como 31 de agosto às 21h, e a ação de 6 de setembro não aparecia em mês nenhum.
+
+Quatro regras, com as funções em `src/lib/fuso.ts`:
+
+- **Dia não atravessa a fronteira como `Date`.** Viaja como chave
+  (`"2026-09-06"`, `"2026-09"`), e o Client Component monta a grade a partir
+  dela — a mesma conta no HTML do servidor e na hidratação. O recorte de
+  período (`lib/periodo.ts`) segue o mesmo caminho: `?de=` e `?ate=` são
+  chaves, os atalhos do seletor são chaves, e o `Periodo` com `Date` só existe
+  na borda da consulta.
+- **"Em que dia cai este instante?" se pergunta no fuso das missões**
+  (`diaNoFuso`), nunca no da máquina. Vale para a grade, para a contagem do mês
+  e para tudo que se escreve na tela: `formatarData`, `formatarDataHora`,
+  `formatarPeriodo` e `formatarCompetencia` (`lib/format.ts`) leem o relógio
+  de São Paulo, e por isso o HTML do servidor e o do navegador dizem a mesma
+  hora. Valor só de dia (`"2026-09-01"`, o que uma coluna `date` devolve) é
+  dia do calendário, não instante: os formatadores o escrevem como está, sem
+  passar por `new Date`, que o leria como meia-noite UTC — dia 31 de agosto em
+  São Paulo.
+- **Limite de consulta é instante de São Paulo** (`inicioDoDia`, `fimDoDia`,
+  `instanteNoFuso`): o dia começa às 3h UTC, e o mês e o ano também. Com
+  meia-noite UTC, a ação das 22h do último dia do mês cairia no mês seguinte.
+- **`Date` do fuso da máquina só na conversa com o `react-day-picker`**, que
+  fala em meia-noite local: `dataLocal` e `chaveLocal` (`lib/periodo.ts`)
+  fazem a tradução para chave e são as únicas funções que leem o fuso do
+  navegador de propósito.
+
+E o caminho inverso: o texto sem fuso que o formulário de data entrega
+(`"2026-09-06T08:00"`) vira instante por `paraInstante`, **no relógio de São
+Paulo**, antes de ir à Server Action — lido lá com `new Date(texto)`, seria
+UTC. `paraDatetimeLocal`, que escreve esse texto, usa o mesmo relógio: a
+página de edição o chama no servidor e o navegador devolve o valor, e os dois
+lendo fusos diferentes deslocariam a ação três horas a cada salvamento.
+
+`pnpm testar:calendario` roda as verificações — grade, recorte, formatadores,
+relatório anual e formulário — em quatro fusos de processo e exige o mesmo
+resultado em todos.
+
 ## Desempenho
 
 O banco fica em São Paulo por um motivo medido: cada ida e volta custa ~22 ms
