@@ -49,6 +49,7 @@ Três níveis, do mais amplo ao mais restrito:
 | Convidar pessoas | ✓ (qualquer papel) | ✓ (auxiliares da sua missão) | |
 | Editar e excluir pessoas | ✓ (qualquer uma, menos ele mesmo) | ✓ (auxiliares da sua missão) | |
 | Centros, grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
+| Ler o histórico de uma ação (ninguém o edita) | ✓ | ✓ (da sua) | ✓ (da sua) |
 | Receber o lembrete bimestral de contagem dos grupos | | ✓ | ✓ |
 | Painel, calendário e relatórios | todas as missões (ou uma, em foco) | a sua | a sua |
 | Trocar a própria senha | ✓ | ✓ | ✓ |
@@ -460,6 +461,34 @@ Prestação de contas de cada ação, linha a linha.
 
 - Endereço `http` ou `https`, imposto por `CHECK url_http`.
 - Quem digita `site.com.br` quer `https` — o schema normaliza antes de validar.
+
+## Histórico da ação
+
+- **Tudo que acontece com uma ação vira uma linha em `evento_historico`**, com
+  quem fez e quando: criação, cada edição (campo a campo, com valor anterior e
+  novo), lançamento que entra ou sai, documento e link idem, pesquisa aberta,
+  encerrada, reaberta ou com link novo, e respostas excluídas na moderação.
+  A aba **Histórico** da ação mostra isso do mais recente ao mais antigo.
+- **Quem escreve são triggers do banco**, não a aplicação
+  (`drizzle/politicas.sql`, "Histórico da ação"). A alternativa — cada Server
+  Action montar o diff — dependeria de ninguém esquecer, e um caminho novo de
+  escrita abriria um buraco no histórico sem erro nenhum.
+- **Quem vê a ação vê o histórico dela**; ninguém edita nem apaga uma linha —
+  não há policy de UPDATE nem de DELETE. Histórico que se edita não é
+  histórico. As linhas só saem em cascata com a ação.
+- **O nome de quem fez é copiado no momento do registro**, não só a FK. Quem
+  saiu da equipe continua nomeado, e o responsável enxerga o nome do admin
+  que editou a ação dele mesmo sem ver a linha do admin em `usuarios`. Sem
+  pessoa no escopo (semeadura, correção via SQL) o autor aparece como
+  "Sistema".
+- **Tipo, centro e missão entram pelo nome que valia na hora** ("de Retiro
+  para SVES"), não pelo id: renomear um tipo depois não reescreve o passado.
+- Salvar sem mudar nada não gera linha. Só o prazo da pesquisa mudando (que
+  reabrir já grava junto) também não.
+- **Ações anteriores ao histórico** não têm linha de criação; a aba fecha a
+  linha do tempo com o `criado_em` da ação e avisa que o que mudou antes
+  disso não foi registrado — nunca sugere que uma ação antiga passou intocada.
+- O dia de cada entrada é o dia em São Paulo, como tudo no sistema.
 
 ## Relatórios e exportação
 

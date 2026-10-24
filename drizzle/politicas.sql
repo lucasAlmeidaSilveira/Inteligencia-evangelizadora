@@ -321,6 +321,233 @@ begin
   end loop;
 end $$;
 
+-- ─── Histórico da ação ─────────────────────────────────────────────────────
+
+/*
+ * Tudo que acontece com uma ação apostólica vira uma linha em
+ * `evento_historico` — e quem escreve são estas triggers, não a aplicação.
+ *
+ * A alternativa descartada era cada Server Action montar o diff e inserir.
+ * Custaria um SELECT a mais por edição para conhecer o valor anterior e, pior,
+ * dependeria de ninguém esquecer: um caminho de escrita novo sem a chamada
+ * abriria um buraco no histórico sem erro nenhum. Aqui o `OLD` vem de graça e
+ * não existe UPDATE em `eventos` que passe por fora.
+ *
+ * Nenhuma delas é SECURITY DEFINER: rodam como `ie_app`, dentro do escopo da
+ * requisição, e o INSERT em `evento_historico` passa pela policy da tabela —
+ * que herda o acesso da ação, exatamente como os outros filhos. Quem está no
+ * escopo é lido por ie.usuario_id(); o nome vem da própria linha em
+ * `usuarios`, que todo mundo enxerga de si mesmo (policy `usuarios_leitura`).
+ *
+ * Cada trigger de filho confere se a ação ainda existe antes de gravar. Sem
+ * isso, apagar uma ação falharia: o ON DELETE CASCADE remove lançamentos,
+ * documentos e links depois da própria ação, as triggers tentariam registrar
+ * "lançamento excluído" apontando para uma ação que já se foi, e o FK
+ * recusaria a exclusão inteira.
+ */
+
+/* Nome de quem está no escopo. Nulo sem pessoa — semeadura, correção via SQL. */
+create or replace function ie.usuario_nome() returns text
+  language sql stable
+  as $$ select u.nome from ie.usuarios u where u.id = ie.usuario_id() $$;
+
+/*
+ * O histórico guarda o *nome* do tipo, do centro e da missão, não o id: "de
+ * Retiro para SVES" é o que se lê, e é o nome que valia naquele momento — um
+ * tipo renomeado depois não reescreve o passado. Se o nome não está ao alcance
+ * (centro de outra missão, para um admin que moveu a ação), fica o id, que é
+ * melhor que nada.
+ */
+create or replace function ie.nome_no_historico(coluna text, valor jsonb) returns jsonb
+  language sql stable
+  as $$
+    select case
+      when valor is null or jsonb_typeof(valor) = 'null' then valor
+      else to_jsonb(coalesce(
+        case coluna
+          when 'tipo_evento_id' then (select nome from ie.tipos_evento where id = (valor #>> '{}')::uuid)
+          when 'centro_id'      then (select nome from ie.centros_evangelizacao where id = (valor #>> '{}')::uuid)
+          when 'missao_id'      then (select nome from ie.missoes where id = (valor #>> '{}')::uuid)
+        end,
+        valor #>> '{}'))
+    end
+  $$;
+
+/*
+ * A própria ação: criação e cada edição, campo a campo.
+ *
+ * O diff sai de `to_jsonb(OLD)` contra `to_jsonb(NEW)`, sem lista de colunas
+ * escrita à mão — uma coluna nova em `eventos` entra no histórico sozinha.
+ * Ficam de fora `atualizado_em` (muda em toda edição, não diz nada) e o que
+ * não muda nunca (`id`, `criado_em`, `criado_por`). Edição que não alterou
+ * valor algum — salvar o formulário sem mexer em nada — não vira linha.
+ */
+create or replace function ie.registrar_historico_evento() returns trigger
+  language plpgsql
+  as $$
+  declare
+    antes jsonb;
+    depois jsonb;
+    chave text;
+    de jsonb;
+    para jsonb;
+    alteracoes jsonb := '[]'::jsonb;
+  begin
+    if tg_op = 'INSERT' then
+      insert into ie.evento_historico (evento_id, tipo, usuario_id, usuario_nome)
+      values (new.id, 'acao_criada', ie.usuario_id(), ie.usuario_nome());
+      return null;
+    end if;
+
+    antes  := to_jsonb(old) - array['id', 'criado_em', 'criado_por', 'atualizado_em'];
+    depois := to_jsonb(new) - array['id', 'criado_em', 'criado_por', 'atualizado_em'];
+
+    for chave in select jsonb_object_keys(depois) order by 1 loop
+      de   := antes -> chave;
+      para := depois -> chave;
+      if de is distinct from para then
+        if chave in ('tipo_evento_id', 'centro_id', 'missao_id') then
+          de   := ie.nome_no_historico(chave, de);
+          para := ie.nome_no_historico(chave, para);
+        end if;
+        alteracoes := alteracoes
+          || jsonb_build_object('campo', chave, 'de', de, 'para', para);
+      end if;
+    end loop;
+
+    if alteracoes = '[]'::jsonb then
+      return null;
+    end if;
+
+    insert into ie.evento_historico (evento_id, tipo, usuario_id, usuario_nome, detalhes)
+    values (
+      new.id, 'acao_alterada', ie.usuario_id(), ie.usuario_nome(),
+      jsonb_build_object('alteracoes', alteracoes)
+    );
+    return null;
+  end
+  $$;
+
+/* Lançamentos, documentos e links: entrou ou saiu. Uma função para os três,
+   decidindo pelo nome da tabela — o que muda é só o que vale guardar de cada
+   um para a frase da tela. */
+create or replace function ie.registrar_historico_filho() returns trigger
+  language plpgsql
+  as $$
+  declare
+    linha record;
+    evento uuid;
+    tipo ie.tipo_historico;
+    detalhes jsonb;
+  begin
+    if tg_op = 'DELETE' then linha := old; else linha := new; end if;
+    evento := linha.evento_id;
+
+    -- Cascata da exclusão da ação: a ação já não existe, nada a registrar.
+    if not exists (select 1 from ie.eventos e where e.id = evento) then
+      return null;
+    end if;
+
+    case tg_table_name
+      when 'evento_lancamentos' then
+        tipo := case tg_op when 'INSERT' then 'lancamento_adicionado' else 'lancamento_excluido' end;
+        detalhes := jsonb_build_object(
+          'descricao', linha.descricao,
+          'tipo', linha.tipo::text,
+          -- Como texto, não número: dinheiro atravessa JSON sem perder centavos.
+          'valor', linha.valor::text,
+          'data', linha.data::text);
+      when 'evento_documentos' then
+        tipo := case tg_op when 'INSERT' then 'documento_adicionado' else 'documento_excluido' end;
+        detalhes := jsonb_build_object('nome', linha.nome);
+      when 'evento_links' then
+        tipo := case tg_op when 'INSERT' then 'link_adicionado' else 'link_excluido' end;
+        detalhes := jsonb_build_object('titulo', linha.titulo, 'url', linha.url);
+    end case;
+
+    insert into ie.evento_historico (evento_id, tipo, usuario_id, usuario_nome, detalhes)
+    values (evento, tipo, ie.usuario_id(), ie.usuario_nome(), detalhes);
+    return null;
+  end
+  $$;
+
+/*
+ * A pesquisa: aberta, encerrada, reaberta ou com link novo. Só o prazo
+ * mudando (reabrir já grava o prazo junto) não é acontecimento próprio.
+ * Reiniciar a pesquisa aparece como "link renovado" mais "N respostas
+ * excluídas", abaixo — duas linhas que contam a história inteira.
+ */
+create or replace function ie.registrar_historico_pesquisa() returns trigger
+  language plpgsql
+  as $$
+  declare
+    tipo ie.tipo_historico;
+  begin
+    if tg_op = 'INSERT' then
+      tipo := 'pesquisa_aberta';
+    elsif old.aberta is distinct from new.aberta then
+      tipo := case when new.aberta then 'pesquisa_reaberta' else 'pesquisa_encerrada' end;
+    elsif old.token is distinct from new.token then
+      tipo := 'pesquisa_link_renovado';
+    else
+      return null;
+    end if;
+
+    insert into ie.evento_historico (evento_id, tipo, usuario_id, usuario_nome, detalhes)
+    values (
+      new.evento_id, tipo, ie.usuario_id(), ie.usuario_nome(),
+      jsonb_build_object('encerra_em', to_jsonb(new.encerra_em))
+    );
+    return null;
+  end
+  $$;
+
+/*
+ * Respostas só saem — moderação de uma, ou todas no reinício. Trigger por
+ * comando, não por linha: reiniciar uma pesquisa com trezentas respostas vira
+ * "300 respostas excluídas", não trezentas linhas iguais.
+ */
+create or replace function ie.registrar_historico_respostas() returns trigger
+  language plpgsql
+  as $$
+  begin
+    insert into ie.evento_historico (evento_id, tipo, usuario_id, usuario_nome, detalhes)
+    select r.evento_id, 'respostas_excluidas', ie.usuario_id(), ie.usuario_nome(),
+           jsonb_build_object('quantidade', count(*))
+      from removidas r
+     where exists (select 1 from ie.eventos e where e.id = r.evento_id)
+     group by r.evento_id;
+    return null;
+  end
+  $$;
+
+drop trigger if exists trg_eventos_historico on ie.eventos;
+create trigger trg_eventos_historico
+  after insert or update on ie.eventos
+  for each row execute function ie.registrar_historico_evento();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['evento_lancamentos', 'evento_documentos', 'evento_links'] loop
+    execute format('drop trigger if exists trg_%1$s_historico on ie.%1$I', t);
+    execute format(
+      'create trigger trg_%1$s_historico after insert or delete on ie.%1$I
+       for each row execute function ie.registrar_historico_filho()', t);
+  end loop;
+end $$;
+
+drop trigger if exists trg_evento_pesquisas_historico on ie.evento_pesquisas;
+create trigger trg_evento_pesquisas_historico
+  after insert or update on ie.evento_pesquisas
+  for each row execute function ie.registrar_historico_pesquisa();
+
+drop trigger if exists trg_evento_respostas_historico on ie.evento_respostas;
+create trigger trg_evento_respostas_historico
+  after delete on ie.evento_respostas
+  referencing old table as removidas
+  for each statement execute function ie.registrar_historico_respostas();
+
 -- ─── Habilitar RLS ─────────────────────────────────────────────────────────
 /*
  * FORCE cobre o caso de a aplicação conectar como dona das tabelas. Não
@@ -334,7 +561,8 @@ begin
     'grupos_oracao', 'grupo_responsaveis', 'grupo_contagens',
     'lembretes_contagem', 'notificacoes', 'tipos_evento',
     'categorias_financeiras', 'eventos', 'evento_lancamentos',
-    'evento_documentos', 'evento_links', 'evento_pesquisas', 'evento_respostas'
+    'evento_documentos', 'evento_links', 'evento_pesquisas', 'evento_respostas',
+    'evento_historico'
   ] loop
     execute format('alter table ie.%I enable row level security', t);
     execute format('alter table ie.%I force row level security', t);
@@ -514,6 +742,25 @@ create policy evento_respostas_leitura on ie.evento_respostas for select
 drop policy if exists evento_respostas_moderar on ie.evento_respostas;
 create policy evento_respostas_moderar on ie.evento_respostas for delete
   using (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+/*
+ * Histórico: quem vê a ação lê o que aconteceu com ela. Só a trigger insere —
+ * e insere no escopo de quem editou, então a policy de INSERT herda o acesso
+ * da ação como os demais filhos. Não há policy de UPDATE nem de DELETE:
+ * histórico que se edita não é histórico. As linhas só saem em cascata com a
+ * ação.
+ */
+drop policy if exists evento_historico_leitura on ie.evento_historico;
+create policy evento_historico_leitura on ie.evento_historico for select
+  using (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+drop policy if exists evento_historico_registrar on ie.evento_historico;
+create policy evento_historico_registrar on ie.evento_historico for insert
+  with check (exists (
     select 1 from ie.eventos e
     where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
 

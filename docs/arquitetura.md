@@ -165,7 +165,7 @@ src/
 │  ├─ (publico)/pesquisa/    pesquisa de satisfação por token, sem login
 │  ├─ (app)/                 área autenticada (shell + páginas)
 │  │  ├─ missoes/            missões, centros, grupos de oração, indicadores
-│  │  ├─ eventos/            ações apostólicas: geral, financeiro, documentos, links
+│  │  ├─ eventos/            ações apostólicas: geral, financeiro, documentos, links, pesquisa, histórico
 │  │  ├─ calendario/         grade mensal
 │  │  ├─ relatorios/         consolidações + exportação CSV
 │  │  ├─ config/             tipos, categorias e usuários (só admin)
@@ -204,6 +204,14 @@ build, que é o objetivo.
   na listagem, na visão geral e no painel ao mesmo tempo; revalidar só a
   página alterada deixaria as outras servindo o número anterior. O padrão é
   `revalidatePath("/missoes", "layout")` mais a raiz.
+- **O histórico da ação é escrito por triggers**, não pela Server Action
+  (`drizzle/politicas.sql`, "Histórico da ação"). O `OLD` da trigger dá o
+  diff de graça, e não existe UPDATE em `eventos` que passe por fora — ao
+  contrário de uma chamada que cada action novo precisaria lembrar de fazer.
+  As triggers rodam como `ie_app`, no escopo da requisição: o INSERT em
+  `evento_historico` passa pela policy da tabela como qualquer filho da ação,
+  e `ie.usuario_id()` diz quem fez. Nenhuma é `SECURITY DEFINER`. A forma do
+  `detalhes` e a tradução para frase vivem em `features/eventos/historico.ts`.
 
 ## Rotinas agendadas e e-mail
 

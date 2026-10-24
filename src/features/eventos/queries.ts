@@ -17,6 +17,7 @@ import {
   categoriasFinanceiras,
   centrosEvangelizacao,
   eventoDocumentos,
+  eventoHistorico,
   eventoLancamentos,
   eventoLinks,
   eventos,
@@ -40,6 +41,7 @@ import {
   somarLancamentos,
   type Financeiro,
 } from "./financeiro";
+import type { DetalhesHistorico, EntradaHistorico } from "./historico";
 import { calcularImpacto, type EntradaDoImpacto } from "./impacto";
 
 /**
@@ -445,6 +447,38 @@ export const obterEventoCompleto = cache(
 export type EventoCompleto = NonNullable<
   Awaited<ReturnType<typeof obterEventoCompleto>>
 >;
+
+/**
+ * O histórico de uma ação, do mais recente ao mais antigo.
+ *
+ * Fora de `obterEventoCompleto` de propósito: aquela consulta alimenta todas
+ * as abas, e o histórico só interessa a uma — carregá-lo em toda visita ao
+ * detalhe seria pagar por linhas que ninguém está lendo. Mesma etiqueta da
+ * ação: toda escrita já passa por `revalidarEvento`, então a linha que a
+ * trigger acabou de gravar aparece na volta sem ninguém lembrar que a aba
+ * existe.
+ */
+export const listarHistorico = leituraCacheada(
+  "historico-evento",
+  async (tx, eventoId: string): Promise<EntradaHistorico[]> =>
+    tx
+      .select({
+        id: eventoHistorico.id,
+        tipo: eventoHistorico.tipo,
+        usuarioNome: eventoHistorico.usuarioNome,
+        detalhes: sql<DetalhesHistorico>`${eventoHistorico.detalhes}`,
+        registradoEm: emIso(eventoHistorico.registradoEm),
+      })
+      .from(eventoHistorico)
+      .where(eq(eventoHistorico.eventoId, eventoId))
+      // O id desempata o que aconteceu no mesmo instante — dentro de uma
+      // transação, `now()` é igual para todas as linhas.
+      .orderBy(desc(eventoHistorico.registradoEm), desc(eventoHistorico.id)),
+  {
+    etiquetas: ([eventoId]) => [ETIQUETAS.evento(eventoId)],
+    revalidar: CINCO_MINUTOS,
+  },
+);
 
 export type EventoListado = Awaited<ReturnType<typeof listarEventos>>[number];
 export type EventoDetalhe = NonNullable<Awaited<ReturnType<typeof obterEvento>>>;

@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   numeric,
   pgSchema,
   smallint,
@@ -750,6 +751,83 @@ export const eventoRespostas = ie.table(
   ],
 );
 
+/*
+ * O que pode acontecer com uma ação e merece ficar registrado. Um valor por
+ * acontecimento, e não um texto livre: é o enum que deixa a tela escolher
+ * ícone e frase sem adivinhar a partir de uma string.
+ */
+export const tipoHistoricoEnum = ie.enum("tipo_historico", [
+  "acao_criada",
+  "acao_alterada",
+  "lancamento_adicionado",
+  "lancamento_excluido",
+  "documento_adicionado",
+  "documento_excluido",
+  "link_adicionado",
+  "link_excluido",
+  "pesquisa_aberta",
+  "pesquisa_encerrada",
+  "pesquisa_reaberta",
+  "pesquisa_link_renovado",
+  "respostas_excluidas",
+]);
+
+/**
+ * Histórico de uma ação: uma linha por acontecimento, com quem fez e quando.
+ *
+ * Quem escreve aqui são triggers (ver "Histórico da ação" em
+ * drizzle/politicas.sql), nunca a aplicação. A alternativa descartada — cada
+ * Server Action montar o diff e inserir — exigiria um SELECT a mais por
+ * edição para conhecer o valor anterior e, pior, dependeria de ninguém
+ * esquecer: um caminho de escrita novo sem a chamada deixaria um buraco no
+ * histórico sem erro nenhum. No trigger o `OLD` vem de graça e não há como
+ * uma escrita em `eventos` passar por fora.
+ *
+ * `usuario_nome` é cópia do nome no momento do registro, e não só a FK: quem
+ * saiu da equipe continua nomeado no histórico, e um responsável enxerga o
+ * nome do admin que editou a ação dele mesmo sem ver a linha do admin em
+ * `usuarios`. Nulo quando não havia pessoa no escopo (semeadura, correção
+ * via SQL).
+ *
+ * `detalhes` depende do tipo: em `acao_alterada` é a lista de campos com
+ * valor anterior e novo; nos demais, o suficiente para dizer o que foi
+ * ("lançamento 'Aluguel do salão', R$ 350,00"). A forma exata está em
+ * `features/eventos/historico.ts`.
+ *
+ * Linhas nunca são editadas nem apagadas pela aplicação — não há policy de
+ * UPDATE nem de DELETE. Caem em cascata com a ação.
+ */
+export const eventoHistorico = ie.table(
+  "evento_historico",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventoId: uuid("evento_id")
+      .notNull()
+      .references(() => eventos.id, { onDelete: "cascade" }),
+    tipo: tipoHistoricoEnum("tipo").notNull(),
+    usuarioId: uuid("usuario_id").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    usuarioNome: text("usuario_nome"),
+    detalhes: jsonb("detalhes").notNull().default({}),
+    /**
+     * `clock_timestamp()` e não `now()`: `now()` é o instante em que a
+     * transação começou, igual para tudo que ela grava — e reiniciar a
+     * pesquisa grava duas linhas na mesma transação ("link renovado" e "N
+     * respostas excluídas") que empatariam e sairiam em ordem aleatória. O
+     * relógio de parede as separa na ordem em que de fato aconteceram.
+     */
+    registradoEm: timestamp("registrado_em", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    // A aba pergunta "o que aconteceu com esta ação, do mais recente ao mais
+    // antigo" — e nada além disso.
+    index("idx_historico_evento_data").on(t.eventoId, t.registradoEm),
+  ],
+);
+
 /* ═════════════════════════════ Relacionamentos ════════════════════════════ */
 
 export const usuariosRelations = relations(usuarios, ({ one }) => ({
@@ -859,7 +937,22 @@ export const eventosRelations = relations(eventos, ({ one, many }) => ({
   links: many(eventoLinks),
   pesquisa: one(eventoPesquisas),
   respostas: many(eventoRespostas),
+  historico: many(eventoHistorico),
 }));
+
+export const eventoHistoricoRelations = relations(
+  eventoHistorico,
+  ({ one }) => ({
+    evento: one(eventos, {
+      fields: [eventoHistorico.eventoId],
+      references: [eventos.id],
+    }),
+    usuario: one(usuarios, {
+      fields: [eventoHistorico.usuarioId],
+      references: [usuarios.id],
+    }),
+  }),
+);
 
 export const eventoLancamentosRelations = relations(
   eventoLancamentos,
@@ -936,7 +1029,9 @@ export type EventoDocumento = typeof eventoDocumentos.$inferSelect;
 export type EventoLink = typeof eventoLinks.$inferSelect;
 export type EventoPesquisa = typeof eventoPesquisas.$inferSelect;
 export type EventoResposta = typeof eventoRespostas.$inferSelect;
+export type EventoHistorico = typeof eventoHistorico.$inferSelect;
 export type Papel = (typeof papelEnum.enumValues)[number];
 export type StatusEvento = (typeof statusEventoEnum.enumValues)[number];
+export type TipoHistorico = (typeof tipoHistoricoEnum.enumValues)[number];
 export type TipoCentro = (typeof tipoCentroEnum.enumValues)[number];
 export type CanalLembrete = (typeof canalLembreteEnum.enumValues)[number];

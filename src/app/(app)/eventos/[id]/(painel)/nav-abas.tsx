@@ -41,6 +41,9 @@ export function NavAbas({
       href: `${base}/pesquisa`,
       contagem: contagens.respostas,
     },
+    /* Sem contagem: "47 alterações" não ajuda ninguém a decidir se abre a aba,
+       ao contrário de "3 documentos". */
+    { rotulo: "Histórico", href: `${base}/historico`, contagem: undefined },
   ];
 
   return (

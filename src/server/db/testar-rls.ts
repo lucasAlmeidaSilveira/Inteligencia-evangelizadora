@@ -850,6 +850,94 @@ async function principal() {
         )
       ).rowCount === 1,
     );
+
+    // ─── Histórico da ação ──────────────────────────────────────────────────
+    /*
+     * As triggers de `politicas.sql` escrevem em `evento_historico` no escopo
+     * de quem editou. O que se prova: a linha nasce com o nome certo e o diff
+     * certo; herda o acesso da ação (Carla não vê); ninguém edita nem apaga;
+     * e apagar a ação não tropeça nas triggers dos filhos durante a cascata —
+     * que é a falha que só apareceria em produção, ao excluir uma ação com
+     * lançamentos.
+     */
+    console.log("\nHistórico da ação");
+    await escopo(c, { usuarioId: bruno, papel: "auxiliar", missaoId: norte });
+
+    await c.query(
+      "update eventos set titulo = 'Evento do Norte, revisto', local = 'Salão' where id = $1",
+      [eventoNorte],
+    );
+    const { rows: historico } = await c.query<{
+      tipo: string;
+      usuario_nome: string | null;
+      detalhes: { alteracoes?: { campo: string; de: unknown; para: unknown }[] };
+    }>(
+      `select tipo, usuario_nome, detalhes from evento_historico
+        where evento_id = $1 and tipo = 'acao_alterada'
+        order by registrado_em desc limit 1`,
+      [eventoNorte],
+    );
+    const campos = historico[0]?.detalhes.alteracoes?.map((a) => a.campo).sort();
+    conferir(
+      "edição de Bruno vira linha com o nome dele e os dois campos alterados",
+      historico[0]?.usuario_nome === "Bruno Auxiliar" &&
+        campos?.join(",") === "local,titulo",
+    );
+
+    const antes = (
+      await c.query("select count(*)::int as n from evento_historico where evento_id = $1", [eventoNorte])
+    ).rows[0].n as number;
+    await c.query("update eventos set titulo = 'Evento do Norte, revisto' where id = $1", [eventoNorte]);
+    conferir(
+      "salvar sem mudar nada não gera linha",
+      (
+        await c.query("select count(*)::int as n from evento_historico where evento_id = $1", [eventoNorte])
+      ).rows[0].n === antes,
+    );
+
+    conferir(
+      "Bruno não edita o histórico",
+      (
+        await c.query(
+          "update evento_historico set usuario_nome = 'Forjado' where evento_id = $1",
+          [eventoNorte],
+        )
+      ).rowCount === 0,
+    );
+    conferir(
+      "nem apaga",
+      (
+        await c.query("delete from evento_historico where evento_id = $1", [eventoNorte])
+      ).rowCount === 0,
+    );
+
+    await escopo(c, { usuarioId: carla, papel: "responsavel", missaoId: sul });
+    conferir(
+      "Carla (Sul) não vê o histórico do Norte",
+      (
+        await c.query("select 1 from evento_historico where evento_id = $1", [eventoNorte])
+      ).rowCount === 0,
+    );
+
+    /* A cascata: ação com lançamento, link e pesquisa — cada filho tem trigger
+       de DELETE que tentaria registrar numa ação que já se foi. Num savepoint,
+       para o rollback final continuar encontrando o cenário. */
+    await escopo(c, { usuarioId: ana, papel: "responsavel", missaoId: norte });
+    await c.query("savepoint apagar_acao");
+    await c.query(
+      `insert into evento_lancamentos (evento_id, tipo, descricao, valor, data)
+       values ($1, 'despesa', 'Som', 100, current_date)`,
+      [eventoNorte],
+    );
+    await c.query(
+      "insert into evento_links (evento_id, titulo, url) values ($1, 'Fotos', 'https://exemplo.local')",
+      [eventoNorte],
+    );
+    conferir(
+      "apaga ação com lançamento, link, pesquisa e histórico, sem travar nas triggers",
+      !(await deveRejeitar(c, "delete from eventos where id = $1", [eventoNorte])),
+    );
+    await c.query("rollback to savepoint apagar_acao");
   } finally {
     await c.query("rollback").catch(() => undefined);
     c.release();
