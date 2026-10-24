@@ -102,8 +102,7 @@ export function SinoNotificacoes({
 
         {itens.length === 0 ? (
           <p className="text-muted-foreground px-4 py-8 text-center text-sm">
-            Nenhuma notificação por enquanto. Os lembretes de contagem dos
-            grupos de oração aparecem aqui.
+            Nenhuma notificação por enquanto.
           </p>
         ) : (
           <ScrollArea className="max-h-[60dvh]">
