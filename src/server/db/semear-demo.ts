@@ -2,7 +2,7 @@ import { config } from "dotenv";
 
 config({ path: ".env.local" });
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { Pool } from "pg";
 
@@ -105,6 +105,15 @@ const DESPESAS = [
   "Alimentação", "Aluguel do espaço", "Transporte da equipe",
   "Material gráfico", "Som e iluminação", "Decoração", "Combustível",
 ];
+const COMENTARIOS = [
+  "Fui tocado pela pregação. Voltarei com minha família.",
+  "Poderia ter mais tempo de adoração.",
+  "Organização impecável, equipe muito acolhedora.",
+  "O som estava baixo no fundo do salão.",
+  "Primeira vez que participo e já quero servir na próxima.",
+  "Faltou água no intervalo.",
+  "A música levou todo mundo. Obrigado!",
+];
 
 const LINKS = [
   { titulo: "Formulário de inscrição", url: "https://forms.gle/exemplo-inscricao" },
@@ -129,6 +138,7 @@ async function principal() {
 
     // Limpa antes: a demonstração precisa ser reproduzível, não acumulativa.
     for (const t of [
+      "evento_respostas", "evento_pesquisas",
       "evento_links", "evento_documentos", "evento_lancamentos", "eventos",
       "notificacoes", "lembretes_contagem", "grupo_contagens",
       "grupo_responsaveis", "grupos_oracao", "centros_evangelizacao",
@@ -164,7 +174,7 @@ async function principal() {
     const proximoNome = () => NOMES[nomeAtual++ % NOMES.length];
 
     const hoje = new Date();
-    const totais = { centros: 0, grupos: 0, pastores: 0, contagens: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
+    const totais = { centros: 0, grupos: 0, pastores: 0, contagens: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, pesquisas: 0, respostas: 0, usuarios: 1 };
 
     for (const [indice, missao] of MISSOES.entries()) {
       const slug = missao.nome.toLowerCase().normalize("NFD")
@@ -374,6 +384,31 @@ async function principal() {
         );
         totais.eventos++;
 
+        // Pesquisa pública em metade do que aconteceu, aberta ou já encerrada,
+        // com respostas concentradas no alto da escala: a demonstração precisa
+        // mostrar os três estados do card e a nota da pesquisa vencendo a
+        // manual.
+        if (status === "realizado" && aleatorio() > 0.5) {
+          const { rows: [pesquisa] } = await c.query<{ id: string }>(
+            `insert into evento_pesquisas (evento_id, token, aberta, encerra_em)
+             values ($1, $2, $3, $4::timestamptz + interval '14 days') returning id`,
+            [evento.id, randomBytes(32).toString("base64url"), aleatorio() > 0.3, fim.toISOString()],
+          );
+          totais.pesquisas++;
+
+          for (let r = 0; r < inteiro(8, 60); r++) {
+            const nota = Math.min(10, Math.max(0, Math.round(8.5 + (aleatorio() - 0.5) * 5)));
+            await c.query(
+              `insert into evento_respostas (pesquisa_id, evento_id, nota, comentario, respondida_em)
+               values ($1, $2, $3, $4, $5::timestamptz + ($6 || ' hours')::interval)`,
+              [pesquisa.id, evento.id, nota,
+               aleatorio() > 0.7 ? escolher(COMENTARIOS) : null,
+               fim.toISOString(), inteiro(1, 72)],
+            );
+            totais.respostas++;
+          }
+        }
+
         // Financeiro só para o que já aconteceu.
         if (status === "realizado") {
           for (let l = 0; l < inteiro(2, 4); l++) {
@@ -421,7 +456,8 @@ async function principal() {
     console.log(`  ${totais.competencias} competências registradas (12 meses por missão)`);
     console.log(`  ${totais.eventos} ações apostólicas`);
     console.log(`  ${totais.lancamentos} lançamentos financeiros`);
-    console.log(`  ${totais.links} links úteis\n`);
+    console.log(`  ${totais.links} links úteis`);
+    console.log(`  ${totais.pesquisas} pesquisas de satisfação com ${totais.respostas} respostas\n`);
   } catch (erro) {
     await c.query("rollback").catch(() => undefined);
     throw erro;

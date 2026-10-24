@@ -15,6 +15,11 @@ import { MetricaCompacta } from "@/components/padroes/metrica-compacta";
 import { Input } from "@/components/ui/input";
 import { formatarNumero } from "@/lib/format";
 
+import {
+  descreverFonte,
+  type Satisfacao,
+} from "@/features/pesquisas/satisfacao";
+
 import { atualizarParticipacao } from "../actions";
 import { formatarNps } from "../impacto";
 import { calcularParticipacao, formatarTaxa } from "../participacao";
@@ -29,9 +34,12 @@ export type NumerosDaParticipacao = Saida;
 export function CartaoParticipacao({
   eventoId,
   valores,
+  satisfacao,
 }: {
   eventoId: string;
   valores: NumerosDaParticipacao;
+  /** A nota efetiva — da pesquisa quando há respostas, manual se não. */
+  satisfacao: Satisfacao;
 }) {
   return (
     <CartaoEditavel titulo="Participação">
@@ -40,6 +48,7 @@ export function CartaoParticipacao({
           <Formulario
             eventoId={eventoId}
             valores={valores}
+            temPesquisa={satisfacao.fonte === "pesquisa"}
             fechar={fechar}
             /* `key` pelos valores: reabrir o card depois de gravar precisa
                recarregar os defaults do react-hook-form, que só lê
@@ -47,14 +56,20 @@ export function CartaoParticipacao({
             key={JSON.stringify(valores)}
           />
         ) : (
-          <Leitura valores={valores} />
+          <Leitura valores={valores} satisfacao={satisfacao} />
         )
       }
     </CartaoEditavel>
   );
 }
 
-function Leitura({ valores }: { valores: NumerosDaParticipacao }) {
+function Leitura({
+  valores,
+  satisfacao,
+}: {
+  valores: NumerosDaParticipacao;
+  satisfacao: Satisfacao;
+}) {
   const participacao = calcularParticipacao(valores);
 
   return (
@@ -87,13 +102,14 @@ function Leitura({ valores }: { valores: NumerosDaParticipacao }) {
               : undefined
           }
         />
-        {/* Nota de 0 a 10 — a mesma escala que a missão aplicou na pesquisa.
-            Vazia é "sem pesquisa", nunca zero: zero seria a pior nota. */}
+        {/* Nota de 0 a 10, e de onde veio: as respostas da pesquisa pública
+            têm prioridade sobre a nota digitada. Vazia é "sem pesquisa",
+            nunca zero: zero seria a pior nota. */}
         <MetricaCompacta
           rotulo="Satisfação (NPS)"
-          valor={formatarNps(valores.nps)}
-          detalhe={valores.nps === null ? "Sem pesquisa" : "de 0 a 10"}
-          tom={valores.nps === null ? "atenuado" : "normal"}
+          valor={formatarNps(satisfacao.nota)}
+          detalhe={descreverFonte(satisfacao)}
+          tom={satisfacao.nota === null ? "atenuado" : "normal"}
         />
       </div>
 
@@ -116,10 +132,12 @@ function Leitura({ valores }: { valores: NumerosDaParticipacao }) {
 function Formulario({
   eventoId,
   valores,
+  temPesquisa,
   fechar,
 }: {
   eventoId: string;
   valores: NumerosDaParticipacao;
+  temPesquisa: boolean;
   fechar: () => void;
 }) {
   const router = useRouter();
@@ -228,7 +246,11 @@ function Formulario({
 
         <Campo
           rotulo="Satisfação (NPS)"
-          ajuda="Nota média de 0 a 10. Vazio se não houve pesquisa."
+          ajuda={
+            temPesquisa
+              ? "Nota manual. Enquanto houver respostas na pesquisa, elas têm prioridade."
+              : "Nota média de 0 a 10. Vazio se não houve pesquisa."
+          }
           erro={errors.nps?.message}
         >
           {(props) => (

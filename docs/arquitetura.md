@@ -76,7 +76,10 @@ Cinco detalhes que sustentam o isolamento e não devem ser mexidos sem entender:
 
 **As funções das policies** (`ie.eh_admin()`, `ie.tem_acesso_missao()`,
 `ie.pode_editar_missao()`…) são a tradução SQL da tabela de permissões em
-`regras-de-negocio.md`. Duas são `SECURITY DEFINER`, e só duas.
+`regras-de-negocio.md`. Quatro são `SECURITY DEFINER`, e só quatro: duas da
+sessão, descritas a seguir, e duas da pesquisa pública, descritas na seção
+seguinte. Todas têm o `EXECUTE` revogado de `PUBLIC` — a instância é
+compartilhada com outro sistema — e `pnpm db:testar-rls` confere isso.
 
 `ie.missao_pelo_token()` existe porque sem ela há recursão — a policy de
 `usuarios` chamaria uma função que consulta `usuarios`, disparando a policy de
@@ -92,6 +95,47 @@ A superfície das duas é mínima: nenhuma aceita parâmetro — agem sempre sob
 linha do `firebase_uid` que o escopo já identificou — e ambas têm `search_path`
 fixo, porque uma função `SECURITY DEFINER` com `search_path` aberto pode ser
 induzida a chamar objetos plantados por quem a invoca.
+
+### A rota pública: pesquisa de satisfação
+
+`/pesquisa/<token>` é a única página sem login. Vive no grupo `(publico)`, fora
+do `(app)` que chama `requerUsuario()`, e está na lista de rotas públicas do
+`middleware.ts` (casamento de fronteira, não `startsWith` cru). O que a protege:
+
+1. **Escopo próprio, sem pessoa.** `comPesquisa()` em `escopo.ts` abre a
+   transação com `app.papel = 'pesquisa'` e `app.pesquisa_token = <token>`, e
+   os quatro valores de pessoa vazios. `comEscopo()` continua sem conhecer esse
+   papel (`PAPEIS` tem três), então nenhum caminho de sessão chega ao banco
+   como pesquisa — e toda transação escreve os cinco settings, para nada de um
+   caminho sobrar no outro.
+2. **O papel `pesquisa` não tem policy em tabela alguma.** Todo SELECT, INSERT,
+   UPDATE ou DELETE que ele tente devolve zero linhas ou é recusado. O que ele
+   alcança são duas funções `SECURITY DEFINER` em `politicas.sql`:
+   `ie.pesquisa_do_token()` (título da ação e se a pesquisa aceita respostas) e
+   `ie.responder_pesquisa(nota, comentario)` (a única porta de entrada de uma
+   resposta, com os limites de inundação dentro dela). Ambas exigem o papel
+   `pesquisa` **e** escopo sem pessoa; um coordenador logado que as chamasse
+   não obtém nada. A alternativa descartada — policies condicionadas ao token —
+   exporia a linha inteira de `eventos` ao escopo público.
+3. **Nada de sessão no caminho.** A página não lê cookie, não chama
+   `usuarioAtual()` (que carimbaria último acesso) nem `leituraCacheada` (que
+   redirecionaria ao login). É `force-dynamic`: sem isso o Next guardaria a
+   primeira renderização e a pesquisa seguiria "aberta" depois de encerrada.
+4. **Filtros baratos antes do banco** (`src/server/pesquisa.ts`): zod e
+   honeypot, um limitador em memória por token e por instância, e um semáforo
+   de duas transações públicas simultâneas — o pool tem cinco conexões,
+   divididas com os coordenadores. São filtros; a garantia é a função SQL.
+5. **Cabeçalhos** em `next.config.ts` para `/pesquisa/*`: sem moldura
+   (`X-Frame-Options`, `frame-ancestors 'none'`), sem Referer (o token está na
+   URL), sem indexação. A action pública revalida só a etiqueta da ação
+   respondida — expirar listas e painel a cada resposta deixaria qualquer
+   visitante esvaziar o cache de todas as missões.
+
+O cenário "Pesquisa pública" de `pnpm db:testar-rls` prova os dois lados:
+tabelas fechadas para o papel, funções respondendo só ao token certo, aberto e
+no prazo, e o limite de 120 respostas por minuto. Ele também confere que **toda
+tabela do schema** está com RLS forçado — uma tabela nova fora do array de
+`politicas.sql` nasceria sem RLS, e nenhuma outra verificação pegaria.
 
 `politicas.sql` é **idempotente de propósito**: reaplicado a cada
 `pnpm db:migrate`, acompanha mudanças de schema sem exigir uma migration por
@@ -118,6 +162,7 @@ no meio da cascata e recusaria — o `db:testar-rls` cobre isso.
 src/
 ├─ app/
 │  ├─ (auth)/login/          entrada
+│  ├─ (publico)/pesquisa/    pesquisa de satisfação por token, sem login
 │  ├─ (app)/                 área autenticada (shell + páginas)
 │  │  ├─ missoes/            missões, centros, grupos de oração, indicadores
 │  │  ├─ eventos/            ações apostólicas: geral, financeiro, documentos, links

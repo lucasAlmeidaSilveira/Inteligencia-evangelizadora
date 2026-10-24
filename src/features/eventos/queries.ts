@@ -25,6 +25,16 @@ import {
 } from "@/server/db/schema";
 
 import {
+  comentariosDoEvento,
+  pesquisaDoEvento,
+  respostasPorEvento,
+} from "@/features/pesquisas/queries";
+import {
+  resumirSatisfacao,
+  type AgregadoRespostas,
+} from "@/features/pesquisas/satisfacao";
+
+import {
   calcularFinanceiro,
   SEM_MOVIMENTO,
   somarLancamentos,
@@ -33,19 +43,25 @@ import {
 import { calcularImpacto, type EntradaDoImpacto } from "./impacto";
 
 /**
- * Anexa financeiro e índice de impacto a uma linha de evento.
+ * Anexa financeiro, satisfação e índice de impacto a uma linha de evento.
  *
- * O índice é calculado na leitura, como o saldo: coluna gravada seria estado
- * que diverge dos lançamentos e da participação na primeira edição.
+ * Tudo calculado na leitura, como o saldo: coluna gravada seria estado que
+ * diverge dos lançamentos, das respostas e da participação na primeira
+ * edição. A satisfação efetiva é a da pesquisa quando há respostas, e a nota
+ * manual caso contrário — e é essa nota efetiva que entra no índice, para o
+ * card e o índice nunca discordarem.
  */
 function comImpacto<E extends Omit<EntradaDoImpacto, "financeiro">>(
   evento: E,
   financeiro: Financeiro,
+  respostas?: AgregadoRespostas,
 ) {
+  const satisfacao = resumirSatisfacao(respostas, evento.nps);
   return {
     ...evento,
     financeiro,
-    impacto: calcularImpacto({ ...evento, financeiro }),
+    satisfacao,
+    impacto: calcularImpacto({ ...evento, nps: satisfacao.nota, financeiro }),
   };
 }
 
@@ -146,13 +162,18 @@ export const listarEventos = leituraCacheada(
       .where(condicoes.length ? and(...condicoes) : undefined)
       .orderBy(desc(eventos.dataInicio));
 
-    const financeiro = await financeiroPorEvento(
-      tx,
-      lista.map((e) => e.id),
-    );
+    const ids = lista.map((e) => e.id);
+    const [financeiro, respostas] = await Promise.all([
+      financeiroPorEvento(tx, ids),
+      respostasPorEvento(tx, ids),
+    ]);
 
     return lista.map((evento) =>
-      comImpacto(evento, financeiro.get(evento.id) ?? SEM_MOVIMENTO),
+      comImpacto(
+        evento,
+        financeiro.get(evento.id) ?? SEM_MOVIMENTO,
+        respostas.get(evento.id),
+      ),
     );
   },
   { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
@@ -183,8 +204,15 @@ export const obterEvento = cache(
 
       if (!evento) return null;
 
-      const financeiro = await financeiroPorEvento(tx, [evento.id]);
-      return comImpacto(evento, financeiro.get(evento.id) ?? SEM_MOVIMENTO);
+      const [financeiro, respostas] = await Promise.all([
+        financeiroPorEvento(tx, [evento.id]),
+        respostasPorEvento(tx, [evento.id]),
+      ]);
+      return comImpacto(
+        evento,
+        financeiro.get(evento.id) ?? SEM_MOVIMENTO,
+        respostas.get(evento.id),
+      );
     },
     {
       etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
@@ -385,12 +413,26 @@ export const obterEventoCompleto = cache(
         .where(eq(eventoLinks.eventoId, id))
         .orderBy(asc(eventoLinks.ordem), asc(eventoLinks.titulo));
 
+      // A pesquisa e as respostas entram na mesma transação: o card de
+      // satisfação e o índice saem do mesmo instante que o resto da tela.
+      const [respostas, pesquisa, comentarios] = await Promise.all([
+        respostasPorEvento(tx, [id]),
+        pesquisaDoEvento(tx, id),
+        comentariosDoEvento(tx, id),
+      ]);
+
       // Já temos os lançamentos: somar em memória evita mais uma ida ao banco.
       return {
-        evento: comImpacto(evento, somarLancamentos(lancamentos)),
+        evento: comImpacto(
+          evento,
+          somarLancamentos(lancamentos),
+          respostas.get(id),
+        ),
         lancamentos,
         documentos,
         links,
+        pesquisa,
+        comentarios,
       };
     },
     {

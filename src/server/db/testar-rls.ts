@@ -36,18 +36,22 @@ async function escopo(
     /* Só o bloco do último acesso precisa: `ie.registrar_acesso()` encontra a
        pessoa por aqui, não pelo usuario_id. */
     firebaseUid?: string;
+    /** Só o bloco da pesquisa pública: é a credencial do papel `pesquisa`. */
+    pesquisaToken?: string;
   },
 ) {
   await c.query(
     `select set_config('app.usuario_id', $1, true),
             set_config('app.papel', $2, true),
             set_config('app.missao_id', $3, true),
-            set_config('app.firebase_uid', $4, true)`,
+            set_config('app.firebase_uid', $4, true),
+            set_config('app.pesquisa_token', $5, true)`,
     [
       valores.usuarioId ?? "",
       valores.papel ?? "",
       valores.missaoId ?? "",
       valores.firebaseUid ?? "",
+      valores.pesquisaToken ?? "",
     ],
   );
 }
@@ -100,6 +104,75 @@ async function principal() {
       process.exit(1);
     }
 
+    /*
+     * Toda tabela do schema precisa estar na lista de FORCE de politicas.sql.
+     * Uma tabela nova fora dela nasce sem RLS nenhuma — ie_app já tem todos
+     * os verbos por default privileges — e nenhuma verificação abaixo pegaria,
+     * porque todas olham tabelas que já estão na lista. Esta pega a classe
+     * inteira do esquecimento.
+     */
+    const { rows: semForce } = await c.query<{ relname: string }>(
+      `select c.relname
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'ie' and c.relkind = 'r'
+          and c.relname <> '__migrations'
+          and not c.relforcerowsecurity
+        order by 1`,
+    );
+    conferir(
+      `toda tabela do schema tem RLS forçado${
+        semForce.length ? ` (faltam: ${semForce.map((r) => r.relname).join(", ")})` : ""
+      }`,
+      semForce.length === 0,
+    );
+
+    /*
+     * As SECURITY DEFINER são as únicas portas que ignoram as policies.
+     * Precisam ter o search_path fixo e não podem estar executáveis por
+     * PUBLIC — esta instância é compartilhada com outro sistema. A consulta
+     * pega **todas** as definer do schema, não uma lista: uma função nova
+     * esquecida no bloco de `revoke` apareceria aqui.
+     *
+     * `proacl is null` é o padrão do Postgres — e o padrão é PUBLIC poder
+     * executar. Por isso nulo conta como público.
+     */
+    const { rows: definer } = await c.query<{
+      proname: string;
+      search_path_fixo: boolean;
+      publico: boolean;
+      dona_ignora_rls: boolean;
+    }>(
+      `select p.proname,
+              coalesce(array_to_string(p.proconfig, ',') like '%search_path=%', false) as search_path_fixo,
+              (p.proacl is null
+               or exists (select 1 from unnest(p.proacl) a where a::text like '=X/%')) as publico,
+              (r.rolbypassrls or r.rolsuper) as dona_ignora_rls
+         from pg_proc p
+         join pg_roles r on r.oid = p.proowner
+        where p.pronamespace = 'ie'::regnamespace and p.prosecdef
+        order by 1`,
+    );
+    conferir(
+      `as quatro funções SECURITY DEFINER existem (${definer.map((f) => f.proname).join(", ")})`,
+      definer.length === 4,
+    );
+    conferir(
+      "todas têm search_path fixo",
+      definer.every((f) => f.search_path_fixo),
+    );
+    conferir(
+      "nenhuma delas é executável por PUBLIC",
+      definer.every((f) => !f.publico),
+    );
+    /* Sob FORCE RLS a função só lê e escreve nas tabelas porque a dona ignora
+       o RLS. Se um dia o schema for criado por um papel comum, a pesquisa
+       pública para de gravar em silêncio — esta linha é o que avisa. */
+    conferir(
+      "a dona das funções ignora RLS (é o que as faz atravessar o FORCE)",
+      definer.every((f) => f.dona_ignora_rls),
+    );
+
     // ─── Cenário ────────────────────────────────────────────────────────────
     await escopo(c, { papel: "admin" });
 
@@ -137,12 +210,14 @@ async function principal() {
     );
     const [centroNorte, centroSul] = centros.map((x) => x.id);
 
-    await c.query(
+    const { rows: eventosCriados } = await c.query<{ id: string }>(
       `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
        values ($1, $4, $2, 'Evento do Norte', now(), now() + interval '2 hours'),
-              ($3, $5, $2, 'Evento do Sul',   now(), now() + interval '2 hours')`,
+              ($3, $5, $2, 'Evento do Sul',   now(), now() + interval '2 hours')
+       returning id`,
       [norte, tipos[0].id, sul, centroNorte, centroSul],
     );
+    const [eventoNorte, eventoSul] = eventosCriados.map((e) => e.id);
 
     // ─── Estrutura: um responsável por missão ───────────────────────────────
     console.log("\nEstrutura de papéis");
@@ -538,6 +613,243 @@ async function principal() {
       "não enxerga nem as tabelas de configuração",
       (await c.query("select id from tipos_evento")).rowCount === 0,
     );
+
+    // ─── Pesquisa pública ───────────────────────────────────────────────────
+    /*
+     * O papel `pesquisa` é o único sem sessão que chega ao banco. Ele não tem
+     * policy em tabela alguma: o que alcança são duas funções SECURITY
+     * DEFINER, e é isso que se prova aqui — pelos dois lados. As tabelas
+     * continuam fechadas, e as funções só respondem ao token certo, aberto e
+     * no prazo.
+     */
+    console.log("\nPesquisa pública (papel pesquisa)");
+    const TOKEN_NORTE = "a".repeat(43);
+    const TOKEN_SUL = "b".repeat(43);
+    const TOKEN_ERRADO = "c".repeat(43);
+
+    await escopo(c, { papel: "admin" });
+    const { rows: pesquisas } = await c.query<{ id: string }>(
+      `insert into evento_pesquisas (evento_id, token, aberta, encerra_em) values
+         ($1, $3, true,  now() + interval '14 days'),
+         ($2, $4, false, now() + interval '14 days')
+       returning id`,
+      [eventoNorte, eventoSul, TOKEN_NORTE, TOKEN_SUL],
+    );
+    const pesquisaNorte = pesquisas[0].id;
+    const pesquisaSul = pesquisas[1].id;
+
+    /* Com ids literais, de propósito: um `insert … select` de uma tabela que
+       o papel não enxerga insere zero linhas e "passa" sem o RLS ser sequer
+       consultado. A prova precisa de uma linha concreta sendo recusada. */
+    const INSERIR_RESPOSTA = `insert into evento_respostas (pesquisa_id, evento_id, nota)
+                              values ($1, $2, 10)`;
+
+    await escopo(c, { papel: "pesquisa", pesquisaToken: TOKEN_NORTE });
+
+    for (const tabela of [
+      "eventos",
+      "evento_pesquisas",
+      "evento_respostas",
+      "usuarios",
+      "missoes",
+      "tipos_evento",
+    ]) {
+      conferir(
+        `não enxerga linha alguma de ${tabela}`,
+        (await c.query(`select 1 from ${tabela}`)).rowCount === 0,
+      );
+    }
+
+    conferir(
+      "não insere resposta direto na tabela",
+      await deveRejeitar(c, INSERIR_RESPOSTA, [pesquisaNorte, eventoNorte]),
+    );
+    conferir(
+      "não altera a pesquisa",
+      (await c.query("update evento_pesquisas set aberta = false")).rowCount ===
+        0,
+    );
+    conferir(
+      "não apaga pesquisa nem resposta",
+      (await c.query("delete from evento_pesquisas")).rowCount === 0 &&
+        (await c.query("delete from evento_respostas")).rowCount === 0,
+    );
+
+    const publica = await c.query<{ titulo: string; aceita: boolean }>(
+      "select * from ie.pesquisa_do_token()",
+    );
+    conferir(
+      "pesquisa_do_token() devolve só título e se aceita — e nada mais",
+      publica.rowCount === 1 &&
+        publica.rows[0].titulo === "Evento do Norte" &&
+        publica.rows[0].aceita === true &&
+        Object.keys(publica.rows[0]).sort().join(",") === "aceita,titulo",
+    );
+
+    const respondida = await c.query<{ evento_id: string }>(
+      "select ie.responder_pesquisa(9, 'Ótima ação') as evento_id",
+    );
+    conferir(
+      "responder_pesquisa() grava e devolve a ação do token",
+      respondida.rows[0]?.evento_id === eventoNorte,
+    );
+    await c.query("select ie.responder_pesquisa(8, '   ')");
+    conferir(
+      "nota fora da escala é recusada",
+      await deveRejeitar(c, "select ie.responder_pesquisa(11, null)"),
+    );
+    conferir(
+      "comentário acima de 500 caracteres é recusado",
+      await deveRejeitar(c, "select ie.responder_pesquisa(8, $1)", [
+        "x".repeat(501),
+      ]),
+    );
+
+    /* `now()` é fixo dentro da transação: todas as respostas caem na mesma
+       janela de 60 segundos, e a 120ª chamada total (2 já gravadas + 118)
+       passa, a 121ª não. */
+    let aceitas = 2;
+    let recusouNaSeguinte = false;
+    for (let i = 0; i < 125; i++) {
+      const rejeitou = await deveRejeitar(
+        c,
+        "select ie.responder_pesquisa(7, null)",
+      );
+      if (!rejeitou) aceitas++;
+      else {
+        recusouNaSeguinte = aceitas === 120;
+        break;
+      }
+    }
+    conferir(
+      `limite de 120 respostas por minuto (aceitou ${aceitas})`,
+      aceitas === 120 && recusouNaSeguinte,
+    );
+
+    await escopo(c, { papel: "pesquisa", pesquisaToken: TOKEN_ERRADO });
+    conferir(
+      "token desconhecido não vê pesquisa",
+      (await c.query("select 1 from ie.pesquisa_do_token()")).rowCount === 0,
+    );
+    conferir(
+      "token desconhecido não responde",
+      await deveRejeitar(c, "select ie.responder_pesquisa(10, null)"),
+    );
+
+    await escopo(c, { papel: "pesquisa", pesquisaToken: TOKEN_SUL });
+    const encerrada = await c.query<{ aceita: boolean }>(
+      "select aceita from ie.pesquisa_do_token()",
+    );
+    conferir(
+      "pesquisa encerrada ainda se identifica, como 'não aceita'",
+      encerrada.rowCount === 1 && encerrada.rows[0].aceita === false,
+    );
+    conferir(
+      "mas não aceita resposta",
+      await deveRejeitar(c, "select ie.responder_pesquisa(10, null)"),
+    );
+
+    // Aberta, mas com o prazo vencido: o `aberta = true` sozinho não basta.
+    await escopo(c, { papel: "admin" });
+    await c.query(
+      "update evento_pesquisas set aberta = true, encerra_em = now() - interval '1 second' where id = $1",
+      [pesquisaSul],
+    );
+    await escopo(c, { papel: "pesquisa", pesquisaToken: TOKEN_SUL });
+    conferir(
+      "aberta mas vencida também não aceita",
+      (await c.query<{ aceita: boolean }>("select aceita from ie.pesquisa_do_token()"))
+        .rows[0]?.aceita === false &&
+        (await deveRejeitar(c, "select ie.responder_pesquisa(10, null)")),
+    );
+
+    // Token certo com pessoa no escopo, ou papel de pessoa com token: nada.
+    await escopo(c, {
+      usuarioId: ana,
+      papel: "responsavel",
+      missaoId: norte,
+      pesquisaToken: TOKEN_NORTE,
+    });
+    conferir(
+      "responsável com token no escopo não responde pela função",
+      await deveRejeitar(c, "select ie.responder_pesquisa(10, null)"),
+    );
+    await escopo(c, {
+      usuarioId: ana,
+      papel: "pesquisa",
+      pesquisaToken: TOKEN_NORTE,
+    });
+    conferir(
+      "papel pesquisa com usuário no escopo não responde",
+      await deveRejeitar(c, "select ie.responder_pesquisa(10, null)"),
+    );
+
+    // ─── Coordenadores e as respostas ───────────────────────────────────────
+    console.log("\nCoordenadores e a pesquisa");
+    await escopo(c, { usuarioId: carla, papel: "responsavel", missaoId: sul });
+    conferir(
+      "Carla (Sul) não vê respostas do Norte",
+      (await c.query("select 1 from evento_respostas")).rowCount === 0,
+    );
+    conferir(
+      "Carla não vê o token da pesquisa do Norte",
+      (
+        await c.query("select 1 from evento_pesquisas where token = $1", [
+          TOKEN_NORTE,
+        ])
+      ).rowCount === 0,
+    );
+
+    await escopo(c, { usuarioId: ana, papel: "responsavel", missaoId: norte });
+    conferir(
+      `Ana (Norte) vê as respostas da sua ação (${aceitas})`,
+      (await c.query("select 1 from evento_respostas")).rowCount === aceitas,
+    );
+    conferir(
+      "comentário só de espaços foi gravado como nulo",
+      (
+        await c.query(
+          "select 1 from evento_respostas where nota = 8 and comentario is null",
+        )
+      ).rowCount === 1,
+    );
+    conferir(
+      "Ana não insere resposta à mão",
+      await deveRejeitar(c, INSERIR_RESPOSTA, [pesquisaNorte, eventoNorte]),
+    );
+    conferir(
+      "Ana não altera uma resposta",
+      (await c.query("update evento_respostas set nota = 10")).rowCount === 0,
+    );
+    conferir(
+      "Ana modera: apaga uma resposta",
+      (
+        await c.query(
+          `delete from evento_respostas where id = (
+             select id from evento_respostas limit 1)`,
+        )
+      ).rowCount === 1,
+    );
+
+    await escopo(c, { usuarioId: bruno, papel: "auxiliar", missaoId: norte });
+    conferir(
+      "Bruno (auxiliar) não abre pesquisa para ação de outra missão",
+      await deveRejeitar(
+        c,
+        `insert into evento_pesquisas (evento_id, token, encerra_em)
+         values ($1, $2, now() + interval '7 days')`,
+        [eventoSul, "d".repeat(43)],
+      ),
+    );
+    conferir(
+      "Bruno troca o link da pesquisa da própria missão",
+      (
+        await c.query(
+          "update evento_pesquisas set token = $1 where evento_id = $2",
+          ["e".repeat(43), eventoNorte],
+        )
+      ).rowCount === 1,
+    );
   } finally {
     await c.query("rollback").catch(() => undefined);
     c.release();
@@ -548,7 +860,9 @@ async function principal() {
     console.error(`\n✗ ${falhas} verificação(ões) falharam.\n`);
     process.exit(1);
   }
-  console.log("\n✓ Três níveis de acesso confirmados no banco.\n");
+  console.log(
+    "\n✓ Três níveis de acesso e o escopo da pesquisa pública confirmados no banco.\n",
+  );
 }
 
 principal().catch((erro) => {

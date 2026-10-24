@@ -101,11 +101,15 @@ export function LinhaEvento({
           ) : null}
 
           {/* NPS e índice só quando existem: a lista é de relance, e um
-              travessão em toda linha antiga seria ruído sem informação. */}
-          {evento.nps !== null ? (
+              travessão em toda linha antiga seria ruído sem informação. A
+              nota é a efetiva — da pesquisa, quando há respostas. */}
+          {evento.satisfacao.nota !== null ? (
             <span className="flex items-center gap-1.5">
               <ThumbsUp className="size-3.5" aria-hidden />
-              NPS {formatarNps(evento.nps)}
+              NPS {formatarNps(evento.satisfacao.nota)}
+              {evento.satisfacao.fonte === "pesquisa"
+                ? ` · ${evento.satisfacao.respostas} resp.`
+                : ""}
             </span>
           ) : null}
 

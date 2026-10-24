@@ -12,6 +12,8 @@ import {
 } from "@/server/db/schema";
 import { calcularFinanceiro, paraCentavos } from "@/features/eventos/financeiro";
 import { calcularImpacto } from "@/features/eventos/impacto";
+import { respostasPorEvento } from "@/features/pesquisas/queries";
+import { resumirSatisfacao } from "@/features/pesquisas/satisfacao";
 
 export type FiltrosRelatorio = {
   de: Date;
@@ -125,11 +127,25 @@ const consolidar = leituraCacheada(
       }
     }
 
-    /* O índice de cada ação sai da mesma função que a tela da ação usa: o
-       relatório nunca pode dizer um número e a ação, outro. Calculado uma vez
-       por evento e reaproveitado nos dois agrupamentos. */
+    /* A nota de satisfação e o índice de cada ação saem das mesmas funções que
+       a tela da ação usa: o relatório nunca pode dizer um número e a ação,
+       outro. A nota efetiva é a da pesquisa quando há respostas, e a manual
+       caso contrário. Calculado uma vez por evento e reaproveitado nos dois
+       agrupamentos. */
+    const respostas =
+      lista.length > 0
+        ? await respostasPorEvento(
+            tx,
+            lista.map((e) => e.id),
+          )
+        : new Map();
+
+    const notaPorEvento = new Map<string, number | null>();
     const impactoPorEvento = new Map<string, number | null>();
     for (const evento of lista) {
+      const nota = resumirSatisfacao(respostas.get(evento.id), evento.nps).nota;
+      notaPorEvento.set(evento.id, nota);
+
       const dinheiro = financeiroPorEvento.get(evento.id);
       const receitas = (dinheiro?.receitas ?? 0) / 100;
       const despesas = (dinheiro?.despesas ?? 0) / 100;
@@ -140,7 +156,7 @@ const consolidar = leituraCacheada(
           participantesTotal: evento.participantes,
           participantesNovos: evento.participantesNovos,
           participantesPermaneceram: evento.participantesPermaneceram,
-          nps: evento.nps,
+          nps: nota,
           orcamentoPrevisto: evento.orcamentoPrevisto,
           financeiro: { receitas, despesas, saldo: receitas - despesas },
         }).indice,
@@ -189,8 +205,8 @@ const consolidar = leituraCacheada(
       atual.receitas += dinheiro?.receitas ?? 0;
       atual.despesas += dinheiro?.despesas ?? 0;
 
-      const nps = evento.nps === null ? null : Number(evento.nps);
-      if (nps !== null && Number.isFinite(nps)) {
+      const nps = notaPorEvento.get(evento.id) ?? null;
+      if (nps !== null) {
         atual.somaNps += nps;
         atual.comNps += 1;
       }

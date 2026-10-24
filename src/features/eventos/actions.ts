@@ -1,11 +1,15 @@
 "use server";
 
-import { revalidatePath, updateTag } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 
 import { tipoPodeSerVisto } from "@/lib/documentos";
-import { comUsuario, falha, sucesso, traduzirErroDeBanco } from "@/server/dados";
-import { ETIQUETAS } from "@/server/etiquetas";
+import {
+  camposComErro,
+  comUsuario,
+  falha,
+  sucesso,
+  traduzirErroDeBanco,
+} from "@/server/dados";
 import type { Transacao } from "@/server/db/index";
 import {
   eventoDocumentos,
@@ -23,6 +27,7 @@ import {
   urlDeUpload,
 } from "@/server/armazenamento/r2";
 
+import { revalidarEvento as revalidar } from "./revalidacao";
 import {
   eventoSchema,
   informacoesSchema,
@@ -32,30 +37,6 @@ import {
   participacaoSchema,
   textosSchema,
 } from "./schemas";
-
-/*
- * Duas camadas, porque são dois caches distintos.
- *
- * `updateTag` expira o que `leituraCacheada` guardou no servidor; os
- * `revalidatePath` cuidam do Router Cache do navegador, que guarda a tela já
- * renderizada e não conhece etiqueta alguma. Só um dos dois deixaria metade do
- * caminho servindo o número anterior.
- *
- * `updateTag` e não `revalidateTag`: quem acabou de lançar uma despesa precisa
- * ver o saldo novo na volta, não o anterior servido como stale enquanto revalida.
- */
-function revalidar(eventoId?: string, missaoId?: string) {
-  updateTag(ETIQUETAS.eventos);
-  if (eventoId) updateTag(ETIQUETAS.evento(eventoId));
-  updateTag(ETIQUETAS.painel);
-
-  revalidatePath("/eventos", "layout");
-  if (eventoId) revalidatePath(`/eventos/${eventoId}`, "layout");
-  if (missaoId) revalidatePath(`/missoes/${missaoId}`, "layout");
-  revalidatePath("/missoes", "layout");
-  revalidatePath("/calendario");
-  revalidatePath("/");
-}
 
 /**
  * Confirma que o evento existe e é acessível, devolvendo a missão dona.
@@ -69,17 +50,6 @@ async function missaoDoEvento(tx: Transacao, eventoId: string) {
     .where(eq(eventos.id, eventoId))
     .limit(1);
   return evento?.missaoId ?? null;
-}
-
-function camposComErro(erro: {
-  issues: { path: PropertyKey[]; message: string }[];
-}) {
-  const campos: Record<string, string> = {};
-  for (const problema of erro.issues) {
-    const caminho = problema.path.map(String).join(".");
-    if (caminho && !campos[caminho]) campos[caminho] = problema.message;
-  }
-  return campos;
 }
 
 /* ═══════════════════════════════ Evento ═══════════════════════════════════ */

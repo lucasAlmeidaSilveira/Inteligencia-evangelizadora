@@ -327,6 +327,47 @@ Detalhes que sustentam esse fluxo:
 - Preenche-se junto com a participação — no formulário e no card da visão
   geral — porque é no mesmo momento, depois da ação, que se contam presentes e
   se lê a pesquisa.
+- **A pesquisa pública tem prioridade.** Quando a ação tem respostas na
+  pesquisa de satisfação (abaixo), a nota efetiva é a média delas, e a tela
+  diz a fonte: "37 respostas" ou "informada manualmente". O campo manual
+  continua existindo para pesquisa feita no papel e para ação antiga.
+
+### Pesquisa de satisfação
+
+A **primeira rota sem login** do sistema. O coordenador abre a pesquisa dentro
+da ação, o sistema gera um link secreto (`/pesquisa/<token>`) e um QR code, e os
+participantes respondem no celular: uma nota de 0 a 10 e um comentário
+opcional. Nenhum dado pessoal é pedido.
+
+- **Uma pesquisa por ação** (`evento_pesquisas.evento_id` único). "Gerar novo
+  link" troca o token da mesma pesquisa: o link antigo morre na hora e as
+  respostas já recebidas ficam.
+- **O token é a única credencial** do participante: 32 bytes aleatórios em
+  base64url (43 caracteres), gerado só no servidor. Quem tem o link responde.
+- **Anônima e repetível.** Resposta duplicada da mesma pessoa é aceita, por
+  decisão de produto. O que o banco limita é inundação: no máximo **120
+  respostas por minuto** por pesquisa e **10 000 no total**, impostos dentro de
+  `ie.responder_pesquisa()`.
+- **Encerramento.** Ao abrir, a pesquisa vale até catorze dias depois do fim da
+  ação (ou sete dias a partir de agora, se a ação já passou há mais tempo). O
+  coordenador pode encerrar antes e reabrir — reabrir dá mais catorze dias.
+  Vencida ou encerrada, a página pública diz "Esta pesquisa foi encerrada".
+- **Leitura:** a média de 0 a 10 é o número principal; a distribuição por nota
+  e a frase "X% deram 9 ou 10 · Y% deram 6 ou menos" são apoio. Não se mostra o
+  NPS clássico (−100 a 100): a régua que o coordenador conhece é a nota.
+- **Pesquisa envenenada se zera.** Como o link é projetado num salão, ele
+  vira público para quem estava lá; se alguém o inundar de notas falsas,
+  "Zerar respostas" apaga todas as respostas da ação, troca o link e reabre
+  por catorze dias — apagar uma a uma não resolveria, e resposta sem
+  comentário nem aparece na lista.
+- **Moderação é apagar.** Um comentário ofensivo sai com a resposta inteira
+  (nota incluída); não existe "editar" uma resposta, que seria adulterar a
+  pesquisa. Só quem vê a ação apaga — quem está logado nunca insere resposta.
+- **O título da ação aparece na página pública**, e nada mais da missão.
+- **O que o caminho público alcança no banco** é descrito em `arquitetura.md`:
+  o papel `pesquisa` não tem policy em tabela alguma e só executa duas funções.
+- Listas, relatórios e painel refletem respostas novas no prazo normal do cache
+  (até cinco minutos); a página da própria ação, na hora.
 
 ### Índice de Impacto Evangelizador
 
@@ -341,7 +382,7 @@ Quatro componentes, cada um também de 0 a 100, combinados por média ponderada:
 | Componente | Peso | Como se calcula |
 |---|---|---|
 | Permanência | 35% | Permaneceram ÷ presentes. O fruto que a missão mede, por isso o maior peso. |
-| Satisfação | 25% | NPS × 10. |
+| Satisfação | 25% | Nota efetiva × 10 — a média da pesquisa quando há respostas, a nota manual se não. |
 | Engajamento | 20% | Presentes ÷ inscritos, limitado a 100% — quem se comprometeu veio. |
 | Financeiro | 20% | A **pior** de duas notas: cobertura (receitas ÷ despesas, 100 se nada foi gasto) e aderência ao orçamento (100 dentro do previsto; perde um ponto por ponto percentual de estouro; sem orçamento, 100). |
 

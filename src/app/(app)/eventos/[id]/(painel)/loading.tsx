@@ -21,13 +21,15 @@ export default function Carregando() {
         </Card>
 
         <div className="space-y-4 lg:col-span-2">
-          {[5, 4].map((colunas) => (
+          {/* Participação (6 métricas), pesquisa (3 métricas e as barras),
+              financeiro (4): na ordem e na altura em que aparecem. */}
+          {[6, 3, 4].map((colunas) => (
             <Card key={colunas}>
               <CardHeader>
                 <Skeleton className="h-5 w-32" />
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
                   {Array.from({ length: colunas }, (_, i) => (
                     <div key={i} className="space-y-1.5">
                       <Skeleton className="h-3 w-16" />
@@ -35,7 +37,11 @@ export default function Carregando() {
                     </div>
                   ))}
                 </div>
-                <Skeleton className="h-5 w-56" />
+                {colunas === 3 ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : (
+                  <Skeleton className="h-5 w-56" />
+                )}
               </CardContent>
             </Card>
           ))}

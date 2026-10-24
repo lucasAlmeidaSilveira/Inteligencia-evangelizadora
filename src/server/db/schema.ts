@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   pgSchema,
+  smallint,
   text,
   time,
   timestamp,
@@ -682,6 +683,73 @@ export const eventoLinks = ie.table(
   ],
 );
 
+/*
+ * Pesquisa de satisfação pública de uma ação.
+ *
+ * Uma por ação (`evento_id` único): "gerar novo link" troca o token da mesma
+ * linha em vez de criar outra, e assim as respostas já colhidas continuam
+ * penduradas na pesquisa. O token é a única credencial do participante — quem
+ * tem o link responde, sem login — e o papel `pesquisa` do RLS não enxerga
+ * esta tabela: só duas funções SECURITY DEFINER (ver drizzle/politicas.sql)
+ * leem o token do escopo e devolvem o estritamente necessário.
+ */
+export const eventoPesquisas = ie.table(
+  "evento_pesquisas",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventoId: uuid("evento_id")
+      .notNull()
+      .unique()
+      .references(() => eventos.id, { onDelete: "cascade" }),
+    /** 43 caracteres base64url de `randomBytes(32)`: 256 bits, inenumerável. */
+    token: text("token").notNull().unique(),
+    aberta: boolean("aberta").notNull().default(true),
+    /** Link esquecido não fica aberto para sempre: depois daqui a função de
+     *  resposta recusa, mesmo com `aberta` ligado. */
+    encerraEm: timestamp("encerra_em", { withTimezone: true }).notNull(),
+    criadaPor: uuid("criada_por").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    ...auditoria,
+  },
+  (t) => [check("token_base64url", sql`${t.token} ~ '^[A-Za-z0-9_-]{43}$'`)],
+);
+
+/**
+ * Cada resposta é anônima e só tem nota e comentário. Resposta duplicada da
+ * mesma pessoa é aceita por decisão de produto; o que a função de inserção
+ * limita é inundação, não repetição.
+ */
+export const eventoRespostas = ie.table(
+  "evento_respostas",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pesquisaId: uuid("pesquisa_id")
+      .notNull()
+      .references(() => eventoPesquisas.id, { onDelete: "cascade" }),
+    /** Repetido de propósito: o agregado por ação e a policy de leitura
+     *  filtram por aqui sem JOIN com a pesquisa. */
+    eventoId: uuid("evento_id")
+      .notNull()
+      .references(() => eventos.id, { onDelete: "cascade" }),
+    nota: smallint("nota").notNull(),
+    comentario: text("comentario"),
+    respondidaEm: timestamp("respondida_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("nota_entre_zero_e_dez", sql`${t.nota} between 0 and 10`),
+    check(
+      "comentario_ate_500",
+      sql`${t.comentario} is null or char_length(${t.comentario}) <= 500`,
+    ),
+    index("idx_respostas_evento").on(t.eventoId),
+    // A janela antiflood pergunta "quantas nesta pesquisa no último minuto".
+    index("idx_respostas_pesquisa_data").on(t.pesquisaId, t.respondidaEm),
+  ],
+);
+
 /* ═════════════════════════════ Relacionamentos ════════════════════════════ */
 
 export const usuariosRelations = relations(usuarios, ({ one }) => ({
@@ -789,6 +857,8 @@ export const eventosRelations = relations(eventos, ({ one, many }) => ({
   lancamentos: many(eventoLancamentos),
   documentos: many(eventoDocumentos),
   links: many(eventoLinks),
+  pesquisa: one(eventoPesquisas),
+  respostas: many(eventoRespostas),
 }));
 
 export const eventoLancamentosRelations = relations(
@@ -822,6 +892,31 @@ export const eventoLinksRelations = relations(eventoLinks, ({ one }) => ({
   }),
 }));
 
+export const eventoPesquisasRelations = relations(
+  eventoPesquisas,
+  ({ one, many }) => ({
+    evento: one(eventos, {
+      fields: [eventoPesquisas.eventoId],
+      references: [eventos.id],
+    }),
+    respostas: many(eventoRespostas),
+  }),
+);
+
+export const eventoRespostasRelations = relations(
+  eventoRespostas,
+  ({ one }) => ({
+    pesquisa: one(eventoPesquisas, {
+      fields: [eventoRespostas.pesquisaId],
+      references: [eventoPesquisas.id],
+    }),
+    evento: one(eventos, {
+      fields: [eventoRespostas.eventoId],
+      references: [eventos.id],
+    }),
+  }),
+);
+
 /* ═══════════════════════════════ Tipos ════════════════════════════════════ */
 
 export type Usuario = typeof usuarios.$inferSelect;
@@ -839,6 +934,8 @@ export type Evento = typeof eventos.$inferSelect;
 export type EventoLancamento = typeof eventoLancamentos.$inferSelect;
 export type EventoDocumento = typeof eventoDocumentos.$inferSelect;
 export type EventoLink = typeof eventoLinks.$inferSelect;
+export type EventoPesquisa = typeof eventoPesquisas.$inferSelect;
+export type EventoResposta = typeof eventoRespostas.$inferSelect;
 export type Papel = (typeof papelEnum.enumValues)[number];
 export type StatusEvento = (typeof statusEventoEnum.enumValues)[number];
 export type TipoCentro = (typeof tipoCentroEnum.enumValues)[number];

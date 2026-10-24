@@ -14,8 +14,10 @@ import {
   obterEventoCompleto,
 } from "@/features/eventos/queries";
 import { AcoesDocumento } from "@/features/eventos/components/acoes-documento";
+import { CartaoPesquisa } from "@/features/pesquisas/components/cartao-pesquisa";
 import { formatarData, formatarTamanhoArquivo } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { urlPublica } from "@/server/url-publica";
 
 /** Quantos itens de documento e link cabem antes de virar ruído. */
 const PREVIA = 4;
@@ -32,14 +34,16 @@ export default async function PaginaVisaoGeralEvento({
      Tipos e centros vêm por causa da edição em tela: os dois selects do card
      de informações precisam das opções. Ambas as listas são cacheadas e
      compartilhadas com o formulário de /editar. */
-  const [dados, tipos, centros] = await Promise.all([
+  const [dados, tipos, centros, base] = await Promise.all([
     obterEventoCompleto(id),
     listarTiposEvento(),
     centrosDasMissoesVisiveis(),
+    // Lê `headers()`, por isso fica na página e não dentro da consulta cacheada.
+    urlPublica(),
   ]);
   if (!dados) notFound();
 
-  const { evento, documentos, links } = dados;
+  const { evento, documentos, links, pesquisa, comentarios } = dados;
 
   /* Só os centros desta missão: a FK composta `(centro_id, missao_id)` recusa
      os de outra, e oferecê-los no select seria oferecer um erro. O centro da
@@ -98,6 +102,17 @@ export default async function PaginaVisaoGeralEvento({
               servosEngajados: evento.servosEngajados,
               nps: evento.nps,
             }}
+            satisfacao={evento.satisfacao}
+          />
+
+          {/* Entre participação e financeiro: é a pesquisa que alimenta a
+              "Satisfação" do card de cima. */}
+          <CartaoPesquisa
+            eventoId={evento.id}
+            pesquisa={pesquisa}
+            satisfacao={evento.satisfacao}
+            comentarios={comentarios}
+            base={base}
           />
 
           <CartaoFinanceiro

@@ -28,6 +28,12 @@ create or replace function ie.papel() returns text
   language sql stable
   as $$ select nullif(current_setting('app.papel', true), '') $$;
 
+/* Token da pesquisa pública. Só `comPesquisa()` o define, e só com
+   `app.papel = 'pesquisa'`; em toda requisição de pessoa vem vazio. */
+create or replace function ie.pesquisa_token() returns text
+  language sql stable
+  as $$ select nullif(current_setting('app.pesquisa_token', true), '') $$;
+
 /*
  * Missão a que a pessoa pertence. Nula para o admin, que não pertence a
  * nenhuma — e por isso enxerga todas.
@@ -40,8 +46,10 @@ create or replace function ie.papel() returns text
  * zero no caminho normal, em que o escopo já está definido.
  */
 /*
- * SECURITY DEFINER de propósito. É uma das duas do arquivo — a outra é
- * ie.registrar_acesso(), logo abaixo, e existe por um motivo diferente.
+ * SECURITY DEFINER de propósito. É uma das quatro do arquivo — as outras são
+ * ie.registrar_acesso(), logo abaixo, e as duas da pesquisa pública, mais
+ * adiante; cada uma existe por um motivo diferente, e todas têm o EXECUTE
+ * revogado de PUBLIC no fim do arquivo.
  *
  * Sem isso há recursão: a policy de `usuarios` chama `missao_do_usuario()`,
  * que consultaria `usuarios`, disparando a policy de novo — o Postgres estoura
@@ -136,6 +144,157 @@ create or replace function ie.registrar_acesso() returns void
             or ultimo_acesso_em < now() - interval '15 minutes')
   $$;
 
+-- ─── Pesquisa pública ──────────────────────────────────────────────────────
+
+/*
+ * A pesquisa de satisfação é a primeira porta do sistema sem login. O papel
+ * `pesquisa` que a atende não tem policy em tabela alguma — todo SELECT,
+ * INSERT, UPDATE e DELETE que ele tente devolve zero linhas ou é recusado — e
+ * só consegue o que estas duas funções entregam. A alternativa descartada,
+ * policies "for select/insert" condicionadas ao token, exporia a linha inteira
+ * de `eventos` e de `evento_pesquisas` ao escopo público: um SELECT a mais no
+ * código, e o token de outra pesquisa ou o orçamento da ação sairiam pela
+ * porta. Aqui o que sai está escrito dentro da função.
+ *
+ * As duas exigem papel `pesquisa` E escopo sem pessoa (usuario_id e
+ * firebase_uid vazios): escopo de pesquisa nunca coexiste com uma sessão, e
+ * um usuário logado que chamasse a função — ie_app tem EXECUTE em tudo — não
+ * obtém nada. O `search_path` é fixado pelo mesmo motivo das funções acima.
+ *
+ * Sob FORCE ROW LEVEL SECURITY, o INSERT dentro de ie.responder_pesquisa()
+ * só acontece porque a dona do schema ignora o RLS (BYPASSRLS em produção,
+ * superusuário na demo) — a mesma dependência, invisível, de
+ * ie.registrar_acesso(). É o cenário "Pesquisa pública" de `pnpm db:testar-rls`
+ * que a torna visível em qualquer ambiente.
+ */
+create or replace function ie.escopo_de_pesquisa() returns boolean
+  language sql stable
+  as $$
+    select ie.papel() = 'pesquisa'
+       and ie.pesquisa_token() is not null
+       and ie.usuario_id() is null
+       and ie.firebase_uid() is null
+       and nullif(current_setting('app.missao_id', true), '') is null
+  $$;
+
+/* O que a página pública precisa saber, e nada além: o título da ação e se a
+   pesquisa ainda aceita respostas — decidido aqui, com o mesmo `now()` que
+   ie.responder_pesquisa() usa para recusar, para a página e a função nunca
+   discordarem. Nenhum id sai daqui. */
+drop function if exists ie.pesquisa_do_token();
+create function ie.pesquisa_do_token()
+  returns table (titulo text, aceita boolean)
+  language sql stable security definer
+  set search_path = ie, pg_temp
+  as $$
+    select e.titulo, (p.aberta and p.encerra_em > now()) as aceita
+      from ie.evento_pesquisas p
+      join ie.eventos e on e.id = p.evento_id
+     where ie.escopo_de_pesquisa()
+       and p.token = ie.pesquisa_token()
+  $$;
+
+/*
+ * A única porta de entrada de uma resposta. Devolve o id da ação para a
+ * aplicação expirar o cache daquela ação — e só daquela.
+ *
+ * Cada recusa nomeia a causa em `constraint`, não no texto: é esse nome que
+ * `traduzirErroDeBanco` transforma em frase, e o token nunca aparece em
+ * mensagem nenhuma.
+ *
+ * `for update` na linha da pesquisa serializa as respostas de uma mesma
+ * pesquisa, e é isso que torna o limite por minuto exato sob carga em vez de
+ * aproximado. Os limites são contra inundação (um robô batendo no link), não
+ * contra a mesma pessoa responder duas vezes, que é aceito — e 120 por minuto
+ * é o que um salão inteiro apontando o celular para o QR projetado consegue
+ * produzir sem ser barrado; um robô produz isso em dois segundos.
+ */
+create or replace function ie.responder_pesquisa(
+  nota_informada int,
+  comentario_informado text
+) returns uuid
+  language plpgsql security definer
+  set search_path = ie, pg_temp
+  as $$
+  declare
+    pesquisa ie.evento_pesquisas%rowtype;
+    recentes int;
+    total int;
+  begin
+    if not ie.escopo_de_pesquisa() then
+      raise exception 'Pesquisa não encontrada.'
+        using errcode = 'P0001', constraint = 'pesquisa_inexistente';
+    end if;
+
+    select * into pesquisa
+      from ie.evento_pesquisas
+     where token = ie.pesquisa_token()
+       for update;
+
+    if not found then
+      raise exception 'Pesquisa não encontrada.'
+        using errcode = 'P0001', constraint = 'pesquisa_inexistente';
+    end if;
+
+    if not pesquisa.aberta or pesquisa.encerra_em <= now() then
+      raise exception 'Pesquisa encerrada.'
+        using errcode = 'P0001', constraint = 'pesquisa_encerrada';
+    end if;
+
+    -- `limit 121` em vez de contar tudo: o índice (pesquisa_id, respondida_em)
+    -- responde sem varrer as respostas antigas.
+    select count(*) into recentes from (
+      select 1 from ie.evento_respostas
+       where pesquisa_id = pesquisa.id
+         and respondida_em > now() - interval '60 seconds'
+       limit 121
+    ) janela;
+    if recentes >= 120 then
+      raise exception 'Muitas respostas em pouco tempo.'
+        using errcode = 'P0001', constraint = 'pesquisa_muitas_respostas';
+    end if;
+
+    select count(*) into total from (
+      select 1 from ie.evento_respostas
+       where pesquisa_id = pesquisa.id
+       limit 10001
+    ) todas;
+    if total >= 10000 then
+      raise exception 'Limite de respostas atingido.'
+        using errcode = 'P0001', constraint = 'pesquisa_lotada';
+    end if;
+
+    insert into ie.evento_respostas (pesquisa_id, evento_id, nota, comentario)
+    values (
+      pesquisa.id,
+      pesquisa.evento_id,
+      nota_informada,
+      nullif(btrim(comentario_informado), '')
+    );
+
+    return pesquisa.evento_id;
+  end
+  $$;
+
+/*
+ * CREATE FUNCTION concede EXECUTE a PUBLIC por padrão, e esta instância é
+ * compartilhada com outro sistema. As quatro SECURITY DEFINER ficam só com o
+ * papel da aplicação. `grant` idempotente; `revoke` sem efeito se já revogado.
+ */
+revoke all on function ie.missao_pelo_token() from public;
+revoke all on function ie.registrar_acesso() from public;
+revoke all on function ie.pesquisa_do_token() from public;
+revoke all on function ie.responder_pesquisa(int, text) from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'ie_app') then
+    grant execute on function ie.missao_pelo_token() to ie_app;
+    grant execute on function ie.registrar_acesso() to ie_app;
+    grant execute on function ie.pesquisa_do_token() to ie_app;
+    grant execute on function ie.responder_pesquisa(int, text) to ie_app;
+  end if;
+end $$;
+
 -- ─── atualizado_em automático ──────────────────────────────────────────────
 
 create or replace function ie.tocar_atualizado_em() returns trigger
@@ -153,7 +312,7 @@ begin
   foreach t in array array[
     'usuarios', 'missoes', 'missao_indicadores', 'centros_evangelizacao',
     'grupos_oracao', 'tipos_evento', 'categorias_financeiras', 'eventos',
-    'evento_lancamentos'
+    'evento_lancamentos', 'evento_pesquisas'
   ] loop
     execute format('drop trigger if exists trg_%1$s_atualizado_em on ie.%1$I', t);
     execute format(
@@ -175,7 +334,7 @@ begin
     'grupos_oracao', 'grupo_responsaveis', 'grupo_contagens',
     'lembretes_contagem', 'notificacoes', 'tipos_evento',
     'categorias_financeiras', 'eventos', 'evento_lancamentos',
-    'evento_documentos', 'evento_links'
+    'evento_documentos', 'evento_links', 'evento_pesquisas', 'evento_respostas'
   ] loop
     execute format('alter table ie.%I enable row level security', t);
     execute format('alter table ie.%I force row level security', t);
@@ -328,6 +487,33 @@ create policy evento_links_escopo on ie.evento_links for all
     select 1 from ie.eventos e
     where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)))
   with check (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+/* A pesquisa é da ação: quem registra a ação abre, encerra e troca o link. O
+   papel `pesquisa` não aparece aqui de propósito — ver "Pesquisa pública". */
+drop policy if exists evento_pesquisas_escopo on ie.evento_pesquisas;
+create policy evento_pesquisas_escopo on ie.evento_pesquisas for all
+  using (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)))
+  with check (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+/* Respostas: quem vê a ação lê e modera (apaga um comentário ofensivo).
+   Ninguém logado insere nem edita — não há policy de INSERT nem de UPDATE, e
+   a única porta de entrada é ie.responder_pesquisa(). Editar a nota de um
+   participante seria adulterar a pesquisa. */
+drop policy if exists evento_respostas_leitura on ie.evento_respostas;
+create policy evento_respostas_leitura on ie.evento_respostas for select
+  using (exists (
+    select 1 from ie.eventos e
+    where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+drop policy if exists evento_respostas_moderar on ie.evento_respostas;
+create policy evento_respostas_moderar on ie.evento_respostas for delete
+  using (exists (
     select 1 from ie.eventos e
     where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
 

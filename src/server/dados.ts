@@ -1,5 +1,6 @@
 import "server-only";
 
+import { erroDeBanco, resumoDoErro } from "@/lib/erro-de-banco";
 import { escopoDe, requerUsuario, type UsuarioSessao } from "@/server/auth/sessao";
 import { comEscopo } from "@/server/db/escopo";
 import type { Transacao } from "@/server/db/index";
@@ -33,14 +34,28 @@ export function falha(erro: string, campos?: Record<string, string>) {
   return { ok: false as const, erro, campos };
 }
 
+/** Primeira mensagem de cada campo, no formato que `Resultado.campos` espera. */
+export function camposComErro(erro: {
+  issues: { path: PropertyKey[]; message: string }[];
+}) {
+  const campos: Record<string, string> = {};
+  for (const problema of erro.issues) {
+    const caminho = problema.path.map(String).join(".");
+    if (caminho && !campos[caminho]) campos[caminho] = problema.message;
+  }
+  return campos;
+}
+
+export { erroDeBanco } from "@/lib/erro-de-banco";
+
 /**
  * Traduz erros do Postgres em mensagens que o usuário entende.
  * Sem isso, uma violação de UNIQUE chega na tela como
  * "duplicate key value violates unique constraint uq_...".
  */
 export function traduzirErroDeBanco(erro: unknown): string {
-  const codigo = (erro as { code?: string })?.code;
-  const restricao = (erro as { constraint?: string })?.constraint ?? "";
+  const { code: codigo, constraint } = erroDeBanco(erro);
+  const restricao = constraint ?? "";
 
   if (codigo === "23505") {
     // Antes do ramo genérico de "nome": aqui o conflito é dentro de uma missão,
@@ -63,7 +78,27 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("responsavel_ordem")) {
       return "Essa posição de pastor já está ocupada.";
     }
+    if (restricao.includes("evento_pesquisas_evento_id")) {
+      return "Esta ação já tem uma pesquisa de satisfação.";
+    }
     return "Esse registro já existe.";
+  }
+
+  // Recusas de ie.responder_pesquisa(): a função nomeia a causa em
+  // `constraint`, e é esse nome que vira frase — nunca o texto cru do RAISE.
+  if (codigo === "P0001") {
+    if (restricao === "pesquisa_inexistente") {
+      return "Pesquisa não encontrada. Confira o link.";
+    }
+    if (restricao === "pesquisa_encerrada") {
+      return "Esta pesquisa foi encerrada.";
+    }
+    if (restricao === "pesquisa_muitas_respostas") {
+      return "Muita gente respondendo agora. Aguarde um minuto e tente de novo.";
+    }
+    if (restricao === "pesquisa_lotada") {
+      return "Esta pesquisa atingiu o limite de respostas.";
+    }
   }
 
   if (codigo === "23514") {
@@ -78,6 +113,12 @@ export function traduzirErroDeBanco(erro: unknown): string {
     }
     if (restricao.includes("nps_entre_zero_e_dez")) {
       return "A nota de satisfação (NPS) vai de 0 a 10.";
+    }
+    if (restricao.includes("nota_entre_zero_e_dez")) {
+      return "A nota vai de 0 a 10.";
+    }
+    if (restricao.includes("comentario_ate_500")) {
+      return "O comentário tem no máximo 500 caracteres.";
     }
     if (
       restricao.includes("membros_nao_negativos") ||
@@ -108,6 +149,8 @@ export function traduzirErroDeBanco(erro: unknown): string {
     return "Você não tem permissão para essa ação.";
   }
 
-  console.error("Erro de banco não tratado:", erro);
+  // Só código, restrição e mensagem do Postgres: o embrulho do Drizzle traz a
+  // consulta e os parâmetros, e parâmetro pode ser texto de pessoa.
+  console.error("Erro de banco não tratado:", resumoDoErro(erro));
   return "Não foi possível concluir. Tente novamente.";
 }

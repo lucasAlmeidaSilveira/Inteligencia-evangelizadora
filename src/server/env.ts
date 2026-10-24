@@ -77,6 +77,23 @@ export const envR2 = memoizar(() =>
   ),
 );
 
+/* ─── Endereço público ───────────────────────────────────────────────────── */
+
+/**
+ * Grupo próprio, e não dentro de `envAgendador`: aquele lança sem
+ * `CRON_SECRET`, e o link da pesquisa de satisfação não pode depender de o
+ * cron estar configurado. Opcional aqui; `urlPublica()` decide o que fazer na
+ * falta dele conforme o ambiente.
+ */
+export const envPublico = memoizar(() =>
+  ler(
+    z.object({
+      APP_URL: z.url().optional(),
+    }),
+    "Endereço público",
+  ),
+);
+
 /* ─── E-mail (Resend) ────────────────────────────────────────────────────── */
 
 /**

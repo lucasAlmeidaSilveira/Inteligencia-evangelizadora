@@ -7,6 +7,13 @@ import {
   mediaDeNps,
   pontuarFinanceiro,
 } from "@/features/eventos/impacto";
+import {
+  descreverFonte,
+  fraseDeLeitura,
+  percentual,
+  resumirSatisfacao,
+  SEM_RESPOSTAS,
+} from "@/features/pesquisas/satisfacao";
 
 /**
  * Confere o Índice de Impacto Evangelizador contra números escolhidos a dedo.
@@ -175,6 +182,54 @@ ok("faixa alta a partir de 90", faixaDoImpacto(90)?.rotulo, "Alto");
 ok("faixa média a partir de 70", faixaDoImpacto(70)?.rotulo, "Médio");
 ok("abaixo de 70 é baixa", faixaDoImpacto(69.9)?.rotulo, "Baixo");
 ok("sem índice, sem faixa", faixaDoImpacto(null), null);
+
+console.log("\nSatisfação efetiva (pesquisa × nota manual)");
+const manual = resumirSatisfacao(undefined, "8.0");
+ok("sem respostas, vale a nota manual", [manual.nota, manual.fonte], [8, "manual"]);
+ok("fonte manual se descreve", descreverFonte(manual), "informada manualmente");
+
+const comRespostas = resumirSatisfacao(
+  {
+    quantidade: 3,
+    soma: 26, // 9 + 9 + 8 → 8,666…
+    promotores: 2,
+    detratores: 0,
+    distribuicao: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0],
+  },
+  "5.0",
+);
+ok(
+  "com respostas, a pesquisa vence a nota manual e arredonda a uma casa",
+  [comRespostas.nota, comRespostas.fonte, comRespostas.respostas],
+  [8.7, "pesquisa", 3],
+);
+ok("fonte pesquisa conta as respostas", descreverFonte(comRespostas), "3 respostas");
+ok(
+  "frase de leitura por faixas",
+  fraseDeLeitura(comRespostas),
+  "67% deram 9 ou 10 · 0% deram 6 ou menos",
+);
+ok("uma resposta, no singular", descreverFonte(resumirSatisfacao({ ...SEM_RESPOSTAS, quantidade: 1, soma: 10 }, null)), "1 resposta");
+
+const nada = resumirSatisfacao(SEM_RESPOSTAS, null);
+ok("sem nada, não há nota nem fonte", [nada.nota, nada.fonte], [null, null]);
+ok("sem nada se descreve como sem pesquisa", descreverFonte(nada), "Sem pesquisa");
+ok("sem respostas não há frase", fraseDeLeitura(manual), null);
+ok("percentual sem base é null", percentual(3, 0), null);
+ok("percentual com base", percentual(1, 4), 25);
+ok(
+  "o índice usa a nota efetiva: 8,7 vira 87 de satisfação",
+  calcularImpacto({
+    participantesInscritos: 0,
+    participantesTotal: 0,
+    participantesNovos: 0,
+    participantesPermaneceram: 0,
+    nps: comRespostas.nota,
+    orcamentoPrevisto: null,
+    financeiro: semMovimento,
+  }).componentes.satisfacao,
+  87,
+);
 
 if (falhas) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam.\n`);

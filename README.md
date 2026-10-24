@@ -217,7 +217,7 @@ agendador pode falhar ou atrasar sem duplicar nem perder avisos.
 ```bash
 # .env.local
 CRON_SECRET=...            # openssl rand -base64 32 — a Vercel o envia sozinha ao cron
-APP_URL=https://...        # opcional: links do e-mail; sem ele, a origem da requisição
+APP_URL=https://...        # links do e-mail e da pesquisa de satisfação; obrigatório em produção para a pesquisa
 RESEND_API_KEY=...         # opcional: sem Resend, só a notificação interna
 EMAIL_REMETENTE="Inteligência Evangelizadora <avisos@dominio-verificado.org>"
 ```

@@ -13,6 +13,8 @@ import {
   textosSchema,
 } from "@/features/eventos/schemas";
 import { contagemSchema, grupoSchema } from "@/features/grupos/schemas";
+import { respostaSchema } from "@/features/pesquisas/schemas";
+import { erroDeBanco, resumoDoErro } from "@/lib/erro-de-banco";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
 import { fimDoDia, inicioDoDia } from "@/lib/fuso";
@@ -525,6 +527,102 @@ verificar(
   "registro sem observação",
 );
 
+
+/* ─── Resposta da pesquisa pública ────────────────────────────────────────
+ *
+ * Entrada hostil por definição: vem de quem não tem login. O que se protege
+ * aqui é a diferença entre vazio e zero em `nota` (zero é nota, vazio é "não
+ * escolheu"), a limpeza do comentário e a recusa de qualquer chave a mais.
+ */
+
+verificar(
+  "Resposta — nota como string e comentário com caractere de controle",
+  respostaSchema,
+  { nota: "7", comentario: "  Boa ação.\u0007 ", confirmacao: "" },
+  "formulário preenchido",
+);
+
+verificar(
+  "Resposta — nota zero é nota, não ausência",
+  respostaSchema,
+  { nota: 0, comentario: "", confirmacao: "" },
+  "nota mínima sem comentário",
+);
+
+{
+  const limpo = respostaSchema.safeParse({
+    nota: "9",
+    comentario: "Linha 1\r\nLinha 2" + String.fromCodePoint(0x202e) + " invertida",
+    confirmacao: "",
+  });
+  console.log("\nResposta — limpeza do comentário");
+  ok("aceita", limpo.success);
+  if (limpo.success) {
+    ok(
+      "normaliza CRLF e remove controle bidi",
+      limpo.data.comentario === "Linha 1\nLinha 2 invertida",
+    );
+  }
+}
+
+recusar("Resposta — sem nota", respostaSchema, { nota: "", comentario: "" }, "nota");
+recusar("Resposta — nota 11", respostaSchema, { nota: "11" }, "nota");
+recusar("Resposta — nota com decimal", respostaSchema, { nota: "7.5" }, "nota");
+recusar(
+  "Resposta — comentário acima de 500",
+  respostaSchema,
+  { nota: "8", comentario: "x".repeat(501) },
+  "comentario",
+);
+{
+  // Chave a mais só vem de requisição montada à mão. O zod acusa na raiz,
+  // não no campo, então o teste confere a recusa e o nome da chave na mensagem.
+  const extra = respostaSchema.safeParse({
+    nota: "8",
+    comentario: "",
+    confirmacao: "",
+    eventoId: "qualquer",
+  });
+  console.log("\nResposta — chave inesperada");
+  ok("a entrada é recusada", !extra.success);
+  ok(
+    "a recusa nomeia a chave estranha",
+    !extra.success &&
+      extra.error.issues.some((i) => i.message.includes("eventoId")),
+  );
+}
+
+/* ─── Erro do Postgres por baixo do embrulho do Drizzle ───────────────────
+ *
+ * O Drizzle lança `DrizzleQueryError` com o erro do `pg` em `cause`, e a
+ * mensagem do embrulho carrega os parâmetros da consulta. Lido no lugar
+ * errado, todo erro vira "tente novamente" e o comentário de um participante
+ * vai parar no log.
+ */
+{
+  console.log("\nErro de banco embrulhado pelo Drizzle");
+  const doPg = Object.assign(new Error("Pesquisa encerrada."), {
+    code: "P0001",
+    constraint: "pesquisa_encerrada",
+  });
+  const embrulho = new Error(
+    "Failed query: select ie.responder_pesquisa($1, $2)\nparams: 7,comentário sensível",
+    { cause: doPg },
+  );
+  ok("acha o código no cause", erroDeBanco(embrulho).code === "P0001");
+  ok(
+    "acha a restrição no cause",
+    erroDeBanco(embrulho).constraint === "pesquisa_encerrada",
+  );
+  ok("erro sem embrulho continua funcionando", erroDeBanco(doPg).code === "P0001");
+  ok("erro sem código nem cause devolve vazio", erroDeBanco(new Error("x")).code === undefined);
+  ok("nulo não explode", erroDeBanco(null).code === undefined);
+  const resumo = JSON.stringify(resumoDoErro(embrulho));
+  ok(
+    "o resumo para log não carrega os parâmetros",
+    !resumo.includes("comentário sensível") && resumo.includes("pesquisa_encerrada"),
+  );
+}
 
 /* ─── Exportação CSV ─────────────────────────────────────────────────────── */
 

@@ -2,6 +2,8 @@ import "server-only";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 
+import { TOKEN_PESQUISA } from "@/lib/pesquisa";
+
 import { DEFINIR_SEARCH_PATH } from "./conexao";
 import { pool, type Transacao } from "./index";
 import * as schema from "./schema";
@@ -53,15 +55,32 @@ function literal(valor: string | null | undefined, formato: RegExp) {
   return valor && formato.test(valor) ? valor : "";
 }
 
-export async function comEscopo<T>(
-  escopo: Escopo,
+/**
+ * Os cinco valores que as policies leem, já validados por formato. Toda
+ * transação escreve os cinco — inclusive os vazios — para que nenhum valor de
+ * um caminho possa sobrar no outro: o de pessoa nunca leva token, e o de
+ * pesquisa nunca leva pessoa.
+ */
+type Configuracoes = {
+  firebaseUid: string;
+  usuarioId: string;
+  papel: string;
+  missaoId: string;
+  pesquisaToken: string;
+  /** `statement_timeout` em ms, só para o caminho público. */
+  tempoLimite?: number;
+};
+
+async function abrirTransacao<T>(
+  configuracoes: Configuracoes,
   executar: (tx: Transacao) => Promise<T>,
   opcoes: OpcoesEscopo = {},
 ): Promise<T> {
-  const firebaseUid = literal(escopo.firebaseUid, UID_FIREBASE);
-  const usuarioId = literal(escopo.usuarioId, UUID);
-  const missaoId = literal(escopo.missaoId, UUID);
-  const papel = escopo.papel && PAPEIS.has(escopo.papel) ? escopo.papel : "";
+  const { firebaseUid, usuarioId, papel, missaoId, pesquisaToken } =
+    configuracoes;
+  const tempoLimite = Number.isInteger(configuracoes.tempoLimite)
+    ? `, set_config('statement_timeout', '${configuracoes.tempoLimite}', true)`
+    : "";
 
   const cliente = await pool.connect();
 
@@ -76,7 +95,9 @@ export async function comEscopo<T>(
         ` select set_config('app.firebase_uid', '${firebaseUid}', true),` +
         ` set_config('app.usuario_id', '${usuarioId}', true),` +
         ` set_config('app.papel', '${papel}', true),` +
-        ` set_config('app.missao_id', '${missaoId}', true);`,
+        ` set_config('app.missao_id', '${missaoId}', true),` +
+        ` set_config('app.pesquisa_token', '${pesquisaToken}', true)` +
+        `${tempoLimite};`,
     );
 
     const tx = drizzle(cliente, { schema }) as Transacao;
@@ -112,4 +133,53 @@ export async function comEscopo<T>(
   } finally {
     cliente.release();
   }
+}
+
+export async function comEscopo<T>(
+  escopo: Escopo,
+  executar: (tx: Transacao) => Promise<T>,
+  opcoes: OpcoesEscopo = {},
+): Promise<T> {
+  return abrirTransacao(
+    {
+      firebaseUid: literal(escopo.firebaseUid, UID_FIREBASE),
+      usuarioId: literal(escopo.usuarioId, UUID),
+      papel: escopo.papel && PAPEIS.has(escopo.papel) ? escopo.papel : "",
+      missaoId: literal(escopo.missaoId, UUID),
+      pesquisaToken: "",
+    },
+    executar,
+    opcoes,
+  );
+}
+
+/**
+ * Transação da pesquisa pública: sem pessoa, com token.
+ *
+ * Separada de `comEscopo` — e `PAPEIS` continua sem "pesquisa" — para que
+ * nenhum caminho de sessão consiga, por engano ou forja, chegar ao banco com
+ * este papel. O papel `pesquisa` não tem policy em tabela alguma; o que ele
+ * alcança são as duas funções descritas em `drizzle/politicas.sql`.
+ *
+ * Token fora do formato vira escopo vazio, como qualquer valor inválido acima:
+ * o RLS trata como "ninguém" e as funções devolvem nada. Quem chama já validou
+ * o formato antes; isto é a segunda tranca, não a primeira. O `statement_timeout`
+ * curto é para o caminho público não segurar conexão do pool numa consulta
+ * lenta — ele divide o pool com os coordenadores.
+ */
+export async function comPesquisa<T>(
+  token: string,
+  executar: (tx: Transacao) => Promise<T>,
+): Promise<T> {
+  return abrirTransacao(
+    {
+      firebaseUid: "",
+      usuarioId: "",
+      papel: "pesquisa",
+      missaoId: "",
+      pesquisaToken: literal(token, TOKEN_PESQUISA),
+      tempoLimite: 3000,
+    },
+    executar,
+  );
 }
