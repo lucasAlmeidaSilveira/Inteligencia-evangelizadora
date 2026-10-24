@@ -24,6 +24,13 @@ const ESTILOS: Record<StatusEvento, { rotulo: string; classe: string }> = {
   },
 };
 
+/** O rótulo sozinho, para onde o selo não cabe — como a dica do calendário,
+ *  cujo fundo escuro apagaria as cores dele. Daqui e não de `STATUS_EVENTO`
+ *  porque `schemas.ts` arrastaria o zod para o bundle de quem só exibe. */
+export function rotuloDoStatus(status: StatusEvento) {
+  return ESTILOS[status].rotulo;
+}
+
 export function SeloStatus({
   status,
   className,

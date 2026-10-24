@@ -13,7 +13,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SeloStatus } from "@/features/eventos/components/selo-status";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  rotuloDoStatus,
+  SeloStatus,
+} from "@/features/eventos/components/selo-status";
 import { formatarPeriodo } from "@/lib/format";
 import { CURVA, DURACAO } from "@/lib/movimento";
 import { cn } from "@/lib/utils";
@@ -126,46 +134,48 @@ export function CalendarioMensal({
 
                 <div className="space-y-1">
                   {visiveis.map((evento) => (
-                    <Link
-                      key={evento.id}
-                      href={`/eventos/${evento.id}`}
-                      title={
-                        evento.destaqueRegional
-                          ? `${evento.titulo} · Destaque regional`
-                          : evento.titulo
-                      }
-                      className="hover:bg-accent flex items-center gap-1 rounded px-1 py-0.5 text-left"
-                    >
-                      {/* A cor identifica o tipo, mas o título vem junto —
-                          identidade nunca depende só de matiz. */}
-                      <span
-                        aria-hidden
-                        className="size-1.5 shrink-0 rounded-full"
-                        style={{ background: evento.tipoCor }}
-                      />
-                      <span
-                        className={cn(
-                          "truncate text-[11px] leading-tight",
-                          evento.status === "cancelado" &&
-                            "text-muted-foreground line-through",
-                        )}
-                      >
-                        {evento.titulo}
-                      </span>
-                      {/* A estrela, e não só o laranja, é o que distingue o
-                          destaque — e ela fica depois da data passar: a ação
-                          realizada é a que o regional consolida. Fica no fim
-                          da linha para o título truncar antes dela. */}
-                      {evento.destaqueRegional ? (
-                        <>
-                          <Star
+                    <Tooltip key={evento.id}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={`/eventos/${evento.id}`}
+                          className="hover:bg-accent flex items-center gap-1 rounded px-1 py-0.5 text-left"
+                        >
+                          {/* A cor identifica o tipo, mas o título vem junto —
+                              identidade nunca depende só de matiz. */}
+                          <span
                             aria-hidden
-                            className="text-laranja size-2.5 shrink-0 fill-current"
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ background: evento.tipoCor }}
                           />
-                          <span className="sr-only">(destaque regional)</span>
-                        </>
-                      ) : null}
-                    </Link>
+                          <span
+                            className={cn(
+                              "truncate text-[11px] leading-tight",
+                              evento.status === "cancelado" &&
+                                "text-muted-foreground line-through",
+                            )}
+                          >
+                            {evento.titulo}
+                          </span>
+                          {/* A estrela, e não só o laranja, é o que distingue o
+                              destaque — e ela fica depois da data passar: a
+                              ação realizada é a que o regional consolida. Fica
+                              no fim da linha para o título truncar antes
+                              dela. */}
+                          {evento.destaqueRegional ? (
+                            <>
+                              <Star
+                                aria-hidden
+                                className="text-laranja size-2.5 shrink-0 fill-current"
+                              />
+                              <span className="sr-only">
+                                (destaque regional)
+                              </span>
+                            </>
+                          ) : null}
+                        </Link>
+                      </TooltipTrigger>
+                      <ResumoDaAcao evento={evento} />
+                    </Tooltip>
                   ))}
 
                   {restantes > 0 ? (
@@ -257,5 +267,62 @@ export function CalendarioMensal({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/*
+ * O resumo que a célula não comporta: o título ali trunca em poucas letras, e
+ * missão, tipo e local só apareciam abrindo o dia. Substitui o `title` nativo,
+ * que mostrava só o título e, junto com este, abriria duas dicas ao mesmo
+ * tempo.
+ *
+ * Tooltip e não HoverCard porque o Tooltip do Radix liga o conteúdo ao link
+ * por `aria-describedby` e abre também no foco do teclado; o HoverCard, pela
+ * documentação do próprio Radix, é só para quem usa mouse e fica fora do
+ * alcance do teclado. No toque ele não abre, e não precisa: o toque já leva à
+ * ação, e o diálogo do dia mostra o mesmo resumo.
+ *
+ * Os rótulos são os da página da ação, para a mesma informação não ter dois
+ * nomes.
+ */
+function ResumoDaAcao({ evento }: { evento: EventoAgenda }) {
+  return (
+    <TooltipContent
+      sideOffset={4}
+      className="flex-col items-start gap-1.5 py-2 text-left"
+    >
+      <p className="font-medium">{evento.titulo}</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        <dt className="text-background/70">Tipo da ação</dt>
+        <dd className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ background: evento.tipoCor }}
+          />
+          {evento.tipoNome}
+        </dd>
+        <dt className="text-background/70">Missão</dt>
+        <dd>{evento.missaoNome}</dd>
+        <dt className="text-background/70">Período</dt>
+        <dd>{formatarPeriodo(evento.dataInicio, evento.dataFim)}</dd>
+        {evento.local ? (
+          <>
+            <dt className="text-background/70">Local</dt>
+            <dd className="wrap-break-word">{evento.local}</dd>
+          </>
+        ) : null}
+        {/* Na célula, a ação cancelada só se distingue pelo risco no título;
+            aqui a situação vem escrita. */}
+        <dt className="text-background/70">Situação</dt>
+        <dd>{rotuloDoStatus(evento.status)}</dd>
+      </dl>
+      {evento.destaqueRegional ? (
+        <p className="flex items-center gap-1.5">
+          <Star aria-hidden className="text-laranja size-3 fill-current" />
+          Destaque regional
+        </p>
+      ) : null}
+    </TooltipContent>
   );
 }
