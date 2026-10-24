@@ -180,12 +180,15 @@ async function principal() {
       const slug = missao.nome.toLowerCase().normalize("NFD")
         .replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+      // A sede funciona no endereço da missão: o centro principal o repete.
+      const enderecoDaMissao = `Rua das Palmeiras, ${inteiro(50, 900)}`;
+
       const { rows: [criada] } = await c.query<{ id: string }>(
         `insert into missoes (nome, slug, cidade, regiao, endereco, data_fundacao,
                               contato_telefone, membros_total, observacoes, ativo)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) returning id`,
         [missao.nome, slug, missao.cidade, missao.regiao,
-         `Rua das Palmeiras, ${inteiro(50, 900)}`,
+         enderecoDaMissao,
          `${inteiro(1998, 2018)}-0${inteiro(1, 9)}-1${inteiro(0, 9)}`,
          `(11) 9${inteiro(1000, 9999)}-${inteiro(1000, 9999)}`,
          // A última missão fica sem total informado, para mostrar a estimativa
@@ -217,9 +220,9 @@ async function principal() {
       // O principal nasce com a missão, como faz `criarMissao`: é ele que
       // recebe tudo que não foi separado em outra frente.
       const { rows: [principal] } = await c.query<{ id: string }>(
-        `insert into centros_evangelizacao (missao_id, nome, tipo, principal, ativo)
-         values ($1, $2, 'centro_evangelizacao', true, true) returning id`,
-        [criada.id, missao.nome],
+        `insert into centros_evangelizacao (missao_id, nome, tipo, principal, endereco, ativo)
+         values ($1, $2, 'centro_evangelizacao', true, $3, true) returning id`,
+        [criada.id, missao.nome, enderecoDaMissao],
       );
       totais.centros++;
 
@@ -230,13 +233,16 @@ async function principal() {
         for (let ce = 0; ce < inteiro(1, 3); ce++) {
           const { rows: [centro] } = await c.query<{ id: string }>(
             `insert into centros_evangelizacao (missao_id, nome, tipo, cidade,
-                                                regiao, contato_telefone, ativo)
-             values ($1,$2,$3,$4,$5,$6,true) returning id`,
+                                                regiao, endereco, contato_telefone, ativo)
+             values ($1,$2,$3,$4,$5,$6,$7,true) returning id`,
             [criada.id, `${escolher(CENTROS)} ${ce + 1}`,
              // Uma irradiação a cada dois centros: a mistura é o normal em
              // campo, e é o que exercita os dois selos na tela.
              ce % 2 === 1 ? "irradiacao" : "centro_evangelizacao",
              missao.cidade, missao.regiao,
+             // Irradiação sem endereço: o formulário de ação precisa mostrar
+             // o aviso de centro sem endereço cadastrado também.
+             ce % 2 === 1 ? null : `Av. Central, ${inteiro(100, 2000)}`,
              `(11) 9${inteiro(1000, 9999)}-${inteiro(1000, 9999)}`],
           );
           centros.push(centro.id);
@@ -364,20 +370,28 @@ async function principal() {
         const nps = status === "realizado" && aleatorio() > 0.4
           ? (6 + aleatorio() * 4).toFixed(1)
           : null;
+        // Parte das ações acontece num centro da missão, e aí o local é a
+        // referência — nome e endereço vêm dele; o resto, num lugar escrito à
+        // mão. Os dois juntos o CHECK `local_centro_ou_texto` recusaria.
+        const localCentro = aleatorio() < 0.4
+          ? escolher([principal.id, ...centros])
+          : null;
 
         const { rows: [evento] } = await c.query<{ id: string }>(
           `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, descricao,
-                                data_inicio, data_fim, local, endereco, responsavel_nome,
-                                participantes_inscritos, participantes_total,
-                                participantes_novos, participantes_permaneceram,
-                                servos_engajados, orcamento_previsto, status,
-                                destaque_regional, nps)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) returning id`,
+                                data_inicio, data_fim, local_centro_id, local, endereco,
+                                responsavel_nome, participantes_inscritos,
+                                participantes_total, participantes_novos,
+                                participantes_permaneceram, servos_engajados,
+                                orcamento_previsto, status, destaque_regional, nps)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) returning id`,
           [criada.id, centroSorteado(), escolher(tipos).id,
            `${escolher(TITULOS)} ${inicio.getFullYear()}`,
            aleatorio() > 0.5 ? "Ação voltada à evangelização e ao acolhimento da comunidade." : null,
-           inicio.toISOString(), fim.toISOString(), escolher(LOCAIS),
-           aleatorio() > 0.6 ? `Av. Central, ${inteiro(100, 2000)}` : null,
+           inicio.toISOString(), fim.toISOString(),
+           localCentro,
+           localCentro ? null : escolher(LOCAIS),
+           !localCentro && aleatorio() > 0.6 ? `Av. Central, ${inteiro(100, 2000)}` : null,
            escolher(NOMES),
            inscritos, participantes, novos, permaneceram, servos, orcamento, status,
            status === "realizado" && aleatorio() > 0.75, nps],

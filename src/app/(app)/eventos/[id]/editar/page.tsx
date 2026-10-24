@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CabecalhoPagina } from "@/components/padroes/cabecalho-pagina";
 import { centrosDasMissoesVisiveis } from "@/features/centros/queries";
 import { FormularioEvento } from "@/features/eventos/components/formulario-evento";
+import { opcoesDeCentro } from "@/features/eventos/opcoes-de-centro";
 import {
   listarTiposEvento,
   missoesDisponiveis,
@@ -25,6 +26,13 @@ export default async function PaginaEditarEvento({
 
   if (!evento) notFound();
 
+  // O centro e o local atuais entram mesmo arquivados — sem eles, os selects
+  // abririam vazios e salvar desvincularia a ação sem ninguém pedir.
+  const opcoes = opcoesDeCentro(centros, evento);
+  // Com um centro como local, `local` e `endereco` vêm resolvidos com os dados
+  // dele; o texto livre da ação, nesse caso, está vazio.
+  const textoLivre = evento.localCentroId === null;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Fora do grupo `(painel)`: sem o cabeçalho e as abas da ação, é a
@@ -45,29 +53,8 @@ export default async function PaginaEditarEvento({
       <FormularioEvento
         eventoId={evento.id}
         missoes={missoes}
-        // O centro da ação pode estar arquivado e fora da lista; sem
-        // acrescentá-lo, o select abriria em "Diretamente na missão" e
-        // salvaria a ação desvinculada sem ninguém pedir.
-        centros={
-          evento.centroId &&
-          evento.centroNome &&
-          evento.centroTipo &&
-          !centros.some((c) => c.id === evento.centroId)
-            ? [
-                ...centros,
-                {
-                  id: evento.centroId,
-                  missaoId: evento.missaoId,
-                  nome: `${evento.centroNome} (inativo)`,
-                  tipo: evento.centroTipo,
-                  // Nunca é o principal: esse vem sempre na lista, mesmo
-                  // arquivado, justamente porque `centroId` é obrigatório.
-                  principal: false,
-                  ativo: false,
-                },
-              ]
-            : centros
-        }
+        centros={opcoes.centros}
+        locais={opcoes.locais}
         tipos={tipos}
         valores={{
           missaoId: evento.missaoId,
@@ -78,8 +65,9 @@ export default async function PaginaEditarEvento({
           observacoes: evento.observacoes ?? "",
           dataInicio: paraDatetimeLocal(evento.dataInicio),
           dataFim: paraDatetimeLocal(evento.dataFim),
-          local: evento.local ?? "",
-          endereco: evento.endereco ?? "",
+          localCentroId: evento.localCentroId ?? "",
+          local: textoLivre ? (evento.local ?? "") : "",
+          endereco: textoLivre ? (evento.endereco ?? "") : "",
           responsavelNome: evento.responsavelNome ?? "",
           participantesInscritos: evento.participantesInscritos,
           participantesTotal: evento.participantesTotal,

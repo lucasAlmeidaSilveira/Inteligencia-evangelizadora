@@ -79,6 +79,9 @@ const colunasSelecao = {
   tipo: centrosEvangelizacao.tipo,
   principal: centrosEvangelizacao.principal,
   ativo: centrosEvangelizacao.ativo,
+  /* O formulário de ação mostra o endereço do centro escolhido como local:
+     é o que a ação vai exibir, e quem escolhe precisa ver antes de salvar. */
+  endereco: centrosEvangelizacao.endereco,
 };
 
 /**

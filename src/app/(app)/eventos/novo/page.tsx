@@ -45,11 +45,13 @@ export default async function PaginaNovoEvento({
           { rotulo: "Nova ação apostólica", href: "/eventos/novo" },
         ]}
         titulo="Nova ação apostólica"
-        descricao="Financeiro, documentos e links são adicionados depois de criada."
+        descricao="Participação, financeiro, documentos e links são adicionados depois de criada."
       />
       <FormularioEvento
         missoes={missoes}
+        // Ação nova não usa centro algum ainda: as duas listas são a mesma.
         centros={centros}
+        locais={centros}
         tipos={tipos}
         valores={{
           missaoId: missaoSugerida,
@@ -60,6 +62,7 @@ export default async function PaginaNovoEvento({
           observacoes: "",
           dataInicio: paraDatetimeLocal(inicio),
           dataFim: paraDatetimeLocal(fim),
+          localCentroId: "",
           local: "",
           endereco: "",
           responsavelNome: "",

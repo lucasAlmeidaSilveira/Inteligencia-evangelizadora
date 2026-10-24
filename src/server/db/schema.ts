@@ -527,6 +527,16 @@ export const eventos = ie.table(
     observacoes: text("observacoes"),
     dataInicio: timestamp("data_inicio", { withTimezone: true }).notNull(),
     dataFim: timestamp("data_fim", { withTimezone: true }).notNull(),
+    /**
+     * Onde a ação acontece, quando é num dos centros da missão. Não confundir
+     * com `centroId`, que diz de qual frente a ação é: a ação de uma
+     * irradiação pode muito bem acontecer na sede.
+     *
+     * Referência, não cópia: nome e endereço vêm do centro pelo JOIN, e
+     * renomeá-lo renomeia o local junto. Fora dos centros vale o texto livre
+     * de `local` e `endereco` — um ou outro, nunca os dois (CHECK abaixo).
+     */
+    localCentroId: uuid("local_centro_id"),
     local: text("local"),
     endereco: text("endereco"),
     /** Quem responde pela ação. Texto livre de propósito: quase sempre é um
@@ -583,11 +593,21 @@ export const eventos = ie.table(
     check("orcamento_nao_negativo", sql`${t.orcamentoPrevisto} >= 0`),
     // A escala é do NPS, não nossa: fora de 0..10 a nota não significa nada.
     check("nps_entre_zero_e_dez", sql`${t.nps} between 0 and 10`),
+    /* O local é o centro escolhido **ou** o texto livre. Os dois juntos dariam
+       à tela duas respostas para "onde", sem regra para escolher entre elas.
+       O zod já limpa o texto quando há centro; isto é para o que não passa
+       por ele. */
+    check(
+      "local_centro_ou_texto",
+      sql`${t.localCentroId} is null or (${t.local} is null and ${t.endereco} is null)`,
+    ),
     /* Não há CHECK relacionando `novos`/`permaneceram` a `participantesTotal`:
        essa regra vive no zod, onde o erro chega no campo certo e em português.
        Vindo do banco, um engano de digitação viraria erro de constraint. */
     index("idx_eventos_missao").on(t.missaoId),
     index("idx_eventos_centro").on(t.centroId),
+    // Para o FK conferir a exclusão de um centro sem varrer `eventos`.
+    index("idx_eventos_local_centro").on(t.localCentroId),
     index("idx_eventos_tipo").on(t.tipoEventoId),
     // Consulta mais frequente do sistema: eventos de um mês no calendário.
     index("idx_eventos_periodo").on(t.dataInicio, t.dataFim),
@@ -601,6 +621,16 @@ export const eventos = ie.table(
       columns: [t.centroId, t.missaoId],
       foreignColumns: [centrosEvangelizacao.id, centrosEvangelizacao.missaoId],
       name: "fk_eventos_centro_da_missao",
+    }),
+    /* O mesmo par para o local: a ação do Norte não acontece "no centro" do
+       Sul. Com `local_centro_id` nulo o Postgres não confere o par (MATCH
+       SIMPLE), que é o que deixa o local ser opcional. `no action` pelo mesmo
+       motivo do FK acima; antes de apagar um centro, `excluirCentro` passa o
+       nome e o endereço dele para o texto livre das ações que acontecem lá. */
+    foreignKey({
+      columns: [t.localCentroId, t.missaoId],
+      foreignColumns: [centrosEvangelizacao.id, centrosEvangelizacao.missaoId],
+      name: "fk_eventos_local_centro_da_missao",
     }),
   ],
 );

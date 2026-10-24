@@ -297,6 +297,17 @@ async function principal() {
       ),
     );
 
+    // A mesma porta, pelo local: a ação do Norte "acontecendo" num centro do
+    // Sul traria o nome e o endereço dele para a tela da Ana.
+    conferir(
+      "não marca centro de outra missão como local de ação sua",
+      await deveRejeitar(
+        c,
+        "update eventos set local_centro_id = $1 where id = $2",
+        [centroSul, eventoNorte],
+      ),
+    );
+
     conferir(
       "não cadastra centro na missão alheia",
       await deveRejeitar(
@@ -893,6 +904,29 @@ async function principal() {
       (
         await c.query("select count(*)::int as n from evento_historico where evento_id = $1", [eventoNorte])
       ).rows[0].n === antes,
+    );
+
+    /* Trocar o texto livre por um centro como local: o histórico guarda o
+       nome do centro, como faz com o centro da ação — o id seria ilegível, e
+       um centro renomeado depois não reescreve o passado. */
+    await c.query(
+      "update eventos set local = null, local_centro_id = $1 where id = $2",
+      [centroNorte, eventoNorte],
+    );
+    const { rows: [comCentro] } = await c.query<{
+      detalhes: { alteracoes?: { campo: string; de: unknown; para: unknown }[] };
+    }>(
+      `select detalhes from evento_historico
+        where evento_id = $1 and tipo = 'acao_alterada'
+        order by registrado_em desc limit 1`,
+      [eventoNorte],
+    );
+    const paraOCentro = comCentro?.detalhes.alteracoes?.find(
+      (a) => a.campo === "local_centro_id",
+    );
+    conferir(
+      "o centro escolhido como local entra no histórico pelo nome",
+      paraOCentro?.de === null && paraOCentro?.para === "Centro do Norte",
     );
 
     conferir(

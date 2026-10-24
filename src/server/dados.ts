@@ -114,6 +114,9 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("nps_entre_zero_e_dez")) {
       return "A nota de satisfação (NPS) vai de 0 a 10.";
     }
+    if (restricao.includes("local_centro_ou_texto")) {
+      return "Escolha um centro da missão ou escreva outro local — não os dois.";
+    }
     if (restricao.includes("nota_entre_zero_e_dez")) {
       return "A nota vai de 0 a 10.";
     }

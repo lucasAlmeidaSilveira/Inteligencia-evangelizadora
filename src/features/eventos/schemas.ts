@@ -165,6 +165,15 @@ const camposInformacoes = {
     .string()
     .min(1, "Informe a data de término.")
     .refine((v) => !Number.isNaN(Date.parse(v)), "Data de término inválida."),
+  /** Onde a ação acontece, quando é num dos centros da missão. Vazio é "outro
+   *  local" ou "não informado" — aí valem `local` e `endereco`, em texto. A FK
+   *  composta recusa o centro de outra missão, como em `centroId`. */
+  localCentroId: z
+    .union([z.uuid(), z.literal(""), z.null()], {
+      error: "Escolha um centro da lista.",
+    })
+    .optional()
+    .transform((v) => (v ? v : null)),
   local: opcional(200),
   endereco: opcional(300),
   responsavelNome: opcional(160),
@@ -209,6 +218,30 @@ function comRegraDePeriodo<
 }
 
 /**
+ * O local é um centro da missão **ou** o texto livre, nunca os dois — o banco
+ * impõe por CHECK (`local_centro_ou_texto`). Com centro escolhido, o texto
+ * some: o formulário guarda o que se digitou em "Outro local" enquanto a
+ * pessoa alterna entre as opções, e o que vale é o que está escolhido na hora
+ * de salvar.
+ *
+ * Aplicada por fora das regras de período e de participação, nunca por
+ * dentro: no zod, o `refine` de um schema transformado não roda quando outro
+ * campo já falhou. Por dentro, "o término não pode ser anterior ao início" só
+ * apareceria depois de corrigido o resto do formulário.
+ */
+function comLocalUnico<
+  S extends z.ZodType<{
+    localCentroId: string | null;
+    local: string | null;
+    endereco: string | null;
+  }>,
+>(schema: S) {
+  return schema.transform((d) =>
+    d.localCentroId ? { ...d, local: null, endereco: null } : d,
+  );
+}
+
+/**
  * Estas duas não têm CHECK no banco de propósito: são engano de digitação
  * comum, e a mensagem precisa apontar o campo. Note que inscritos × presentes
  * não é comparado — comparecer sem se inscrever é normal e frequente.
@@ -231,24 +264,26 @@ function comRegrasDeParticipacao<
     });
 }
 
-export const eventoSchema = comRegrasDeParticipacao(
-  comRegraDePeriodo(
-    z.object({
-      missaoId: z.uuid("Escolha a missão."),
-      titulo: z
-        .string()
-        .trim()
-        .min(3, "Informe ao menos 3 caracteres.")
-        .max(160, "No máximo 160 caracteres."),
-      // Checkbox ausente no FormData vira `undefined`, que precisa virar `false`.
-      destaqueRegional: z
-        .union([z.boolean(), z.string(), z.undefined(), z.null()])
-        .transform((v) => v === true || v === "true" || v === "on"),
-      ...camposInformacoes,
-      ...camposTextos,
-      ...camposParticipacao,
-      ...camposOrcamento,
-    }),
+export const eventoSchema = comLocalUnico(
+  comRegrasDeParticipacao(
+    comRegraDePeriodo(
+      z.object({
+        missaoId: z.uuid("Escolha a missão."),
+        titulo: z
+          .string()
+          .trim()
+          .min(3, "Informe ao menos 3 caracteres.")
+          .max(160, "No máximo 160 caracteres."),
+        // Checkbox ausente no FormData vira `undefined`, que precisa virar `false`.
+        destaqueRegional: z
+          .union([z.boolean(), z.string(), z.undefined(), z.null()])
+          .transform((v) => v === true || v === "true" || v === "on"),
+        ...camposInformacoes,
+        ...camposTextos,
+        ...camposParticipacao,
+        ...camposOrcamento,
+      }),
+    ),
   ),
 );
 
@@ -262,7 +297,9 @@ export type DadosEvento = z.input<typeof eventoSchema>;
  * coluna que não aceita, e o erro só apareceria no banco.
  */
 
-export const informacoesSchema = comRegraDePeriodo(z.object(camposInformacoes));
+export const informacoesSchema = comLocalUnico(
+  comRegraDePeriodo(z.object(camposInformacoes)),
+);
 export const participacaoSchema = comRegrasDeParticipacao(
   z.object(camposParticipacao),
 );

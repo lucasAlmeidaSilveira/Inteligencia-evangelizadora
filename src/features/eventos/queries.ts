@@ -43,6 +43,12 @@ import {
 } from "./financeiro";
 import type { DetalhesHistorico, EntradaHistorico } from "./historico";
 import { calcularImpacto, type EntradaDoImpacto } from "./impacto";
+import {
+  centroDoLocal,
+  enderecoDoLocal,
+  juncaoDoLocal,
+  nomeDoLocal,
+} from "./local";
 
 /**
  * Anexa financeiro, satisfação e índice de impacto a uma linha de evento.
@@ -122,7 +128,10 @@ const colunas = {
   // ISO, não `Date`: ver `server/db/iso.ts`. É o que permite cachear.
   dataInicio: emIso(eventos.dataInicio),
   dataFim: emIso(eventos.dataFim),
-  local: eventos.local,
+  /** Só os formulários precisam saber de onde o local veio. */
+  localCentroId: eventos.localCentroId,
+  /** O nome que se mostra, venha do centro ou do texto livre — ver `local.ts`. */
+  local: nomeDoLocal,
   responsavelNome: eventos.responsavelNome,
   participantesInscritos: eventos.participantesInscritos,
   /** Presentes. Ver a nota na coluna, em `db/schema.ts`. */
@@ -161,6 +170,7 @@ export const listarEventos = leituraCacheada(
         centrosEvangelizacao,
         eq(centrosEvangelizacao.id, eventos.centroId),
       )
+      .leftJoin(centroDoLocal, juncaoDoLocal)
       .where(condicoes.length ? and(...condicoes) : undefined)
       .orderBy(desc(eventos.dataInicio));
 
@@ -178,7 +188,12 @@ export const listarEventos = leituraCacheada(
       ),
     );
   },
-  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+  {
+    // `centros` porque o local pode ser um centro, com nome e endereço pelo
+    // JOIN: editar o centro muda o que a lista mostra.
+    etiquetas: () => [ETIQUETAS.eventos, ETIQUETAS.centros],
+    revalidar: CINCO_MINUTOS,
+  },
 );
 
 export const obterEvento = cache(
@@ -190,7 +205,7 @@ export const obterEvento = cache(
           ...colunas,
           descricao: eventos.descricao,
           observacoes: eventos.observacoes,
-          endereco: eventos.endereco,
+          endereco: enderecoDoLocal,
           criadoEm: emIso(eventos.criadoEm),
           atualizadoEm: emIso(eventos.atualizadoEm),
         })
@@ -201,6 +216,7 @@ export const obterEvento = cache(
           centrosEvangelizacao,
           eq(centrosEvangelizacao.id, eventos.centroId),
         )
+        .leftJoin(centroDoLocal, juncaoDoLocal)
         .where(eq(eventos.id, id))
         .limit(1);
 
@@ -217,7 +233,12 @@ export const obterEvento = cache(
       );
     },
     {
-      etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
+      // `centros` pelo local, como em `listarEventos`.
+      etiquetas: ([id]) => [
+        ETIQUETAS.evento(id),
+        ETIQUETAS.eventos,
+        ETIQUETAS.centros,
+      ],
       revalidar: CINCO_MINUTOS,
     },
   ),
@@ -358,7 +379,7 @@ export const obterEventoCompleto = cache(
           ...colunas,
           descricao: eventos.descricao,
           observacoes: eventos.observacoes,
-          endereco: eventos.endereco,
+          endereco: enderecoDoLocal,
           criadoEm: emIso(eventos.criadoEm),
           atualizadoEm: emIso(eventos.atualizadoEm),
         })
@@ -369,6 +390,7 @@ export const obterEventoCompleto = cache(
           centrosEvangelizacao,
           eq(centrosEvangelizacao.id, eventos.centroId),
         )
+        .leftJoin(centroDoLocal, juncaoDoLocal)
         .where(eq(eventos.id, id))
         .limit(1);
 
@@ -438,7 +460,12 @@ export const obterEventoCompleto = cache(
       };
     },
     {
-      etiquetas: ([id]) => [ETIQUETAS.evento(id), ETIQUETAS.eventos],
+      // `centros` pelo local, como em `listarEventos`.
+      etiquetas: ([id]) => [
+        ETIQUETAS.evento(id),
+        ETIQUETAS.eventos,
+        ETIQUETAS.centros,
+      ],
       revalidar: CINCO_MINUTOS,
     },
   ),

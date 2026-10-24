@@ -9,6 +9,7 @@ import { CartaoImpacto } from "@/features/eventos/components/cartao-impacto";
 import { CartaoInformacoes } from "@/features/eventos/components/cartao-informacoes";
 import { CartaoParticipacao } from "@/features/eventos/components/cartao-participacao";
 import { CartaoTextos } from "@/features/eventos/components/cartao-textos";
+import { opcoesDeCentro } from "@/features/eventos/opcoes-de-centro";
 import {
   listarTiposEvento,
   obterEventoCompleto,
@@ -45,23 +46,14 @@ export default async function PaginaVisaoGeralEvento({
 
   const { evento, documentos, links, pesquisa, comentarios } = dados;
 
-  /* Só os centros desta missão: a FK composta `(centro_id, missao_id)` recusa
-     os de outra, e oferecê-los no select seria oferecer um erro. O centro da
-     própria ação entra mesmo se estiver arquivado e fora da lista — sem isso
-     o select abriria vazio e trocaria o centro sem ninguém pedir. */
-  const centrosDaMissao = centros.filter((c) => c.missaoId === evento.missaoId);
-  const centrosDisponiveis = centrosDaMissao.some(
-    (c) => c.id === evento.centroId,
-  )
-    ? centrosDaMissao
-    : [
-        ...centrosDaMissao,
-        {
-          id: evento.centroId,
-          nome: `${evento.centroNome} (inativo)`,
-          principal: false,
-        },
-      ];
+  /* Só os centros desta missão: as FKs compostas `(centro_id, missao_id)` e
+     `(local_centro_id, missao_id)` recusam os de outra, e oferecê-los no
+     select seria oferecer um erro. O centro e o local da própria ação entram
+     mesmo arquivados — ver `opcoesDeCentro`. */
+  const opcoes = opcoesDeCentro(
+    centros.filter((c) => c.missaoId === evento.missaoId),
+    evento,
+  );
 
   return (
     <div className="space-y-4">
@@ -70,7 +62,8 @@ export default async function PaginaVisaoGeralEvento({
           eventoId={evento.id}
           className="lg:col-span-1"
           tipos={tipos}
-          centros={centrosDisponiveis}
+          centros={opcoes.centros}
+          locais={opcoes.locais}
           informacoes={{
             centroId: evento.centroId,
             centroNome: evento.centroNome,
@@ -82,6 +75,7 @@ export default async function PaginaVisaoGeralEvento({
             missaoNome: evento.missaoNome,
             dataInicio: evento.dataInicio,
             dataFim: evento.dataFim,
+            localCentroId: evento.localCentroId,
             local: evento.local,
             endereco: evento.endereco,
             responsavelNome: evento.responsavelNome,

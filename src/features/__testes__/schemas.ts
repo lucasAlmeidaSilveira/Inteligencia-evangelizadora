@@ -169,6 +169,7 @@ const acaoBase = {
   observacoes: "",
   dataInicio: "2026-09-12T09:00",
   dataFim: "2026-09-14T17:00",
+  localCentroId: "",
   local: "",
   endereco: "",
   responsavelNome: "",
@@ -266,6 +267,81 @@ verificar(
 );
 
 /*
+ * O local é um centro da missão ou texto livre, nunca os dois. O formulário
+ * guarda o texto de "Outro local" enquanto a pessoa alterna entre as opções;
+ * se ele chegasse ao banco junto com o centro, o CHECK `local_centro_ou_texto`
+ * recusaria o salvamento inteiro com uma frase que ninguém entenderia.
+ */
+const comCentroComoLocal = {
+  ...acaoBase,
+  localCentroId: UUID_B,
+  local: "Paróquia São José",
+  endereco: "Rua das Flores, 100",
+};
+
+verificar(
+  "Ação apostólica — local num centro da missão",
+  eventoSchema,
+  comCentroComoLocal,
+  "centro escolhido, com texto esquecido de \"Outro local\"",
+);
+
+{
+  const saida = eventoSchema.safeParse(comCentroComoLocal);
+  ok(
+    "com centro como local, o texto livre sai vazio",
+    saida.success &&
+      saida.data.localCentroId === UUID_B &&
+      saida.data.local === null &&
+      saida.data.endereco === null,
+    saida.success ? JSON.stringify(saida.data) : undefined,
+  );
+}
+
+{
+  const saida = eventoSchema.safeParse({
+    ...acaoBase,
+    local: "Paróquia São José",
+    endereco: "Rua das Flores, 100",
+  });
+  ok(
+    "sem centro, o texto livre é o local, como sempre foi",
+    saida.success &&
+      saida.data.localCentroId === null &&
+      saida.data.local === "Paróquia São José" &&
+      saida.data.endereco === "Rua das Flores, 100",
+    saida.success ? JSON.stringify(saida.data) : undefined,
+  );
+}
+
+recusar(
+  "Ação apostólica — local que não é id de centro",
+  eventoSchema,
+  { ...acaoBase, localCentroId: "salão paroquial" },
+  "localCentroId",
+);
+
+/* A regra de período mora por dentro da limpeza do local, e não por fora: no
+   zod, o `refine` de um schema transformado não roda quando outro campo já
+   falhou. Os dois erros precisam aparecer no mesmo envio. */
+console.log("\nAção apostólica — dois erros no mesmo envio");
+{
+  const saida = eventoSchema.safeParse({
+    ...acaoBase,
+    titulo: "x",
+    dataFim: "2026-09-11T09:00",
+  });
+  const campos = saida.success
+    ? []
+    : saida.error.issues.map((i) => i.path.join("."));
+  ok(
+    "título curto e término antes do início são apontados juntos",
+    campos.includes("titulo") && campos.includes("dataFim"),
+    `apontou para: ${campos.join(", ") || "(nada)"}`,
+  );
+}
+
+/*
  * Os schemas de seção são o caminho da edição direto na visão geral: um card
  * grava só os seus campos. Rodam duas vezes como o completo, e as regras
  * cruzadas precisam continuar valendo aqui — um card que aceitasse o que o
@@ -279,6 +355,7 @@ verificar(
     tipoEventoId: UUID_C,
     dataInicio: "2026-09-12T09:00",
     dataFim: "2026-09-14T17:00",
+    localCentroId: "",
     local: "",
     endereco: "",
     responsavelNome: "",
@@ -286,6 +363,26 @@ verificar(
   },
   "card de informações com os opcionais em branco",
 );
+
+// O card edita o local também: a mesma regra de "um ou outro" vale aqui.
+{
+  const saida = informacoesSchema.safeParse({
+    centroId: UUID_B,
+    tipoEventoId: UUID_C,
+    dataInicio: "2026-09-12T09:00",
+    dataFim: "2026-09-14T17:00",
+    localCentroId: UUID_A,
+    local: "Salão",
+    endereco: "Rua A, 1",
+    responsavelNome: "",
+    status: "planejado",
+  });
+  ok(
+    "Seção Informações — com centro como local, o texto livre sai vazio",
+    saida.success && saida.data.local === null && saida.data.endereco === null,
+    saida.success ? JSON.stringify(saida.data) : undefined,
+  );
+}
 
 verificar(
   "Seção Participação",

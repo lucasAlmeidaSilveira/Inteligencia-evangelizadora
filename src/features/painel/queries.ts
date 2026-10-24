@@ -16,6 +16,11 @@ import {
 } from "@/server/db/schema";
 import { membrosDaMissao } from "@/features/missoes/agregados";
 import { calcularFinanceiro } from "@/features/eventos/financeiro";
+import {
+  centroDoLocal,
+  juncaoDoLocal,
+  nomeDoLocal,
+} from "@/features/eventos/local";
 import { deslocarMes } from "@/lib/mes";
 import { competenciaDoFim, lerChaveDePeriodo } from "@/lib/periodo";
 
@@ -572,7 +577,8 @@ const colunasAgenda = {
   // ISO, não `Date`: ver `server/db/iso.ts`. É o que permite cachear.
   dataInicio: emIso(eventos.dataInicio),
   dataFim: emIso(eventos.dataFim),
-  local: eventos.local,
+  // O centro escolhido como local ou o texto livre — ver `eventos/local.ts`.
+  local: nomeDoLocal,
   status: eventos.status,
   /* O calendário marca a ação levada ao regional, e continua marcando depois
      que ela acontece: o destaque é sobre a ação, não sobre a data — é
@@ -593,6 +599,7 @@ export const obterEventosDoPeriodo = leituraCacheada(
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+      .leftJoin(centroDoLocal, juncaoDoLocal)
       .where(
         and(
           lte(eventos.dataInicio, ate),
@@ -601,7 +608,11 @@ export const obterEventosDoPeriodo = leituraCacheada(
         ),
       )
       .orderBy(asc(eventos.dataInicio)),
-  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+  {
+    // `centros` pelo local, que pode ser o nome de um centro.
+    etiquetas: () => [ETIQUETAS.eventos, ETIQUETAS.centros],
+    revalidar: CINCO_MINUTOS,
+  },
 );
 
 /*
@@ -618,6 +629,7 @@ export const obterProximosEventos = leituraCacheada(
       .from(eventos)
       .innerJoin(missoes, eq(missoes.id, eventos.missaoId))
       .innerJoin(tiposEvento, eq(tiposEvento.id, eventos.tipoEventoId))
+      .leftJoin(centroDoLocal, juncaoDoLocal)
       .where(
         and(
           gte(eventos.dataFim, new Date()),
@@ -627,7 +639,10 @@ export const obterProximosEventos = leituraCacheada(
       )
       .orderBy(asc(eventos.dataInicio))
       .limit(limite),
-  { etiquetas: () => [ETIQUETAS.eventos], revalidar: CINCO_MINUTOS },
+  {
+    etiquetas: () => [ETIQUETAS.eventos, ETIQUETAS.centros],
+    revalidar: CINCO_MINUTOS,
+  },
 );
 
 export type EventoAgenda = Awaited<

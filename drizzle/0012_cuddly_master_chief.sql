@@ -1,0 +1,4 @@
+ALTER TABLE "ie"."eventos" ADD COLUMN "local_centro_id" uuid;--> statement-breakpoint
+ALTER TABLE "ie"."eventos" ADD CONSTRAINT "fk_eventos_local_centro_da_missao" FOREIGN KEY ("local_centro_id","missao_id") REFERENCES "ie"."centros_evangelizacao"("id","missao_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_eventos_local_centro" ON "ie"."eventos" USING btree ("local_centro_id");--> statement-breakpoint
+ALTER TABLE "ie"."eventos" ADD CONSTRAINT "local_centro_ou_texto" CHECK ("ie"."eventos"."local_centro_id" is null or ("ie"."eventos"."local" is null and "ie"."eventos"."endereco" is null));

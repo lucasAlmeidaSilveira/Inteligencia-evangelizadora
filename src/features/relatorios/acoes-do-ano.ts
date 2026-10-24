@@ -1,5 +1,10 @@
 import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
 
+import {
+  centroDoLocal,
+  juncaoDoLocal,
+  nomeDoLocal,
+} from "@/features/eventos/local";
 import type { Transacao } from "@/server/db/index";
 import {
   centrosEvangelizacao,
@@ -40,7 +45,8 @@ export async function consultarAcoesDoAno(
       tipoCor: tiposEvento.cor,
       missaoNome: missoes.nome,
       centroNome: centrosEvangelizacao.nome,
-      local: eventos.local,
+      // O centro escolhido como local ou o texto livre — ver `eventos/local.ts`.
+      local: nomeDoLocal,
       dataInicio: eventos.dataInicio,
       dataFim: eventos.dataFim,
       status: eventos.status,
@@ -53,6 +59,7 @@ export async function consultarAcoesDoAno(
       centrosEvangelizacao,
       eq(centrosEvangelizacao.id, eventos.centroId),
     )
+    .leftJoin(centroDoLocal, juncaoDoLocal)
     .where(
       and(
         lte(eventos.dataInicio, ate),

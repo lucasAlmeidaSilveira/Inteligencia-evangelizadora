@@ -354,7 +354,8 @@ create or replace function ie.usuario_nome() returns text
 /*
  * O histórico guarda o *nome* do tipo, do centro e da missão, não o id: "de
  * Retiro para SVES" é o que se lê, e é o nome que valia naquele momento — um
- * tipo renomeado depois não reescreve o passado. Se o nome não está ao alcance
+ * tipo renomeado depois não reescreve o passado. O centro onde a ação acontece
+ * (`local_centro_id`) entra pelo mesmo motivo. Se o nome não está ao alcance
  * (centro de outra missão, para um admin que moveu a ação), fica o id, que é
  * melhor que nada.
  */
@@ -365,9 +366,10 @@ create or replace function ie.nome_no_historico(coluna text, valor jsonb) return
       when valor is null or jsonb_typeof(valor) = 'null' then valor
       else to_jsonb(coalesce(
         case coluna
-          when 'tipo_evento_id' then (select nome from ie.tipos_evento where id = (valor #>> '{}')::uuid)
-          when 'centro_id'      then (select nome from ie.centros_evangelizacao where id = (valor #>> '{}')::uuid)
-          when 'missao_id'      then (select nome from ie.missoes where id = (valor #>> '{}')::uuid)
+          when 'tipo_evento_id'  then (select nome from ie.tipos_evento where id = (valor #>> '{}')::uuid)
+          when 'centro_id'       then (select nome from ie.centros_evangelizacao where id = (valor #>> '{}')::uuid)
+          when 'local_centro_id' then (select nome from ie.centros_evangelizacao where id = (valor #>> '{}')::uuid)
+          when 'missao_id'       then (select nome from ie.missoes where id = (valor #>> '{}')::uuid)
         end,
         valor #>> '{}'))
     end
@@ -406,7 +408,7 @@ create or replace function ie.registrar_historico_evento() returns trigger
       de   := antes -> chave;
       para := depois -> chave;
       if de is distinct from para then
-        if chave in ('tipo_evento_id', 'centro_id', 'missao_id') then
+        if chave in ('tipo_evento_id', 'centro_id', 'local_centro_id', 'missao_id') then
           de   := ie.nome_no_historico(chave, de);
           para := ie.nome_no_historico(chave, para);
         end if;

@@ -44,6 +44,8 @@ const ROTULOS: Record<string, string> = {
   data_inicio: "Início",
   data_fim: "Término",
   local: "Local",
+  // Chega à tela já unido a `local`, sob o mesmo rótulo — ver `unirLocal`.
+  local_centro_id: "Local",
   endereco: "Endereço",
   responsavel_nome: "Responsável",
   status: "Status",
@@ -97,10 +99,48 @@ export type AlteracaoLegivel = {
   longa: boolean;
 };
 
+/**
+ * `local_centro_id` e `local` são o mesmo dado em duas colunas: o centro
+ * escolhido ou o texto livre, nunca os dois (CHECK `local_centro_ou_texto`).
+ * Trocar um pelo outro grava duas alterações — "Local: Paróquia São José →
+ * em branco" e "local_centro_id: em branco → Missão Guarulhos" —, e quem lê
+ * quer uma só: "Local: Paróquia São José → Missão Guarulhos". Como no máximo
+ * um dos dois tem valor de cada lado, o primeiro não vazio é o local daquele
+ * momento.
+ */
+function unirLocal(lista: Alteracao[]): Alteracao[] {
+  const centro = lista.find((a) => a.campo === "local_centro_id");
+  if (!centro) return lista;
+  const texto = lista.find((a) => a.campo === "local");
+
+  const de = centro.de ?? texto?.de ?? null;
+  const para = centro.para ?? texto?.para ?? null;
+
+  /* Mesmo nome dos dois lados: mudou só a fonte — o centro excluído, cujo nome
+     passou para o texto livre, ou o texto que virou o centro de mesmo nome.
+     Sem dizer a fonte, a linha seria "Sede → Sede", e quem lê não saberia o
+     que mudou. */
+  const comFonte = (valor: Valor, doCentro: boolean) =>
+    `${valor} (${doCentro ? "centro da missão" : "escrito à mão"})`;
+  const unida: Alteracao =
+    de === para
+      ? {
+          campo: "local",
+          de: comFonte(de, centro.de !== null),
+          para: comFonte(para, centro.para !== null),
+        }
+      : { campo: "local", de, para };
+
+  // No lugar do primeiro do par, para manter a ordem em que a trigger grava.
+  const posicao = lista.findIndex((a) => a === centro || a === texto);
+  const resto = lista.filter((a) => a !== centro && a !== texto);
+  return [...resto.slice(0, posicao), unida, ...resto.slice(posicao)];
+}
+
 function alteracoesDe(detalhes: DetalhesHistorico): AlteracaoLegivel[] {
   const lista = detalhes.alteracoes;
   if (!Array.isArray(lista)) return [];
-  return lista.map((a) => ({
+  return unirLocal(lista).map((a) => ({
     campo: a.campo,
     rotulo: rotuloDoCampo(a.campo),
     de: formatarValorDoCampo(a.campo, a.de),

@@ -29,11 +29,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-import type { CentroParaSelecao } from "@/features/centros/queries";
 import { paraInstante } from "@/lib/fuso";
 
 import { atualizarEvento, criarEvento } from "../actions";
+import type { OpcaoDeCentro } from "../opcoes-de-centro";
 import { eventoSchema, STATUS_EVENTO } from "../schemas";
+import { SeletorLocal } from "./seletor-local";
 import { SeletorQuando } from "./seletor-quando";
 
 type Entrada = z.input<typeof eventoSchema>;
@@ -44,6 +45,7 @@ export function FormularioEvento({
   valores,
   missoes,
   centros,
+  locais,
   tipos,
 }: {
   eventoId?: string;
@@ -51,7 +53,11 @@ export function FormularioEvento({
   missoes: { id: string; nome: string }[];
   /** De todas as missões visíveis: a lista é filtrada aqui conforme a missão
    *  escolhida, sem uma ida ao servidor a cada troca. */
-  centros: CentroParaSelecao[];
+  centros: OpcaoDeCentro[];
+  /** Os centros que podem ser o local. Na criação, os mesmos de `centros`;
+   *  na edição, cada lista leva o arquivado que a ação já usa naquele papel
+   *  — ver `opcoesDeCentro`. */
+  locais: OpcaoDeCentro[];
   tipos: { id: string; nome: string; cor: string }[];
 }) {
   const router = useRouter();
@@ -76,7 +82,9 @@ export function FormularioEvento({
   const missaoEscolhida = useWatch({ control, name: "missaoId" });
   const dataInicio = useWatch({ control, name: "dataInicio" });
   const dataFim = useWatch({ control, name: "dataFim" });
+  const localCentroId = useWatch({ control, name: "localCentroId" });
   const centrosDaMissao = centros.filter((c) => c.missaoId === missaoEscolhida);
+  const locaisDaMissao = locais.filter((c) => c.missaoId === missaoEscolhida);
 
   /** O centro que a missão sempre tem — o padrão ao trocar de missão. */
   function principalDaMissao(missaoId: string) {
@@ -126,8 +134,10 @@ export function FormularioEvento({
         <span className="text-destructive" aria-hidden>
           *
         </span>
-        <span className="sr-only">asterisco</span> são obrigatórios. Financeiro,
-        documentos e links são adicionados depois, dentro da ação.
+        <span className="sr-only">asterisco</span> são obrigatórios.{" "}
+        {eventoId
+          ? "Financeiro, documentos e links são adicionados depois, dentro da ação."
+          : "Participação, financeiro, documentos e links são adicionados depois, dentro da ação."}
       </p>
 
       <Card>
@@ -166,6 +176,10 @@ export function FormularioEvento({
                       // recoloca o principal dela, em vez de esvaziar um campo
                       // obrigatório e devolver o erro só no Salvar.
                       setValue("centroId", principalDaMissao(v));
+                      // O local, se era um centro, era da missão anterior e
+                      // cairia na mesma FK. Ele não ganha padrão como o centro:
+                      // é opcional, e onde a ação acontece não se presume.
+                      setValue("localCentroId", "");
                     }}
                   >
                     <SelectTrigger {...props} className="w-full">
@@ -341,19 +355,22 @@ export function FormularioEvento({
             erroFim={errors.dataFim?.message}
           />
 
-          <Campo rotulo="Local" erro={errors.local?.message}>
-            {(props) => (
-              <Input
-                {...props}
-                {...register("local")}
-                placeholder="Paróquia São José"
-              />
-            )}
-          </Campo>
-
-          <Campo rotulo="Endereço" erro={errors.endereco?.message}>
-            {(props) => <Input {...props} {...register("endereco")} />}
-          </Campo>
+          <SeletorLocal
+            className="sm:col-span-2"
+            centros={locaisDaMissao}
+            centroId={localCentroId ?? ""}
+            comTexto={Boolean(valores.local || valores.endereco)}
+            onEscolherCentro={(id) => setValue("localCentroId", id)}
+            onLimparTexto={() => {
+              setValue("local", "");
+              setValue("endereco", "");
+            }}
+            campoLocal={register("local")}
+            campoEndereco={register("endereco")}
+            erroCentro={errors.localCentroId?.message}
+            erroLocal={errors.local?.message}
+            erroEndereco={errors.endereco?.message}
+          />
 
           <Campo
             rotulo="Orçamento previsto"
@@ -375,143 +392,149 @@ export function FormularioEvento({
 
       <Card>
         <CardHeader>
-          <CardTitle>Participação e alcance</CardTitle>
-          <CardDescription>
-            Preencha depois de realizada, se ainda não souber os números.
-          </CardDescription>
+          <CardTitle>Descrição e observações</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2">
-          <Campo
-            rotulo="Participantes inscritos"
-            ajuda="Quantas pessoas se inscreveram antes."
-            erro={errors.participantesInscritos?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="0"
-                className="tabular"
-                {...register("participantesInscritos")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Participantes presentes"
-            ajuda="Quantas compareceram de fato. É este o número que entra nos relatórios."
-            erro={errors.participantesTotal?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="0"
-                className="tabular"
-                {...register("participantesTotal")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Novos participantes"
-            ajuda="Quantas vieram pela primeira vez."
-            erro={errors.participantesNovos?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="0"
-                className="tabular"
-                {...register("participantesNovos")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Permaneceram após a ação"
-            ajuda="Quantas seguiram num grupo de oração depois."
-            erro={errors.participantesPermaneceram?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="0"
-                className="tabular"
-                {...register("participantesPermaneceram")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Servos engajados"
-            ajuda="Quantos serviram na realização."
-            erro={errors.servosEngajados?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="0"
-                className="tabular"
-                {...register("servosEngajados")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Satisfação (NPS)"
-            ajuda="Nota média de 0 a 10 dada pelos participantes. Deixe vazio se não houve pesquisa."
-            erro={errors.nps?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                inputMode="decimal"
-                min={0}
-                max={10}
-                step={0.1}
-                placeholder="0 a 10"
-                className="tabular"
-                {...register("nps")}
-              />
-            )}
-          </Campo>
-
-          <Campo
-            rotulo="Descrição"
-            erro={errors.descricao?.message}
-            className="sm:col-span-2"
-          >
+        <CardContent className="grid gap-5">
+          <Campo rotulo="Descrição" erro={errors.descricao?.message}>
             {(props) => (
               <Textarea {...props} rows={4} {...register("descricao")} />
             )}
           </Campo>
 
-          <Campo
-            rotulo="Observações"
-            erro={errors.observacoes?.message}
-            className="sm:col-span-2"
-          >
+          <Campo rotulo="Observações" erro={errors.observacoes?.message}>
             {(props) => (
               <Textarea {...props} rows={3} {...register("observacoes")} />
             )}
           </Campo>
         </CardContent>
       </Card>
+
+      {/* Só na edição. Na criação a ação ainda não aconteceu: não há presentes,
+          novos nem nota para informar, e seis campos de número em branco só
+          alongariam a tela. Os valores vazios de `valores` seguem para o
+          schema como sempre — zero, e NPS nulo —, e os números entram depois,
+          no card de participação da visão geral, para onde a criação leva. */}
+      {eventoId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Participação e alcance</CardTitle>
+            <CardDescription>
+              Preencha depois de realizada, se ainda não souber os números.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5 sm:grid-cols-2">
+            <Campo
+              rotulo="Participantes inscritos"
+              ajuda="Quantas pessoas se inscreveram antes."
+              erro={errors.participantesInscritos?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="0"
+                  className="tabular"
+                  {...register("participantesInscritos")}
+                />
+              )}
+            </Campo>
+
+            <Campo
+              rotulo="Participantes presentes"
+              ajuda="Quantas compareceram de fato. É este o número que entra nos relatórios."
+              erro={errors.participantesTotal?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="0"
+                  className="tabular"
+                  {...register("participantesTotal")}
+                />
+              )}
+            </Campo>
+
+            <Campo
+              rotulo="Novos participantes"
+              ajuda="Quantas vieram pela primeira vez."
+              erro={errors.participantesNovos?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="0"
+                  className="tabular"
+                  {...register("participantesNovos")}
+                />
+              )}
+            </Campo>
+
+            <Campo
+              rotulo="Permaneceram após a ação"
+              ajuda="Quantas seguiram num grupo de oração depois."
+              erro={errors.participantesPermaneceram?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="0"
+                  className="tabular"
+                  {...register("participantesPermaneceram")}
+                />
+              )}
+            </Campo>
+
+            <Campo
+              rotulo="Servos engajados"
+              ajuda="Quantos serviram na realização."
+              erro={errors.servosEngajados?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder="0"
+                  className="tabular"
+                  {...register("servosEngajados")}
+                />
+              )}
+            </Campo>
+
+            <Campo
+              rotulo="Satisfação (NPS)"
+              ajuda="Nota média de 0 a 10 dada pelos participantes. Deixe vazio se não houve pesquisa."
+              erro={errors.nps?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  placeholder="0 a 10"
+                  className="tabular"
+                  {...register("nps")}
+                />
+              )}
+            </Campo>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {/* Destino fixo, não `router.back()`: aberta por link ou URL digitada,

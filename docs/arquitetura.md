@@ -149,7 +149,8 @@ a policy de escopo como as demais, mas o que impede um grupo de apontar para o
 centro de outra missão é uma chave estrangeira sobre o par
 `(centro_id, missao_id)`: a linha inserida seria da missão de quem escreve, e
 passaria em qualquer policy. Quando a regra é sobre a *combinação* de duas
-colunas, o lugar dela é uma constraint.
+colunas, o lugar dela é uma constraint. O local da ação, quando é um centro
+(`local_centro_id`), segue o mesmo par.
 
 Essa chave é `no action`, e a diferença para `restrict` importa: `no action` é
 conferido no fim do comando, então apagar uma missão funciona mesmo com as

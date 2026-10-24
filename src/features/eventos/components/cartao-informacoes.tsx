@@ -26,7 +26,9 @@ import { paraInstante } from "@/lib/fuso";
 import type { TipoCentro } from "@/server/db/schema";
 
 import { atualizarInformacoes } from "../actions";
+import type { OpcaoDeCentro } from "../opcoes-de-centro";
 import { informacoesSchema, STATUS_EVENTO } from "../schemas";
+import { SeletorLocal } from "./seletor-local";
 import { SeletorQuando } from "./seletor-quando";
 import { SeloStatus } from "./selo-status";
 import { tratarResultado } from "./resultado-edicao";
@@ -45,6 +47,9 @@ export type InformacoesDaAcao = {
   missaoNome: string;
   dataInicio: string;
   dataFim: string;
+  /** O centro escolhido como local, se houver. `local` e `endereco` já vêm
+   *  resolvidos — os do centro, nesse caso —, prontos para exibir. */
+  localCentroId: string | null;
   local: string | null;
   endereco: string | null;
   responsavelNome: string | null;
@@ -59,12 +64,15 @@ export function CartaoInformacoes({
   tipos,
   /** Só os centros da missão desta ação — a FK composta recusa os de outra. */
   centros,
+  /** Idem, para o local — ver `opcoesDeCentro`. */
+  locais,
   className,
 }: {
   eventoId: string;
   informacoes: InformacoesDaAcao;
   tipos: { id: string; nome: string; cor: string }[];
   centros: { id: string; nome: string; principal: boolean }[];
+  locais: OpcaoDeCentro[];
   className?: string;
 }) {
   return (
@@ -76,6 +84,7 @@ export function CartaoInformacoes({
             informacoes={informacoes}
             tipos={tipos}
             centros={centros}
+            locais={locais}
             fechar={fechar}
             key={informacoes.atualizadoEm}
           />
@@ -169,15 +178,22 @@ function Formulario({
   informacoes,
   tipos,
   centros,
+  locais,
   fechar,
 }: {
   eventoId: string;
   informacoes: InformacoesDaAcao;
   tipos: { id: string; nome: string; cor: string }[];
   centros: { id: string; nome: string; principal: boolean }[];
+  locais: OpcaoDeCentro[];
   fechar: () => void;
 }) {
   const router = useRouter();
+
+  // Com um centro como local, `local` e `endereco` são os dele, resolvidos
+  // para exibir; o texto livre da ação, nesse caso, está vazio.
+  const textoLivre = informacoes.localCentroId === null;
+
   const {
     control,
     register,
@@ -192,8 +208,9 @@ function Formulario({
       tipoEventoId: informacoes.tipoEventoId,
       dataInicio: paraDatetimeLocal(informacoes.dataInicio),
       dataFim: paraDatetimeLocal(informacoes.dataFim),
-      local: informacoes.local ?? "",
-      endereco: informacoes.endereco ?? "",
+      localCentroId: informacoes.localCentroId ?? "",
+      local: textoLivre ? (informacoes.local ?? "") : "",
+      endereco: textoLivre ? (informacoes.endereco ?? "") : "",
       responsavelNome: informacoes.responsavelNome ?? "",
       status: informacoes.status,
     },
@@ -204,6 +221,7 @@ function Formulario({
      inteiro, e o ESLint acusa. */
   const dataInicio = useWatch({ control, name: "dataInicio" });
   const dataFim = useWatch({ control, name: "dataFim" });
+  const localCentroId = useWatch({ control, name: "localCentroId" });
 
   async function enviar(dados: Saida) {
     // Instante no relógio de São Paulo — ver `paraInstante`. É este cartão
@@ -319,19 +337,24 @@ function Formulario({
           erroFim={errors.dataFim?.message}
         />
 
-        <Campo rotulo="Local" erro={errors.local?.message}>
-          {(props) => (
-            <Input
-              {...props}
-              placeholder="Paróquia São José"
-              {...register("local")}
-            />
-          )}
-        </Campo>
-
-        <Campo rotulo="Endereço" erro={errors.endereco?.message}>
-          {(props) => <Input {...props} {...register("endereco")} />}
-        </Campo>
+        <SeletorLocal
+          className="sm:col-span-2"
+          centros={locais}
+          centroId={localCentroId ?? ""}
+          comTexto={
+            textoLivre && Boolean(informacoes.local || informacoes.endereco)
+          }
+          onEscolherCentro={(id) => setValue("localCentroId", id)}
+          onLimparTexto={() => {
+            setValue("local", "");
+            setValue("endereco", "");
+          }}
+          campoLocal={register("local")}
+          campoEndereco={register("endereco")}
+          erroCentro={errors.localCentroId?.message}
+          erroLocal={errors.local?.message}
+          erroEndereco={errors.endereco?.message}
+        />
 
         <Campo
           rotulo="Situação"

@@ -102,9 +102,14 @@ frentes a missão sustenta.
   ações passam para o centro principal da missão; o diálogo de confirmação diz
   quantos são, antes de confirmar. Para só tirar o centro das contagens, o
   caminho é marcá-lo como inativo.
-- **Centro inativo não recebe vínculo novo**, mas quem já aponta para ele
-  continua apontando — e o formulário de edição mostra o centro atual mesmo
-  arquivado, para que salvar não o desvincule sem ninguém pedir.
+- **As ações que acontecem num centro excluído mantêm o local.** O nome e o
+  endereço dele passam para o texto livre delas, e a tela segue mostrando o
+  mesmo lugar. O local não vai para o principal, como o vínculo: isso
+  afirmaria que a ação aconteceu onde não aconteceu.
+- **Centro inativo não recebe vínculo novo** — nem passa a ser local de ação
+  —, mas quem já aponta para ele continua apontando. O formulário de edição
+  mostra o centro e o local atuais mesmo arquivados, cada um só no próprio
+  select, para que salvar não os desvincule sem ninguém pedir.
 - **A lista de grupos de oração filtra por centro**, pela query string, como os
   demais filtros. Não há opção "sem centro": o que não foi separado em outra
   frente está no principal, que aparece pelo nome dele. Os totais do cabeçalho
@@ -285,6 +290,27 @@ Detalhes que sustentam esse fluxo:
   pelo admin master — vale para todas as missões.
 - `dataFim >= dataInicio`, imposto por `CHECK` **e** revalidado no zod, para a
   mensagem aparecer no campo certo.
+- **O local é um centro da missão ou um lugar escrito à mão — um ou outro,
+  nunca os dois.** O formulário oferece os centros da missão num select, mais
+  "Outro local", que abre nome e endereço em texto, como sempre foi. Escolhido
+  um centro, a ação guarda a referência (`local_centro_id`), não uma cópia:
+  nome e endereço vêm do cadastro do centro, e renomeá-lo renomeia o local
+  junto. O CHECK `local_centro_ou_texto` recusa centro e texto ao mesmo tempo,
+  e o zod descarta o texto quando há centro, para a recusa nunca chegar à
+  tela. O local segue opcional: sem centro nem texto, é "não informado".
+- **O local nunca é centro de outra missão.** O par `(local_centro_id,
+  missao_id)` é chave estrangeira, como o do centro da ação. Trocar a missão
+  no formulário completo limpa o local que era centro, em vez de ele virar
+  erro no Salvar — e não ganha padrão, porque onde a ação acontece não se
+  presume.
+- **Onde a ação acontece não é de qual centro ela é.** `centro_id` diz a
+  frente a que a ação pertence; o local, onde ela foi feita. A ação de uma
+  irradiação pode acontecer na sede, e por isso um não mexe no outro.
+- **Criar uma ação não pede participação.** Inscritos, presentes, novos,
+  permaneceram, servos e NPS só aparecem no formulário de edição: na criação a
+  ação ainda não aconteceu, e não há esses números. Ela nasce com zeros (e NPS
+  vazio, "sem pesquisa"), e os números entram depois — pelo card de
+  participação da visão geral, para onde a criação leva, ou por `/editar`.
 - Status: `planejado` → `em_andamento` → `realizado`, ou `cancelado`. Sem
   transição automática: quem move é o usuário.
 - Participantes e servos engajados nunca são negativos.
@@ -482,7 +508,10 @@ Prestação de contas de cada ação, linha a linha.
   pessoa no escopo (semeadura, correção via SQL) o autor aparece como
   "Sistema".
 - **Tipo, centro e missão entram pelo nome que valia na hora** ("de Retiro
-  para SVES"), não pelo id: renomear um tipo depois não reescreve o passado.
+  para SVES"), não pelo id: renomear um tipo depois não reescreve o passado. O
+  centro escolhido como local também. E trocar o texto do local por um centro
+  aparece como uma alteração só, "Local: de Paróquia São José para Missão
+  Guarulhos" — as duas colunas são o mesmo dado.
 - Salvar sem mudar nada não gera linha. Só o prazo da pesquisa mudando (que
   reabrir já grava junto) também não.
 - **Ações anteriores ao histórico** não têm linha de criação; a aba fecha a

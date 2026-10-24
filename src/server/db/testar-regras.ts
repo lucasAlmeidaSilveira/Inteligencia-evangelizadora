@@ -182,6 +182,28 @@ async function principal() {
       ),
     );
 
+    ok(
+      "rejeita local num centro e em texto ao mesmo tempo",
+      await deveRejeitar(
+        c,
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim,
+                              local_centro_id, local)
+         values ($1, $3, $2, 'Dois locais', now(), now(), $3, 'Salão paroquial')`,
+        [missao, tipo, centro],
+      ),
+    );
+
+    ok(
+      "aceita um centro da missão como local, sem texto",
+      !(await deveRejeitar(
+        c,
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim,
+                              local_centro_id)
+         values ($1, $3, $2, 'No centro', now(), now(), $3)`,
+        [missao, tipo, centro],
+      )),
+    );
+
     const { rows: e } = await c.query<{ id: string }>(
       `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
        values ($1, $3, $2, 'Evento válido', now(), now() + interval '3 hours') returning id`,

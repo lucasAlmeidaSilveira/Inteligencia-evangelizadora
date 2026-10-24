@@ -114,6 +114,8 @@ export async function excluirCentro(id: string) {
         .select({
           missaoId: centrosEvangelizacao.missaoId,
           principal: centrosEvangelizacao.principal,
+          nome: centrosEvangelizacao.nome,
+          endereco: centrosEvangelizacao.endereco,
         })
         .from(centrosEvangelizacao)
         .where(eq(centrosEvangelizacao.id, id))
@@ -150,6 +152,15 @@ export async function excluirCentro(id: string) {
         .set({ centroId: principal.id })
         .where(eq(eventos.centroId, id))
         .returning({ id: eventos.id });
+
+      /* Onde a ação aconteceu não é vínculo que se remaneja: mandar o local
+         para o principal afirmaria que ela foi feita num lugar onde não foi.
+         Nome e endereço do centro passam para o texto livre, e a ação continua
+         mostrando o mesmo lugar — só que escrito, não mais referenciado. */
+      await tx
+        .update(eventos)
+        .set({ localCentroId: null, local: alvo.nome, endereco: alvo.endereco })
+        .where(eq(eventos.localCentroId, id));
 
       await tx
         .delete(centrosEvangelizacao)
