@@ -3,6 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ClipboardList,
   Clock,
   MapPin,
   MoreVertical,
@@ -40,18 +41,24 @@ import { formatarNumero } from "@/lib/format";
 
 import type { CentroParaSelecao } from "@/features/centros/queries";
 
+import { contagemVencida } from "@/features/lembretes/regras";
+
 import { excluirGrupo } from "../actions";
 import { FiltrosGrupos } from "./filtros-grupos";
 import type { GrupoListado } from "../queries";
 import { nomeDoDia } from "../schemas";
+import { DialogoContagem } from "./dialogo-contagem";
 import { DialogoGrupo } from "./dialogo-grupo";
+import { ResumoContagem, SituacaoContagem } from "./resumo-contagem";
 
 /** Converte o registro do banco de volta para o formato do formulário. */
 function paraFormulario(grupo: GrupoListado) {
   return {
     nome: grupo.nome,
     centroId: grupo.centroId,
-    quantidadePessoas: grupo.quantidadePessoas,
+    membrosEfetivos: grupo.membrosEfetivos,
+    membrosFlutuantes: grupo.membrosFlutuantes,
+    membrosEvadidos: grupo.membrosEvadidos,
     diaSemana: grupo.diaSemana === null ? "" : String(grupo.diaSemana),
     // O Postgres devolve `time` como "19:30:00"; o input espera "19:30".
     horario: grupo.horario ? grupo.horario.slice(0, 5) : "",
@@ -70,6 +77,8 @@ export function ListaGrupos({
   centros,
   grupos,
   filtrado = false,
+  apenasPendentes = false,
+  grupoParaContar,
 }: {
   missaoId: string;
   /** Todos os centros da missão, inclusive os arquivados — o filtro precisa
@@ -78,6 +87,11 @@ export function ListaGrupos({
   grupos: GrupoListado[];
   /** Há recorte por centro na URL: muda o que dizer quando a lista vem vazia. */
   filtrado?: boolean;
+  /** A lista já veio recortada aos grupos com contagem vencida (`?contagem=pendente`). */
+  apenasPendentes?: boolean;
+  /** Grupo cujo diálogo de contagem abre sozinho — é como o lembrete chega
+   *  aqui (`?grupo=<id>`). */
+  grupoParaContar?: string;
 }) {
   const router = useRouter();
   const [excluindo, iniciarExclusao] = useTransition();
@@ -98,6 +112,11 @@ export function ListaGrupos({
   }
 
   const [emEdicao, setEmEdicao] = useState<GrupoListado | null>(null);
+  /* Começa aberto quando a URL aponta para um grupo: quem clicou no lembrete
+     cai direto no formulário de contagem, sem procurar o grupo na lista. */
+  const [emContagem, setEmContagem] = useState<GrupoListado | null>(
+    () => grupos.find((g) => g.id === grupoParaContar) ?? null,
+  );
   const [criando, setCriando] = useState(false);
   const [paraExcluir, setParaExcluir] = useState<GrupoListado | null>(null);
 
@@ -125,20 +144,35 @@ export function ListaGrupos({
     });
   }
 
+  function fecharContagem(salvou: boolean) {
+    setEmContagem(null);
+    // O `?grupo=` cumpriu o papel: ficar na URL faria o diálogo reabrir a cada
+    // recarga. Sai dela, e a navegação já traz a lista atualizada.
+    if (grupoParaContar) {
+      router.replace(`/missoes/${missaoId}/grupos`);
+      return;
+    }
+    if (salvou) router.refresh();
+  }
+
   // Contados sobre `visiveis`: o resumo acima da lista precisa cair junto com
   // o cartão, senão o número segue afirmando o que a tela já desmentiu.
   const ativos = visiveis.filter((g) => g.ativo);
   const pessoas = ativos.reduce((soma, g) => soma + g.quantidadePessoas, 0);
+  const pendentes = ativos.filter((g) => contagemVencida(g.ultimaContagemEm));
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground text-sm">
           {grupos.length === 0
-            ? filtrado
+            ? filtrado || apenasPendentes
               ? "Nenhum grupo neste recorte."
               : "Nenhum grupo cadastrado."
-            : `${formatarNumero(ativos.length)} grupo(s) ativo(s) reunindo ${formatarNumero(pessoas)} pessoas.`}
+            : `${formatarNumero(ativos.length)} grupo(s) ativo(s) reunindo ${formatarNumero(pessoas)} pessoas.` +
+              (pendentes.length > 0
+                ? ` ${formatarNumero(pendentes.length)} com contagem pendente.`
+                : "")}
         </p>
         <Button className="cursor-pointer" onClick={() => setCriando(true)}>
           <Plus aria-hidden />
@@ -152,7 +186,21 @@ export function ListaGrupos({
       {centros.length > 0 ? <FiltrosGrupos centros={centros} /> : null}
 
       {grupos.length === 0 ? (
-        filtrado ? (
+        apenasPendentes ? (
+          <EstadoVazio
+            Icone={ClipboardList}
+            titulo="Nenhuma contagem pendente"
+            descricao="Todos os grupos desta missão tiveram a contagem registrada nos últimos dois meses."
+          >
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => router.push(`/missoes/${missaoId}/grupos`)}
+            >
+              Ver todos os grupos
+            </Button>
+          </EstadoVazio>
+        ) : filtrado ? (
           <EstadoVazio
             Icone={UsersRound}
             titulo="Nenhum grupo neste centro"
@@ -205,9 +253,10 @@ export function ListaGrupos({
                               <Badge variant="secondary">Inativo</Badge>
                             ) : null}
                           </div>
-                          <p className="text-muted-foreground text-sm">
-                            {formatarNumero(grupo.quantidadePessoas)} pessoas
-                          </p>
+                          <ResumoContagem contagem={grupo} />
+                          <SituacaoContagem
+                            ultimaContagemEm={grupo.ultimaContagemEm}
+                          />
                           {grupo.centroNome ? (
                             <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
                               <Waypoints
@@ -231,6 +280,13 @@ export function ListaGrupos({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => setEmContagem(grupo)}
+                            >
+                              <ClipboardList className="size-4" aria-hidden />
+                              Atualizar contagem
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onClick={() => setEmEdicao(grupo)}
@@ -319,6 +375,22 @@ export function ListaGrupos({
           valores={paraFormulario(emEdicao)}
           aberto
           aoFechar={() => setEmEdicao(null)}
+        />
+      ) : null}
+
+      {emContagem ? (
+        <DialogoContagem
+          key={emContagem.id}
+          grupoId={emContagem.id}
+          nome={emContagem.nome}
+          valores={{
+            membrosEfetivos: emContagem.membrosEfetivos,
+            membrosFlutuantes: emContagem.membrosFlutuantes,
+            membrosEvadidos: emContagem.membrosEvadidos,
+          }}
+          ultimaContagemEm={emContagem.ultimaContagemEm}
+          aberto
+          aoFechar={fecharContagem}
         />
       ) : null}
 

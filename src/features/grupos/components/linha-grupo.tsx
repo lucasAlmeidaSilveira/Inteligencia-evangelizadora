@@ -3,10 +3,10 @@ import { Church, Clock, HandHeart, MapPin, Waypoints } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatarNumero } from "@/lib/format";
 
 import type { GrupoVisivel } from "../queries";
 import { nomeDoDia } from "../schemas";
+import { ResumoContagem, SituacaoContagem } from "./resumo-contagem";
 
 /**
  * Grupo na listagem que atravessa missões.
@@ -42,10 +42,12 @@ export function LinhaGrupo({
               </h2>
               {!grupo.ativo ? <Badge variant="secondary">Inativo</Badge> : null}
             </div>
-            <p className="text-muted-foreground text-sm">
-              {formatarNumero(grupo.quantidadePessoas)} pessoas
-            </p>
+            <ResumoContagem contagem={grupo} />
           </div>
+          <SituacaoContagem
+            ultimaContagemEm={grupo.ultimaContagemEm}
+            className="shrink-0"
+          />
         </div>
 
         <div className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1.5 text-xs">

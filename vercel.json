@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/lembretes/contagem",
+      "schedule": "0 11 * * *"
+    }
+  ]
+}

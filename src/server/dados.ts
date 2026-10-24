@@ -79,6 +79,12 @@ export function traduzirErroDeBanco(erro: unknown): string {
     if (restricao.includes("nps_entre_zero_e_dez")) {
       return "A nota de satisfação (NPS) vai de 0 a 10.";
     }
+    if (
+      restricao.includes("membros_nao_negativos") ||
+      restricao.includes("contagem_nao_negativa")
+    ) {
+      return "As contagens de membros não podem ser negativas.";
+    }
     if (restricao.includes("papel_e_missao_coerentes")) {
       return "O administrador master não pertence a missão alguma; os demais precisam de uma.";
     }

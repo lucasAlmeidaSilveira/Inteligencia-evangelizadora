@@ -76,3 +76,42 @@ export const envR2 = memoizar(() =>
     "Cloudflare R2",
   ),
 );
+
+/* ─── E-mail (Resend) ────────────────────────────────────────────────────── */
+
+/**
+ * Só é lido na hora de enviar. `emailConfigurado()` em `src/server/email.ts`
+ * decide antes se vale tentar — e a rotina de lembretes funciona sem e-mail,
+ * apenas com a notificação interna.
+ */
+export const envEmail = memoizar(() =>
+  ler(
+    z.object({
+      RESEND_API_KEY: z.string().min(1),
+      /** "Inteligência Evangelizadora <avisos@dominio-verificado.org>". */
+      EMAIL_REMETENTE: z.string().min(3),
+    }),
+    "E-mail",
+  ),
+);
+
+/* ─── Rotinas agendadas ──────────────────────────────────────────────────── */
+
+export const envAgendador = memoizar(() =>
+  ler(
+    z.object({
+      /**
+       * Segredo que o agendador manda em `Authorization: Bearer`. A Vercel o
+       * injeta sozinha nos crons quando a variável existe no projeto; qualquer
+       * outro agendador precisa mandá-lo à mão. Sem ele a rota recusa tudo.
+       */
+      CRON_SECRET: z.string().min(16),
+      /**
+       * Endereço público da aplicação, para os links do e-mail. Opcional: na
+       * falta, a rota usa a origem da própria requisição.
+       */
+      APP_URL: z.url().optional(),
+    }),
+    "Agendador",
+  ),
+);

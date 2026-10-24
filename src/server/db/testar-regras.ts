@@ -63,11 +63,19 @@ async function principal() {
     );
     const tipo = t[0].id;
 
+    // Todo grupo e toda ação pertencem a um centro — o principal da missão.
+    const { rows: ce } = await c.query<{ id: string }>(
+      `insert into centros_evangelizacao (missao_id, nome, principal)
+       values ($1, 'Principal', true) returning id`,
+      [missao],
+    );
+    const centro = ce[0].id;
+
     // ─── Grupos: no máximo 3 responsáveis ──────────────────────────────────
     console.log("\nGrupos de oração");
     const { rows: g } = await c.query<{ id: string }>(
-      "insert into grupos_oracao (missao_id, nome) values ($1, 'Grupo Teste') returning id",
-      [missao],
+      "insert into grupos_oracao (missao_id, centro_id, nome) values ($1, $2, 'Grupo Teste') returning id",
+      [missao, centro],
     );
     const grupo = g[0].id;
 
@@ -97,11 +105,49 @@ async function principal() {
     );
 
     ok(
-      "rejeita quantidade de pessoas negativa",
+      "rejeita contagem de membros negativa",
       await deveRejeitar(
         c,
-        "insert into grupos_oracao (missao_id, nome, quantidade_pessoas) values ($1, 'Negativo', -1)",
-        [missao],
+        "insert into grupos_oracao (missao_id, centro_id, nome, membros_evadidos) values ($1, $2, 'Negativo', -1)",
+        [missao, centro],
+      ),
+    );
+
+    // ─── Contagem: o total é calculado pelo banco ──────────────────────────
+    const { rows: [contado] } = await c.query<{ quantidade_pessoas: number }>(
+      `insert into grupos_oracao (missao_id, centro_id, nome, membros_efetivos, membros_flutuantes, membros_evadidos)
+       values ($1, $2, 'Contado', 12, 3, 5) returning quantidade_pessoas`,
+      [missao, centro],
+    );
+    ok(
+      "quantidade_pessoas = efetivos + flutuantes, sem os evadidos (12 + 3 = 15)",
+      contado.quantidade_pessoas === 15,
+    );
+
+    ok(
+      "rejeita gravar quantidade_pessoas diretamente (coluna gerada)",
+      await deveRejeitar(
+        c,
+        "insert into grupos_oracao (missao_id, centro_id, nome, quantidade_pessoas) values ($1, $2, 'Direto', 9)",
+        [missao, centro],
+      ),
+    );
+
+    ok(
+      "rejeita histórico de contagem negativo",
+      await deveRejeitar(
+        c,
+        "insert into grupo_contagens (grupo_id, membros_efetivos, membros_flutuantes, membros_evadidos) values ($1, -1, 0, 0)",
+        [grupo],
+      ),
+    );
+
+    ok(
+      "rejeita notificação com endereço externo",
+      await deveRejeitar(
+        c,
+        `insert into notificacoes (usuario_id, titulo, mensagem, url)
+         select id, 'x', 'y', 'https://fora.exemplo' from usuarios limit 1`,
       ),
     );
 
@@ -109,8 +155,8 @@ async function principal() {
       "rejeita dia da semana fora de 0..6",
       await deveRejeitar(
         c,
-        "insert into grupos_oracao (missao_id, nome, dia_semana) values ($1, 'Dia 9', 9)",
-        [missao],
+        "insert into grupos_oracao (missao_id, centro_id, nome, dia_semana) values ($1, $2, 'Dia 9', 9)",
+        [missao, centro],
       ),
     );
 
@@ -120,9 +166,9 @@ async function principal() {
       "rejeita término anterior ao início",
       await deveRejeitar(
         c,
-        `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
-         values ($1, $2, 'Invertido', now(), now() - interval '1 hour')`,
-        [missao, tipo],
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
+         values ($1, $3, $2, 'Invertido', now(), now() - interval '1 hour')`,
+        [missao, tipo, centro],
       ),
     );
 
@@ -130,16 +176,16 @@ async function principal() {
       "rejeita número de participantes negativo",
       await deveRejeitar(
         c,
-        `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim, participantes_total)
-         values ($1, $2, 'Negativo', now(), now(), -5)`,
-        [missao, tipo],
+        `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim, participantes_total)
+         values ($1, $3, $2, 'Negativo', now(), now(), -5)`,
+        [missao, tipo, centro],
       ),
     );
 
     const { rows: e } = await c.query<{ id: string }>(
-      `insert into eventos (missao_id, tipo_evento_id, titulo, data_inicio, data_fim)
-       values ($1, $2, 'Evento válido', now(), now() + interval '3 hours') returning id`,
-      [missao, tipo],
+      `insert into eventos (missao_id, centro_id, tipo_evento_id, titulo, data_inicio, data_fim)
+       values ($1, $3, $2, 'Evento válido', now(), now() + interval '3 hours') returning id`,
+      [missao, tipo, centro],
     );
     const evento = e[0].id;
 

@@ -12,7 +12,7 @@ import {
   participacaoSchema,
   textosSchema,
 } from "@/features/eventos/schemas";
-import { grupoSchema } from "@/features/grupos/schemas";
+import { contagemSchema, grupoSchema } from "@/features/grupos/schemas";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
 import { fimDoDia, inicioDoDia } from "@/lib/fuso";
@@ -416,7 +416,10 @@ verificar(
   {
     nome: "Grupo Teste",
     centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
-    quantidadePessoas: "",
+    // Zero digitado é contagem válida — em branco não é (ver abaixo).
+    membrosEfetivos: "0",
+    membrosFlutuantes: "0",
+    membrosEvadidos: "0",
     diaSemana: "",
     horario: "",
     local: "",
@@ -434,7 +437,9 @@ verificar(
     nome: "Grupo Cheio",
     // O uuid do centro precisa atravessar as duas passagens intacto.
     centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
-    quantidadePessoas: "18",
+    membrosEfetivos: "18",
+    membrosFlutuantes: "4",
+    membrosEvadidos: "2",
     diaSemana: "3",
     horario: "19:30",
     local: "Salão paroquial",
@@ -458,11 +463,55 @@ recusar(
     // Toda missão tem um centro principal, então o formulário nunca envia
     // vazio. Este é o caminho da requisição forjada.
     centroId: "",
-    quantidadePessoas: "",
+    membrosEfetivos: "10",
+    membrosFlutuantes: "0",
+    membrosEvadidos: "0",
     ativo: true,
     pastores: [{ nome: "Maria Silva", telefone: "" }],
   },
   "centroId",
+);
+
+/* ─── Contagem de membros: os três campos são obrigatórios de verdade ──────
+ *
+ * O total antigo tratava "" como zero. A contagem não pode: ela substitui a
+ * planilha bimestral, e um campo esquecido gravado como zero viraria dado
+ * falso sem ninguém perceber. */
+
+recusar(
+  "Grupo de oração — membros efetivos em branco",
+  grupoSchema,
+  {
+    nome: "Grupo Incompleto",
+    centroId: "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21",
+    membrosEfetivos: "",
+    membrosFlutuantes: "0",
+    membrosEvadidos: "0",
+    ativo: true,
+    pastores: [{ nome: "Maria Silva", telefone: "" }],
+  },
+  "membrosEfetivos",
+);
+
+recusar(
+  "Contagem — evadidos negativo",
+  contagemSchema,
+  { membrosEfetivos: "12", membrosFlutuantes: "3", membrosEvadidos: "-1" },
+  "membrosEvadidos",
+);
+
+recusar(
+  "Contagem — flutuantes fracionário",
+  contagemSchema,
+  { membrosEfetivos: "12", membrosFlutuantes: "2.5", membrosEvadidos: "0" },
+  "membrosFlutuantes",
+);
+
+verificar(
+  "Contagem — só os três números, como o lembrete envia",
+  contagemSchema,
+  { membrosEfetivos: "12", membrosFlutuantes: "3", membrosEvadidos: "1" },
+  "três inteiros como texto do formulário",
 );
 
 verificar(

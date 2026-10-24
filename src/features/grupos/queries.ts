@@ -1,13 +1,18 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { lerFiltroDeCentro } from "@/features/centros/schemas";
 import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { comUsuario } from "@/server/dados";
 import { ETIQUETAS } from "@/server/etiquetas";
-import { centrosEvangelizacao, gruposOracao, missoes } from "@/server/db/schema";
+import {
+  centrosEvangelizacao,
+  grupoContagens,
+  gruposOracao,
+  missoes,
+} from "@/server/db/schema";
 
 import { pastoresPorGrupo } from "./pastores";
 
@@ -24,7 +29,32 @@ const colunas = {
   centroNome: centrosEvangelizacao.nome,
   centroTipo: centrosEvangelizacao.tipo,
   nome: gruposOracao.nome,
+  membrosEfetivos: gruposOracao.membrosEfetivos,
+  membrosFlutuantes: gruposOracao.membrosFlutuantes,
+  membrosEvadidos: gruposOracao.membrosEvadidos,
+  /** Efetivos + flutuantes, calculado pelo banco. */
   quantidadePessoas: gruposOracao.quantidadePessoas,
+  /**
+   * Quando a contagem foi feita pela última vez, em ISO — é o que a tela usa
+   * para dizer "atualizada há 3 meses" e marcar o grupo como pendente.
+   *
+   * Subconsulta correlacionada com as referências interpoladas, nunca
+   * escritas como texto: é a interpolação que faz o Drizzle qualificar
+   * `grupos_oracao.id`, e sem ela o Postgres resolveria o nome para a coluna
+   * homônima de `grupo_contagens` — comparação sempre falsa, sem erro algum.
+   * Nulo só para grupo sem histórico, o que a migration não deixa existir.
+   */
+  ultimaContagemEm: sql<string | null>`(
+    select max(${grupoContagens.registradoEm})
+      from ${grupoContagens}
+     where ${grupoContagens.grupoId} = ${gruposOracao.id}
+  )`.mapWith((valor) =>
+    valor === null || valor === undefined
+      ? null
+      : valor instanceof Date
+        ? valor.toISOString()
+        : new Date(valor as string).toISOString(),
+  ),
   diaSemana: gruposOracao.diaSemana,
   horario: gruposOracao.horario,
   local: gruposOracao.local,

@@ -13,6 +13,7 @@ import { missoesDisponiveis } from "@/features/eventos/queries";
 import { LinhaGrupo } from "@/features/grupos/components/linha-grupo";
 import { listarGruposVisiveis } from "@/features/grupos/queries";
 import { lerFiltrosDeGrupos } from "@/features/grupos/schemas";
+import { contagemVencida } from "@/features/lembretes/regras";
 import { formatarNumero } from "@/lib/format";
 
 import { FiltrosGruposGerais } from "./filtros";
@@ -37,6 +38,9 @@ export default async function PaginaGrupos({
   // Somadas sobre o recorte em tela: um total que ignorasse o filtro
   // contradiria a lista logo abaixo dele.
   const pessoas = grupos.reduce((soma, g) => soma + g.quantidadePessoas, 0);
+  const pendentes = grupos.filter(
+    (g) => g.ativo && contagemVencida(g.ultimaContagemEm),
+  ).length;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -76,7 +80,11 @@ export default async function PaginaGrupos({
               <p className="text-muted-foreground text-sm">
                 {formatarNumero(grupos.length)}{" "}
                 {grupos.length === 1 ? "grupo" : "grupos"} reunindo{" "}
-                {formatarNumero(pessoas)} pessoas.
+                {formatarNumero(pessoas)} pessoas
+                {pendentes > 0
+                  ? ` · ${formatarNumero(pendentes)} com contagem pendente`
+                  : ""}
+                .
               </p>
               <div className="cascata space-y-3">
                 {grupos.map((grupo) => (

@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { COOKIE_SESSAO } from "@/lib/auth-cookie";
 
-const ROTAS_PUBLICAS = ["/login", "/api/auth"];
+/* `/api/lembretes` não tem cookie de sessão: quem chama é o agendador, e a rota
+   confere o próprio segredo. Fora desta lista, o middleware a redirecionaria
+   para o login e o cron receberia uma página HTML como resposta. */
+const ROTAS_PUBLICAS = ["/login", "/api/auth", "/api/lembretes"];
 
 /**
  * O middleware roda no Edge, onde o SDK do Firebase Admin não existe — ele

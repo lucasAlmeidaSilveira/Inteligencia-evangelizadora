@@ -172,7 +172,8 @@ declare t text;
 begin
   foreach t in array array[
     'usuarios', 'missoes', 'missao_indicadores', 'centros_evangelizacao',
-    'grupos_oracao', 'grupo_responsaveis', 'tipos_evento',
+    'grupos_oracao', 'grupo_responsaveis', 'grupo_contagens',
+    'lembretes_contagem', 'notificacoes', 'tipos_evento',
     'categorias_financeiras', 'eventos', 'evento_lancamentos',
     'evento_documentos', 'evento_links'
   ] loop
@@ -283,6 +284,26 @@ create policy grupo_pastores_escopo on ie.grupo_responsaveis for all
     select 1 from ie.grupos_oracao g
     where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)));
 
+/* Histórico de contagens e registro de lembretes: herdam o acesso do grupo,
+   como os pastores. Quem vê o grupo vê quando ele foi contado e avisado. */
+drop policy if exists grupo_contagens_escopo on ie.grupo_contagens;
+create policy grupo_contagens_escopo on ie.grupo_contagens for all
+  using (exists (
+    select 1 from ie.grupos_oracao g
+    where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)))
+  with check (exists (
+    select 1 from ie.grupos_oracao g
+    where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)));
+
+drop policy if exists lembretes_contagem_escopo on ie.lembretes_contagem;
+create policy lembretes_contagem_escopo on ie.lembretes_contagem for all
+  using (exists (
+    select 1 from ie.grupos_oracao g
+    where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)))
+  with check (exists (
+    select 1 from ie.grupos_oracao g
+    where g.id = grupo_id and ie.tem_acesso_missao(g.missao_id)));
+
 drop policy if exists evento_lancamentos_escopo on ie.evento_lancamentos;
 create policy evento_lancamentos_escopo on ie.evento_lancamentos for all
   using (exists (
@@ -309,6 +330,34 @@ create policy evento_links_escopo on ie.evento_links for all
   with check (exists (
     select 1 from ie.eventos e
     where e.id = evento_id and ie.tem_acesso_missao(e.missao_id)));
+
+-- ─── Notificações: cada um lê e marca as suas ───────────────────────────────
+
+/*
+ * A notificação é da pessoa, não da missão: o recorte é `usuario_id`, e nem o
+ * responsável enxerga as dos auxiliares. Ler e marcar como lida é de quem
+ * recebeu.
+ *
+ * Inserir é do escopo do sistema — a rotina de lembretes roda com
+ * `app.papel = 'admin'` (ver src/server/sistema.ts) — ou de alguém escrevendo
+ * para si mesmo. Não há caminho para um usuário criar notificação para outro.
+ */
+drop policy if exists notificacoes_proprias on ie.notificacoes;
+create policy notificacoes_proprias on ie.notificacoes for select
+  using (usuario_id = ie.usuario_id());
+
+drop policy if exists notificacoes_marcar on ie.notificacoes;
+create policy notificacoes_marcar on ie.notificacoes for update
+  using (usuario_id = ie.usuario_id())
+  with check (usuario_id = ie.usuario_id());
+
+drop policy if exists notificacoes_apagar on ie.notificacoes;
+create policy notificacoes_apagar on ie.notificacoes for delete
+  using (usuario_id = ie.usuario_id());
+
+drop policy if exists notificacoes_criar on ie.notificacoes;
+create policy notificacoes_criar on ie.notificacoes for insert
+  with check (ie.eh_admin() or usuario_id = ie.usuario_id());
 
 -- ─── Configuração: todos leem, só o admin master altera ────────────────────
 

@@ -130,6 +130,7 @@ async function principal() {
     // Limpa antes: a demonstração precisa ser reproduzível, não acumulativa.
     for (const t of [
       "evento_links", "evento_documentos", "evento_lancamentos", "eventos",
+      "notificacoes", "lembretes_contagem", "grupo_contagens",
       "grupo_responsaveis", "grupos_oracao", "centros_evangelizacao",
       "missao_indicadores", "usuarios", "missoes",
     ]) {
@@ -163,7 +164,7 @@ async function principal() {
     const proximoNome = () => NOMES[nomeAtual++ % NOMES.length];
 
     const hoje = new Date();
-    const totais = { centros: 0, grupos: 0, pastores: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
+    const totais = { centros: 0, grupos: 0, pastores: 0, contagens: 0, competencias: 0, eventos: 0, lancamentos: 0, links: 0, usuarios: 1 };
 
     for (const [indice, missao] of MISSOES.entries()) {
       const slug = missao.nome.toLowerCase().normalize("NFD")
@@ -245,19 +246,46 @@ async function principal() {
       let pessoasEmGrupos = 0;
 
       for (let g = 0; g < quantosGrupos; g++) {
-        const pessoas = inteiro(8, 32);
-        pessoasEmGrupos += pessoas;
+        const efetivos = inteiro(6, 24);
+        const flutuantes = inteiro(0, 8);
+        const evadidos = inteiro(0, 5);
+        // Só efetivos e flutuantes contam como pessoas no grupo — a mesma soma
+        // da coluna gerada `quantidade_pessoas`.
+        pessoasEmGrupos += efetivos + flutuantes;
 
         const { rows: [grupo] } = await c.query<{ id: string }>(
-          `insert into grupos_oracao (missao_id, centro_id, nome, quantidade_pessoas,
+          `insert into grupos_oracao (missao_id, centro_id, nome, membros_efetivos,
+                                      membros_flutuantes, membros_evadidos,
                                       dia_semana, horario, local, ativo)
-           values ($1,$2,$3,$4,$5,$6,$7,true) returning id`,
-          [criada.id, centroSorteado(), `${escolher(GRUPOS)} ${g + 1}`, pessoas,
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) returning id`,
+          [criada.id, centroSorteado(), `${escolher(GRUPOS)} ${g + 1}`,
+           efetivos, flutuantes, evadidos,
            inteiro(0, 6),
            `${String(inteiro(15, 20)).padStart(2, "0")}:${escolher(["00", "30"])}`,
            escolher(LOCAIS)],
         );
         totais.grupos++;
+
+        /* Histórico de contagens com idades variadas: parte dos grupos fica
+           além dos dois meses, para o lembrete bimestral ter o que fazer na
+           demonstração (`pnpm lembretes:simular`) e a tela mostrar o selo de
+           pendente. A contagem mais recente coincide com os números do grupo. */
+        const diasDaUltima = g % 3 === 0 ? inteiro(65, 120) : inteiro(2, 55);
+        for (const [passo, dias] of [[2, diasDaUltima + 125], [1, diasDaUltima + 62], [0, diasDaUltima]].entries()) {
+          const [, atras] = dias as [number, number];
+          const fator = 1 - passo * 0.08;
+          await c.query(
+            `insert into grupo_contagens (grupo_id, membros_efetivos, membros_flutuantes,
+                                          membros_evadidos, registrado_em)
+             values ($1,$2,$3,$4, now() - ($5 || ' days')::interval)`,
+            [grupo.id,
+             passo === 0 ? efetivos : Math.max(1, Math.round(efetivos * fator)),
+             passo === 0 ? flutuantes : Math.max(0, flutuantes - passo),
+             passo === 0 ? evadidos : Math.max(0, evadidos - passo),
+             atras],
+          );
+          totais.contagens++;
+        }
 
         for (let pastor = 1; pastor <= inteiro(1, 3); pastor++) {
           await c.query(
@@ -389,7 +417,7 @@ async function principal() {
     console.log(`  ${MISSOES.length} missões`);
     console.log(`  ${totais.usuarios} usuários (1 admin, ${MISSOES.length} responsáveis, ${totais.usuarios - MISSOES.length - 1} auxiliares)`);
     console.log(`  ${totais.centros} centros de evangelização e irradiações`);
-    console.log(`  ${totais.grupos} grupos de oração com ${totais.pastores} pastores`);
+    console.log(`  ${totais.grupos} grupos de oração com ${totais.pastores} pastores e ${totais.contagens} contagens no histórico`);
     console.log(`  ${totais.competencias} competências registradas (12 meses por missão)`);
     console.log(`  ${totais.eventos} ações apostólicas`);
     console.log(`  ${totais.lancamentos} lançamentos financeiros`);

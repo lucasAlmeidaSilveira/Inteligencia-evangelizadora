@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { relations, sql, type SQL } from "drizzle-orm";
 import {
   boolean,
   check,
@@ -263,7 +263,31 @@ export const gruposOracao = ie.table(
      *  não foi separado em outra frente. */
     centroId: uuid("centro_id").notNull(),
     nome: text("nome").notNull(),
-    quantidadePessoas: integer("quantidade_pessoas").notNull().default(0),
+    /**
+     * A contagem do grupo, em três números que as missões já acompanhavam em
+     * planilha: quem frequenta sempre, quem aparece às vezes e quem deixou de
+     * vir. Os três são obrigatórios — zero é resposta, em branco não é.
+     *
+     * Toda alteração desses números também vira uma linha em
+     * `grupo_contagens`: é o histórico que diz quando a contagem foi feita, e
+     * é dele que o lembrete bimestral decide quem já passou do prazo.
+     */
+    membrosEfetivos: integer("membros_efetivos").notNull().default(0),
+    membrosFlutuantes: integer("membros_flutuantes").notNull().default(0),
+    membrosEvadidos: integer("membros_evadidos").notNull().default(0),
+    /**
+     * Quantas pessoas o grupo reúne: efetivos mais flutuantes. Coluna gerada
+     * pelo banco, não gravada pela aplicação — assim os indicadores, o painel
+     * e os relatórios continuam somando `quantidade_pessoas` sem saber da
+     * divisão em três, e não há como os dois valores divergirem. Evadidos
+     * ficam de fora: quem saiu não está no grupo.
+     */
+    quantidadePessoas: integer("quantidade_pessoas")
+      .notNull()
+      .generatedAlwaysAs(
+        (): SQL =>
+          sql`${gruposOracao.membrosEfetivos} + ${gruposOracao.membrosFlutuantes}`,
+      ),
     /** 0 = domingo … 6 = sábado. */
     diaSemana: integer("dia_semana"),
     horario: time("horario"),
@@ -273,7 +297,10 @@ export const gruposOracao = ie.table(
     ...auditoria,
   },
   (t) => [
-    check("quantidade_pessoas_nao_negativa", sql`${t.quantidadePessoas} >= 0`),
+    check(
+      "membros_nao_negativos",
+      sql`${t.membrosEfetivos} >= 0 and ${t.membrosFlutuantes} >= 0 and ${t.membrosEvadidos} >= 0`,
+    ),
     check("dia_semana_valido", sql`${t.diaSemana} is null or ${t.diaSemana} between 0 and 6`),
     index("idx_grupos_missao").on(t.missaoId),
     index("idx_grupos_centro").on(t.centroId),
@@ -329,6 +356,112 @@ export const grupoPastores = ie.table(
   (t) => [
     check("ordem_entre_um_e_tres", sql`${t.ordem} between 1 and 3`),
     uniqueIndex("uq_grupo_responsavel_ordem").on(t.grupoId, t.ordem),
+  ],
+);
+
+/**
+ * Histórico das contagens de um grupo: uma linha por vez que alguém informou
+ * (ou confirmou) os três números.
+ *
+ * Substitui a planilha bimestral. A linha mais recente é, por definição, a
+ * contagem corrente — e a data dela é o que diz se o grupo está em dia ou se
+ * o lembrete precisa sair. Não há coluna "última contagem em" no grupo: seria
+ * um estado a mais para divergir deste histórico.
+ *
+ * Linhas nunca são editadas nem apagadas pela aplicação; só caem em cascata
+ * com o grupo.
+ */
+export const grupoContagens = ie.table(
+  "grupo_contagens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    grupoId: uuid("grupo_id")
+      .notNull()
+      .references(() => gruposOracao.id, { onDelete: "cascade" }),
+    membrosEfetivos: integer("membros_efetivos").notNull(),
+    membrosFlutuantes: integer("membros_flutuantes").notNull(),
+    membrosEvadidos: integer("membros_evadidos").notNull(),
+    registradoPor: uuid("registrado_por").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    registradoEm: timestamp("registrado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "contagem_nao_negativa",
+      sql`${t.membrosEfetivos} >= 0 and ${t.membrosFlutuantes} >= 0 and ${t.membrosEvadidos} >= 0`,
+    ),
+    // A pergunta de sempre é "qual a última contagem deste grupo?".
+    index("idx_contagens_grupo_data").on(t.grupoId, t.registradoEm),
+  ],
+);
+
+/**
+ * Por onde o lembrete saiu. `interno` é a notificação dentro do sistema;
+ * `email` é a mensagem enviada ao endereço da pessoa.
+ */
+export const canalLembreteEnum = ie.enum("canal_lembrete", ["interno", "email"]);
+
+/**
+ * Registro de cada lembrete de contagem enviado.
+ *
+ * É o que impede a rotina diária de repetir o aviso: um grupo vencido só
+ * recebe lembrete novo quando o anterior já tem dois meses. Sem este registro,
+ * o agendador teria que rodar exatamente de dois em dois meses — e qualquer
+ * falha ou atraso dele perderia ou duplicaria avisos.
+ */
+export const lembretesContagem = ie.table(
+  "lembretes_contagem",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    grupoId: uuid("grupo_id")
+      .notNull()
+      .references(() => gruposOracao.id, { onDelete: "cascade" }),
+    /** Quem recebeu. Nulo se a pessoa saiu da equipe depois. */
+    usuarioId: uuid("usuario_id").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    canal: canalLembreteEnum("canal").notNull(),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_lembretes_grupo_data").on(t.grupoId, t.enviadoEm)],
+);
+
+/**
+ * Notificação interna: o aviso que a pessoa vê no sino do cabeçalho.
+ *
+ * Pertence a um usuário, não a uma missão — a política de RLS é "cada um lê
+ * e marca as suas". Quem escreve é a rotina de lembretes, com o escopo do
+ * sistema. `url` é para onde o clique leva: a tela do grupo, já com o diálogo
+ * de contagem aberto.
+ */
+export const notificacoes = ie.table(
+  "notificacoes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "cascade" }),
+    titulo: text("titulo").notNull(),
+    mensagem: text("mensagem").notNull(),
+    /** Caminho interno (`/missoes/...`), nunca endereço externo. */
+    url: text("url"),
+    lidaEm: timestamp("lida_em", { withTimezone: true }),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check("url_interna", sql`${t.url} is null or ${t.url} ~ '^/'`),
+    // O sino pergunta "quantas não lidas tenho?" a cada página.
+    index("idx_notificacoes_usuario_nao_lidas")
+      .on(t.usuarioId)
+      .where(sql`${t.lidaEm} is null`),
+    index("idx_notificacoes_usuario_data").on(t.usuarioId, t.criadoEm),
   ],
 );
 
@@ -600,8 +733,38 @@ export const gruposOracaoRelations = relations(
       references: [centrosEvangelizacao.id],
     }),
     pastores: many(grupoPastores),
+    contagens: many(grupoContagens),
+    lembretes: many(lembretesContagem),
   }),
 );
+
+export const grupoContagensRelations = relations(grupoContagens, ({ one }) => ({
+  grupo: one(gruposOracao, {
+    fields: [grupoContagens.grupoId],
+    references: [gruposOracao.id],
+  }),
+}));
+
+export const lembretesContagemRelations = relations(
+  lembretesContagem,
+  ({ one }) => ({
+    grupo: one(gruposOracao, {
+      fields: [lembretesContagem.grupoId],
+      references: [gruposOracao.id],
+    }),
+    usuario: one(usuarios, {
+      fields: [lembretesContagem.usuarioId],
+      references: [usuarios.id],
+    }),
+  }),
+);
+
+export const notificacoesRelations = relations(notificacoes, ({ one }) => ({
+  usuario: one(usuarios, {
+    fields: [notificacoes.usuarioId],
+    references: [usuarios.id],
+  }),
+}));
 
 export const grupoPastoresRelations = relations(grupoPastores, ({ one }) => ({
   grupo: one(gruposOracao, {
@@ -667,6 +830,9 @@ export type MissaoIndicador = typeof missaoIndicadores.$inferSelect;
 export type CentroEvangelizacao = typeof centrosEvangelizacao.$inferSelect;
 export type GrupoOracao = typeof gruposOracao.$inferSelect;
 export type GrupoPastor = typeof grupoPastores.$inferSelect;
+export type GrupoContagem = typeof grupoContagens.$inferSelect;
+export type LembreteContagem = typeof lembretesContagem.$inferSelect;
+export type Notificacao = typeof notificacoes.$inferSelect;
 export type TipoEvento = typeof tiposEvento.$inferSelect;
 export type CategoriaFinanceira = typeof categoriasFinanceiras.$inferSelect;
 export type Evento = typeof eventos.$inferSelect;
@@ -676,3 +842,4 @@ export type EventoLink = typeof eventoLinks.$inferSelect;
 export type Papel = (typeof papelEnum.enumValues)[number];
 export type StatusEvento = (typeof statusEventoEnum.enumValues)[number];
 export type TipoCentro = (typeof tipoCentroEnum.enumValues)[number];
+export type CanalLembrete = (typeof canalLembreteEnum.enumValues)[number];

@@ -138,6 +138,8 @@ pnpm dev
 | `pnpm db:copiar` | Copia os dados de outro banco (migração de provedor) |
 | `pnpm db:estado` | Retrato rápido do que existe no banco |
 | `pnpm admin:criar` | Cria o primeiro administrador |
+| `pnpm lembretes:simular` | Mostra quem receberia o lembrete bimestral hoje, sem enviar nada |
+| `pnpm testar:lembretes` | Exercita a rotina do lembrete contra um cenário controlado (banco local) |
 | `pnpm db:testar` · `db:testar-rls` · `db:testar-regras` | Conexão, isolamento e regras de domínio |
 | `pnpm testar:schemas` · `testar:consultas` | Validação e consultas, contra números conhecidos |
 | `pnpm testar:calendario` | Calendário e relatório anual, iguais em qualquer fuso de servidor |
@@ -198,6 +200,31 @@ editar aquele arquivo, não caçar valores hexadecimais pelo código.
 
 Construção do monograma, pares tipográficos e regras de uso em
 [`docs/identidade-visual.md`](docs/identidade-visual.md).
+
+## Lembrete bimestral de contagem
+
+Cada grupo de oração guarda três números — membros **efetivos**, **flutuantes**
+e **evadidos** — e um histórico de quando foram contados. Dois meses depois da
+última contagem, o responsável e os auxiliares da missão recebem um aviso no
+sino do cabeçalho e, se o e-mail estiver configurado, uma mensagem com um link
+por grupo. O link abre a tela do grupo já no diálogo de contagem; salvar
+registra a contagem do bimestre e encerra o lembrete.
+
+Quem avisa é a rota `/api/lembretes/contagem`, chamada todo dia pelo cron de
+`vercel.json` (8h em São Paulo). Ela decide sozinha quem venceu, então o
+agendador pode falhar ou atrasar sem duplicar nem perder avisos.
+
+```bash
+# .env.local
+CRON_SECRET=...            # openssl rand -base64 32 — a Vercel o envia sozinha ao cron
+APP_URL=https://...        # opcional: links do e-mail; sem ele, a origem da requisição
+RESEND_API_KEY=...         # opcional: sem Resend, só a notificação interna
+EMAIL_REMETENTE="Inteligência Evangelizadora <avisos@dominio-verificado.org>"
+```
+
+Para ver quem receberia hoje sem enviar nada: `pnpm lembretes:simular`, ou
+`GET /api/lembretes/contagem?simular=1` com o cabeçalho
+`Authorization: Bearer $CRON_SECRET`.
 
 ## Banco de demonstração
 

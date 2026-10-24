@@ -1,4 +1,4 @@
-import { ViewTransition } from "react";
+import { Suspense, ViewTransition } from "react";
 
 import { AlternarTema } from "@/components/alternar-tema";
 import { MenuUsuario } from "@/components/navegacao/menu-usuario";
@@ -10,6 +10,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { focoAtual } from "@/features/missoes/foco";
+import {
+  Notificacoes,
+  SinoCarregando,
+} from "@/features/notificacoes/components/notificacoes";
 import { requerUsuario } from "@/server/auth/sessao";
 
 export default async function LayoutApp({ children }: LayoutProps<"/">) {
@@ -56,6 +60,11 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
           <SidebarTrigger className="cursor-pointer" />
           <Separator orientation="vertical" className="mr-1 !h-5" />
           <div className="flex-1" />
+          {/* Em fronteira própria: a consulta das notificações não segura o
+              resto do cabeçalho, e o esqueleto tem o tamanho exato do sino. */}
+          <Suspense fallback={<SinoCarregando />}>
+            <Notificacoes />
+          </Suspense>
           <AlternarTema />
           <MenuUsuario
             nome={usuario.nome}

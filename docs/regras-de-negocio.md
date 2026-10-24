@@ -49,6 +49,7 @@ Três níveis, do mais amplo ao mais restrito:
 | Convidar pessoas | ✓ (qualquer papel) | ✓ (auxiliares da sua missão) | |
 | Editar e excluir pessoas | ✓ (qualquer uma, menos ele mesmo) | ✓ (auxiliares da sua missão) | |
 | Centros, grupos, ações, financeiro, documentos, indicadores | ✓ | ✓ | ✓ |
+| Receber o lembrete bimestral de contagem dos grupos | | ✓ | ✓ |
 | Painel, calendário e relatórios | todas as missões (ou uma, em foco) | a sua | a sua |
 | Trocar a própria senha | ✓ | ✓ | ✓ |
 
@@ -236,7 +237,46 @@ Detalhes que sustentam esse fluxo:
 - Ao salvar, a lista de pastores é **substituída por completo**. Apagar e
   reinserir mantém `ordem` contígua (1, 2, 3), que é o que a restrição espera.
 - `diaSemana`: 0 = domingo … 6 = sábado. Opcional, como horário e local.
-- Quantidade de pessoas nunca é negativa.
+- **A contagem são três números obrigatórios**: membros **efetivos** (vêm
+  sempre), **flutuantes** (vêm às vezes) e **evadidos** (deixaram de vir).
+  Nenhum é negativo (`CHECK membros_nao_negativos`), e em branco não vira zero
+  — zero digitado é informação, campo esquecido não é. Substituem a planilha
+  bimestral que as missões mantinham.
+- **`quantidade_pessoas` é coluna gerada pelo banco**: efetivos + flutuantes.
+  Evadidos ficam de fora — quem saiu não está no grupo. Indicadores, painel e
+  relatórios continuam somando essa coluna sem conhecer a divisão, e não há
+  como os dois valores divergirem. A migration preservou o total antigo como
+  "efetivos", com flutuantes e evadidos em zero até a próxima atualização.
+- **Toda contagem vira uma linha em `grupo_contagens`** (histórico, com quem
+  registrou e quando). O cadastro do grupo é a primeira; editar o grupo só
+  registra outra se algum dos três números mudou; "Atualizar contagem" registra
+  sempre — confirmar "continua igual" é contar. A linha mais recente é a
+  contagem corrente; não existe coluna "última contagem em" no grupo.
+
+## Lembrete bimestral de contagem
+
+- **Um grupo está com a contagem vencida** quando a última linha de
+  `grupo_contagens` tem dois meses ou mais — ou quando não há nenhuma. A regra
+  é uma só, `contagemVencida` em `features/lembretes/regras.ts`, usada pela
+  tela (selo "Contagem pendente") e pela rotina que avisa.
+- **A rotina roda todo dia** (`/api/lembretes/contagem`, 8h de São Paulo) e
+  decide sozinha quem avisar: grupo ativo, de missão ativa, vencido e **sem
+  lembrete nos últimos dois meses** (`lembretes_contagem`). É isso que torna o
+  ritmo bimestral independente do agendador — atraso, falha ou execução dobrada
+  não duplicam aviso nem pulam bimestre.
+- **Quem recebe** são o responsável e os auxiliares ativos da missão — quem
+  registra grupos. O admin master não: acompanha todas e seria soterrado.
+  Missão vencida sem ninguém ativo aparece no relatório da rotina como "sem
+  destinatário".
+- **Uma mensagem por pessoa**, com todos os grupos vencidos da missão dela:
+  notificação interna (sino do cabeçalho) sempre; e-mail quando o Resend está
+  configurado. Falha de e-mail não desfaz a notificação nem derruba a rodada —
+  fica no relatório.
+- **O link leva ao diálogo de contagem**: `/missoes/<id>/grupos?grupo=<id>`
+  abre o grupo já com os três campos; `?contagem=pendente` recorta a lista aos
+  vencidos. Salvar pelo diálogo registra a contagem e tira o grupo da fila.
+- Notificação é da pessoa, não da missão: cada um lê e marca as suas, e nem o
+  responsável enxerga as dos auxiliares.
 
 ## Ações apostólicas
 

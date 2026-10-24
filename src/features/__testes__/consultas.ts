@@ -104,10 +104,12 @@ async function principal() {
 
         const g = (
           await tx.execute<{ id: string }>(
-            sql`insert into grupos_oracao (missao_id, centro_id, nome, quantidade_pessoas, ativo) values
-                  (${missao}, ${c[1]}, 'Grupo A', 12, true),
-                  (${missao}, ${c[0]}, 'Grupo B', 8,  true),
-                  (${missao}, ${c[1]}, 'Grupo Encerrado', 500, false)
+            /* Os totais (12, 8, 500) são efetivos + flutuantes; os evadidos
+               entram só para provar que ficam fora da soma dos agregados. */
+            sql`insert into grupos_oracao (missao_id, centro_id, nome, membros_efetivos, membros_flutuantes, membros_evadidos, ativo) values
+                  (${missao}, ${c[1]}, 'Grupo A', 10, 2, 3, true),
+                  (${missao}, ${c[0]}, 'Grupo B', 8, 0, 1, true),
+                  (${missao}, ${c[1]}, 'Grupo Encerrado', 500, 0, 0, false)
                 returning id`,
           )
         ).rows.map((r) => r.id);

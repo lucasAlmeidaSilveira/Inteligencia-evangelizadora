@@ -36,6 +36,7 @@ import type { CentroParaSelecao } from "@/features/centros/queries";
 
 import { atualizarGrupo, criarGrupo } from "../actions";
 import { DIAS_SEMANA, grupoSchema } from "../schemas";
+import { CamposDeContagem } from "./campos-de-contagem";
 
 type Entrada = z.input<typeof grupoSchema>;
 type Saida = z.output<typeof grupoSchema>;
@@ -43,7 +44,9 @@ type Saida = z.output<typeof grupoSchema>;
 const NOVO: Entrada = {
   nome: "",
   centroId: "",
-  quantidadePessoas: "",
+  membrosEfetivos: "",
+  membrosFlutuantes: "",
+  membrosEvadidos: "",
   diaSemana: "",
   horario: "",
   local: "",
@@ -135,8 +138,8 @@ export function DialogoGrupo({
               {grupoId ? "Editar grupo de oração" : "Novo grupo de oração"}
             </DialogTitle>
             <DialogDescription>
-              O total de pessoas informado aqui alimenta os indicadores da
-              missão.
+              Efetivos e flutuantes somados formam o total de pessoas que
+              alimenta os indicadores da missão.
             </DialogDescription>
           </DialogHeader>
 
@@ -194,24 +197,6 @@ export function DialogoGrupo({
                         </SelectContent>
                       </Select>
                     )}
-                  />
-                )}
-              </Campo>
-
-              <Campo
-                rotulo="Pessoas no grupo"
-                ajuda="Em branco conta como zero."
-                erro={errors.quantidadePessoas?.message}
-              >
-                {(props) => (
-                  <Input
-                    {...props}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    placeholder="0"
-                    className="tabular"
-                    {...register("quantidadePessoas")}
                   />
                 )}
               </Campo>
@@ -278,6 +263,8 @@ export function DialogoGrupo({
                 )}
               </Campo>
             </div>
+
+            <CamposDeContagem form={form} />
 
             {/* ─── Pastores ────────────────────────────────────────────── */}
             <fieldset className="space-y-3 rounded-lg border p-4">

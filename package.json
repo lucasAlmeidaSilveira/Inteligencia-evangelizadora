@@ -27,6 +27,8 @@
     "testar:consultas": "tsx src/features/__testes__/consultas.ts",
     "testar:calendario": "tsx src/features/__testes__/calendario.ts",
     "testar:impacto": "tsx src/features/__testes__/impacto.ts",
+    "testar:lembretes": "tsx src/features/__testes__/lembretes.ts",
+    "lembretes:simular": "tsx src/features/lembretes/simular.ts",
     "db:copiar": "tsx src/server/db/copiar.ts",
     "db:criar-papel": "tsx src/server/db/criar-papel.ts",
     "demo:semear": "tsx src/server/db/semear-demo.ts",

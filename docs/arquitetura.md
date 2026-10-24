@@ -125,14 +125,18 @@ src/
 │  │  ├─ relatorios/         consolidações + exportação CSV
 │  │  ├─ config/             tipos, categorias e usuários (só admin)
 │  │  └─ conta/              troca de senha, para qualquer usuário
-│  └─ api/auth/sessao/       troca do token Firebase pelo cookie de sessão
+│  └─ api/
+│     ├─ auth/sessao/        troca do token Firebase pelo cookie de sessão
+│     └─ lembretes/contagem/ rotina diária do lembrete bimestral (cron)
 ├─ components/
 │  ├─ ui/                    shadcn — não reescrever à mão
 │  ├─ padroes/               CabecalhoPagina, CartaoMetrica, EstadoVazio…
 │  └─ navegacao/             sidebar, menu de conta
 ├─ features/<dominio>/       schemas.ts, queries.ts, actions.ts, components/
+│  ├─ lembretes/             regras puras, textos e a rotina do lembrete bimestral
+│  └─ notificacoes/          o sino do cabeçalho: leitura e "marcar como lida"
 ├─ lib/                      utilidades que podem ir para o cliente
-└─ server/                   só servidor — banco, auth, Firebase Admin, R2
+└─ server/                   só servidor — banco, auth, Firebase Admin, R2, e-mail
 ```
 
 **Onde colocar código novo:** um domínio novo é uma pasta em `features/` com
@@ -155,6 +159,29 @@ build, que é o objetivo.
   na listagem, na visão geral e no painel ao mesmo tempo; revalidar só a
   página alterada deixaria as outras servindo o número anterior. O padrão é
   `revalidatePath("/missoes", "layout")` mais a raiz.
+
+## Rotinas agendadas e e-mail
+
+Não há fila nem worker: a única rotina é um Route Handler
+(`/api/lembretes/contagem`) que a Vercel chama todo dia pelo cron de
+`vercel.json`. O que autoriza é `CRON_SECRET` em `Authorization: Bearer`,
+comparado em tempo constante; o middleware deixa `/api/lembretes` passar sem
+cookie. Qualquer outro agendador serve, desde que mande o segredo.
+
+A rotina roda com o **escopo do sistema** (`src/server/sistema.ts`): papel
+`admin` para o RLS e um `usuario_id` que não é de ninguém. É a única situação
+em que esse escopo pode ser usado — numa Server Action ele entregaria dado de
+todas as missões a quem pediu, sem erro em lugar nenhum.
+
+A lógica em si (`features/lembretes/job.ts`) recebe a transação em vez de
+abri-la, e por isso não tem `server-only`: o teste (`pnpm testar:lembretes`)
+e a simulação (`pnpm lembretes:simular`) a exercitam direto, numa transação
+revertida. `?simular=1` na rota faz o mesmo em produção, sem gravar nem enviar.
+
+E-mail sai pela API HTTP do Resend (`src/server/email.ts`), sem SDK, e é
+opcional: sem `RESEND_API_KEY` e `EMAIL_REMETENTE`, o lembrete fica só na
+notificação interna. Trocar de provedor é reescrever `enviarEmail`; a rotina
+recebe a função e não sabe quem está por trás.
 
 ## Fuso horário
 

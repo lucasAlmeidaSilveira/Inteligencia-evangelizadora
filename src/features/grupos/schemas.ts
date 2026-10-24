@@ -37,6 +37,38 @@ export const pastorSchema = z.object({
   telefone: opcional(30),
 });
 
+/**
+ * Uma das três contagens de membros. Obrigatória de verdade: em branco não
+ * vira zero, como acontecia com o total antigo. A diferença importa porque a
+ * contagem substitui a planilha bimestral — um zero digitado é informação, um
+ * campo esquecido não é, e o sistema não pode confundir os dois.
+ */
+const contagem = () =>
+  z
+    .preprocess(
+      (v) => (v === "" || v === null || v === undefined ? undefined : v),
+      z.coerce.number({ error: "Informe a quantidade. Use 0 se não houver." }),
+    )
+    .pipe(
+      z
+        .number()
+        .int("Use um número inteiro.")
+        .min(0, "Não pode ser negativo.")
+        .max(100_000, "Valor acima do razoável."),
+    );
+
+/**
+ * Só os três números. É o que o lembrete bimestral pede ao responsável: ele
+ * atualiza a contagem sem passar pelo cadastro inteiro do grupo.
+ */
+export const contagemSchema = z.object({
+  membrosEfetivos: contagem(),
+  membrosFlutuantes: contagem(),
+  membrosEvadidos: contagem(),
+});
+
+export type DadosContagem = z.input<typeof contagemSchema>;
+
 export const grupoSchema = z.object({
   nome: z
     .string()
@@ -46,18 +78,7 @@ export const grupoSchema = z.object({
   /** Obrigatório: sem escolha explícita, o formulário já vem com o centro
    *  principal da missão marcado. */
   centroId: centroIdObrigatorio,
-  quantidadePessoas: z
-    .preprocess(
-      (v) => (v === "" || v === null || v === undefined ? 0 : v),
-      z.coerce.number({ error: "Informe um número." }),
-    )
-    .pipe(
-      z
-        .number()
-        .int("Use um número inteiro.")
-        .min(0, "Não pode ser negativo.")
-        .max(100_000, "Valor acima do razoável."),
-    ),
+  ...contagemSchema.shape,
   /** Select devolve "" quando ninguém escolhe; o banco espera null. */
   diaSemana: z
     .union([z.string(), z.number(), z.null()])
