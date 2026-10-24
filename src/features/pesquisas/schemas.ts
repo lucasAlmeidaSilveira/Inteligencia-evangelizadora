@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { TOKEN_PESQUISA } from "@/lib/pesquisa";
 
+import { FAIXAS_DE_NOTA, type FaixaDeNota } from "./satisfacao";
+
 /**
  * Caracteres que não são texto: controles ASCII (menos quebra de linha e
  * tab), os separadores de linha e parágrafo do Unicode e os controles de
@@ -73,3 +75,46 @@ export type DadosResposta = z.input<typeof respostaSchema>;
 export const tokenSchema = z.string().regex(TOKEN_PESQUISA);
 
 export const eventoIdSchema = z.uuid();
+
+/** Teto da página pedida pela URL: além disso é digitação, não navegação. */
+const PAGINA_MAXIMA = 10_000;
+
+/**
+ * Lê `?notas=` e `?pagina=` da aba de comentários, que qualquer um edita.
+ *
+ * O que não é valor possível vira o padrão — todas as notas, primeira página —
+ * em vez de erro: um link antigo ou uma URL mexida à mão continuam abrindo a
+ * lista. A página além da última é corrigida depois, por quem sabe o total.
+ */
+export function lerFiltrosDeComentarios(
+  parametros: Record<string, string | string[] | undefined>,
+): { faixa: FaixaDeNota | null; pagina: number } {
+  const texto = (chave: string) => {
+    const valor = parametros[chave];
+    return typeof valor === "string" ? valor : undefined;
+  };
+
+  const faixa =
+    FAIXAS_DE_NOTA.find((f) => f.valor === texto("notas"))?.valor ?? null;
+
+  const numero = Number(texto("pagina"));
+  const pagina =
+    Number.isInteger(numero) && numero >= 1 && numero <= PAGINA_MAXIMA
+      ? numero
+      : 1;
+
+  return { faixa, pagina };
+}
+
+/** Endereço da aba com o recorte, sem os valores padrão na URL. */
+export function enderecoDosComentarios(
+  eventoId: string,
+  faixa: FaixaDeNota | null,
+  pagina = 1,
+) {
+  const parametros = new URLSearchParams();
+  if (faixa) parametros.set("notas", faixa);
+  if (pagina > 1) parametros.set("pagina", String(pagina));
+  const consulta = parametros.toString();
+  return `/eventos/${eventoId}/pesquisa${consulta ? `?${consulta}` : ""}`;
+}

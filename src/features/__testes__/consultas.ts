@@ -16,6 +16,11 @@ import {
 import { vinculadosPorCentro } from "@/features/centros/vinculados";
 import { pastoresPorGrupo } from "@/features/grupos/pastores";
 import {
+  COMENTARIOS_POR_PAGINA,
+  comentariosPaginados,
+  respostasPorEvento,
+} from "@/features/pesquisas/agregados";
+import {
   agregadosPorMissao,
   membrosDaMissao,
 } from "@/features/missoes/agregados";
@@ -270,6 +275,110 @@ async function principal() {
           despesas: 0,
           saldo: 0,
         });
+
+        // ─── Pesquisa: agregado e lista paginada de comentários ─────────────
+        /*
+         * 30 respostas numa ação: 25 com comentário, 5 sem, notas em ciclo de
+         * 0 a 10. Entram por ie.responder_pesquisa(), no escopo da pesquisa
+         * pública — `evento_respostas` não tem policy de INSERT para ninguém
+         * logado, nem para o admin, e é assim que deve ser.
+         *
+         * Dentro de uma transação `now()` não anda, então as 30 respostas
+         * empatam no mesmo instante. É o pior caso da paginação, e o que se
+         * quer provar: só o desempate por id impede que um comentário apareça
+         * em duas páginas enquanto outro some.
+         */
+        console.log("\nPesquisa — respostas e comentários");
+        const eventoPesquisa = (
+          await tx.execute<{ id: string }>(
+            sql`select id from eventos where missao_id = ${missao} and titulo = 'Já aconteceu'`,
+          )
+        ).rows[0].id;
+        const TOKEN = "q".repeat(43);
+        await tx.execute(
+          sql`insert into evento_pesquisas (evento_id, token, encerra_em)
+              values (${eventoPesquisa}, ${TOKEN}, now() + interval '7 days')`,
+        );
+
+        await tx.execute(
+          sql`select set_config('app.papel', 'pesquisa', true),
+                     set_config('app.pesquisa_token', ${TOKEN}, true)`,
+        );
+        for (let n = 1; n <= 30; n++) {
+          const comentario = n <= 25 ? `Comentário ${n}` : null;
+          await tx.execute(
+            sql`select ie.responder_pesquisa(${n % 11}::int, ${comentario}::text)`,
+          );
+        }
+        await tx.execute(
+          sql`select set_config('app.papel', 'admin', true),
+                     set_config('app.pesquisa_token', '', true)`,
+        );
+
+        const agregado = (await respostasPorEvento(tx, [eventoPesquisa])).get(
+          eventoPesquisa,
+        );
+        ok("conta as 30 respostas", agregado?.quantidade, 30);
+        ok("conta só as 25 com comentário", agregado?.comentarios, 25);
+
+        const p1 = await comentariosPaginados(tx, eventoPesquisa, null, 1);
+        const p2 = await comentariosPaginados(tx, eventoPesquisa, null, 2);
+        ok("primeira página cheia", p1.itens.length, COMENTARIOS_POR_PAGINA);
+        ok("segunda página com o resto", p2.itens.length, 25 - COMENTARIOS_POR_PAGINA);
+        ok("total e páginas", [p1.total, p1.paginas], [25, 2]);
+        ok(
+          "com todos empatados no horário, a ordem é a do id, decrescente",
+          [...p1.itens, ...p2.itens].map((c) => c.id),
+          [...p1.itens, ...p2.itens].map((c) => c.id).sort().reverse(),
+        );
+        ok(
+          "nenhum comentário aparece em duas páginas, nenhum some",
+          new Set([...p1.itens, ...p2.itens].map((c) => c.id)).size,
+          25,
+        );
+        ok(
+          "respondidaEm vem em ISO, para atravessar o cache",
+          typeof p1.itens[0]?.respondidaEm === "string" &&
+            p1.itens[0].respondidaEm.endsWith("Z"),
+          true,
+        );
+
+        const alem = await comentariosPaginados(tx, eventoPesquisa, null, 99);
+        ok("página além da última vira a última", alem.pagina, 2);
+
+        // Notas n % 11 para n de 1 a 25: 1..10, depois 0..10, depois 0..3.
+        // 0 a 6: 6 + 7 + 4 = 17 · 7 e 8: 2 + 2 = 4 · 9 e 10: 2 + 2 = 4.
+        const esperadoPorFaixa = { todas: 25, "0-6": 17, "7-8": 4, "9-10": 4 };
+        ok("contagem por faixa", p1.porFaixa, esperadoPorFaixa);
+        ok(
+          "as faixas somam o total",
+          p1.porFaixa["0-6"] + p1.porFaixa["7-8"] + p1.porFaixa["9-10"],
+          p1.porFaixa.todas,
+        );
+
+        const altas = await comentariosPaginados(tx, eventoPesquisa, "9-10", 1);
+        ok(
+          "filtro 9 e 10 traz só essas notas",
+          altas.itens.every((c) => c.nota >= 9) && altas.itens.length === 4,
+          true,
+        );
+        ok("filtro ajusta o total e as páginas", [altas.total, altas.paginas], [4, 1]);
+
+        const semComentario = await comentariosPaginados(
+          tx,
+          (
+            await tx.execute<{ id: string }>(
+              sql`select id from eventos where missao_id = ${missao} and titulo = 'Daqui a 3 dias'`,
+            )
+          ).rows[0].id,
+          null,
+          1,
+        );
+        ok(
+          "ação sem resposta: lista vazia, uma página",
+          [semComentario.itens.length, semComentario.total, semComentario.paginas],
+          [0, 0, 1],
+        );
 
         console.log("\nCasos de borda");
         ok(

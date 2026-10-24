@@ -8,7 +8,9 @@ import {
   pontuarFinanceiro,
 } from "@/features/eventos/impacto";
 import {
+  contarComentarios,
   descreverFonte,
+  FAIXAS_DE_NOTA,
   fraseDeLeitura,
   percentual,
   resumirSatisfacao,
@@ -194,9 +196,36 @@ const comRespostas = resumirSatisfacao(
     soma: 26, // 9 + 9 + 8 → 8,666…
     promotores: 2,
     detratores: 0,
+    comentarios: 1,
     distribuicao: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0],
   },
   "5.0",
+);
+ok("a contagem de comentários atravessa o resumo", comRespostas.comentarios, 1);
+
+console.log("\nComentários e respostas juntos");
+ok("sem respostas", contarComentarios({ respostas: 0, comentarios: 0 }), "Nenhuma resposta ainda");
+ok(
+  "respostas sem comentário",
+  contarComentarios({ respostas: 3, comentarios: 0 }),
+  "Nenhum comentário em 3 respostas",
+);
+ok(
+  "singular dos dois lados",
+  contarComentarios({ respostas: 1, comentarios: 1 }),
+  "1 comentário em 1 resposta",
+);
+ok(
+  "plural",
+  contarComentarios({ respostas: 40, comentarios: 12 }),
+  "12 comentários em 40 respostas",
+);
+ok(
+  "as faixas cobrem 0 a 10 sem buraco nem sobreposição",
+  FAIXAS_DE_NOTA.flatMap((f) =>
+    Array.from({ length: f.ate - f.de + 1 }, (_, i) => f.de + i),
+  ),
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
 );
 ok(
   "com respostas, a pesquisa vence a nota manual e arredonda a uma casa",

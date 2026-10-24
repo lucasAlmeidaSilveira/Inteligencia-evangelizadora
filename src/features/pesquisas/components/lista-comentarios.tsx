@@ -29,14 +29,17 @@ import type { ComentarioDaPesquisa } from "../queries";
  */
 export function ListaComentarios({
   comentarios,
+  vazio = "Nenhum comentário ainda.",
 }: {
   comentarios: ComentarioDaPesquisa[];
+  /** O que dizer sem itens — na aba, com filtro, "nenhum" depende do filtro. */
+  vazio?: string;
 }) {
   if (comentarios.length === 0) {
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-sm">
         <MessageSquareText className="size-4 shrink-0" aria-hidden />
-        Nenhum comentário ainda.
+        {vazio}
       </p>
     );
   }

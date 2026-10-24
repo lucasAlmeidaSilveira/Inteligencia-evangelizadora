@@ -363,6 +363,15 @@ opcional. Nenhum dado pessoal é pedido.
 - **Moderação é apagar.** Um comentário ofensivo sai com a resposta inteira
   (nota incluída); não existe "editar" uma resposta, que seria adulterar a
   pesquisa. Só quem vê a ação apaga — quem está logado nunca insere resposta.
+- **Onde se leem os comentários.** O card da visão geral mostra os cinco mais
+  recentes, de relance, e um "Ver todos". A aba **Pesquisa** da ação lista
+  todos, vinte por página, do mais recente ao mais antigo, com filtro por
+  faixa de nota (0 a 6, 7 e 8, 9 e 10) e exclusão um a um. Filtro e página
+  ficam na URL (`?notas=0-6&pagina=2`), como os demais filtros: a lista das
+  notas baixas de uma ação é um link que se manda para alguém. Página pedida
+  além da última vira a última. Quem só marcou a nota conta na média, mas não
+  aparece na lista — a tela diz isso, junto de "12 comentários em 40
+  respostas", para ninguém achar que 28 respostas sumiram.
 - **O título da ação aparece na página pública**, e nada mais da missão.
 - **O que o caminho público alcança no banco** é descrito em `arquitetura.md`:
   o papel `pesquisa` não tem policy em tabela alguma e só executa duas funções.

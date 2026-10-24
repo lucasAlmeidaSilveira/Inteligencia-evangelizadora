@@ -149,6 +149,7 @@ async function CabecalhoEvento({ id }: { id: string }) {
           lancamentos: lancamentos.length,
           documentos: documentos.length,
           links: links.length,
+          respostas: evento.satisfacao.respostas,
         }}
       />
     </>
@@ -173,7 +174,7 @@ function CabecalhoCarregando() {
         </div>
         <Skeleton className="h-6 w-56" />
       </div>
-      <EsqueletoAbas quantidade={4} />
+      <EsqueletoAbas quantidade={5} />
     </>
   );
 }

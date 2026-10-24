@@ -13,7 +13,11 @@ import {
   textosSchema,
 } from "@/features/eventos/schemas";
 import { contagemSchema, grupoSchema } from "@/features/grupos/schemas";
-import { respostaSchema } from "@/features/pesquisas/schemas";
+import {
+  enderecoDosComentarios,
+  lerFiltrosDeComentarios,
+  respostaSchema,
+} from "@/features/pesquisas/schemas";
 import { erroDeBanco, resumoDoErro } from "@/lib/erro-de-banco";
 import { relatorioParaCsv } from "@/features/relatorios/csv";
 import { competenciaSchema, missaoSchema } from "@/features/missoes/schemas";
@@ -589,6 +593,73 @@ recusar(
     "a recusa nomeia a chave estranha",
     !extra.success &&
       extra.error.issues.some((i) => i.message.includes("eventoId")),
+  );
+}
+
+/* ─── Filtros da lista de comentários na URL ──────────────────────────────
+ *
+ * `?notas=` e `?pagina=` vêm da URL, que qualquer um edita. O que não é valor
+ * possível vira o padrão, em vez de erro ou de um número absurdo indo parar
+ * num OFFSET.
+ */
+{
+  console.log("\nFiltros da lista de comentários");
+  const igual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  ok(
+    "sem parâmetros: todas as notas, primeira página",
+    igual(lerFiltrosDeComentarios({}), { faixa: null, pagina: 1 }),
+  );
+  ok(
+    "faixa e página válidas passam",
+    igual(lerFiltrosDeComentarios({ notas: "0-6", pagina: "3" }), {
+      faixa: "0-6",
+      pagina: 3,
+    }),
+  );
+  ok(
+    "faixa inventada vira todas",
+    lerFiltrosDeComentarios({ notas: "0-10" }).faixa === null,
+  );
+  ok("página zero vira 1", lerFiltrosDeComentarios({ pagina: "0" }).pagina === 1);
+  ok("página negativa vira 1", lerFiltrosDeComentarios({ pagina: "-4" }).pagina === 1);
+  ok("página com decimal vira 1", lerFiltrosDeComentarios({ pagina: "2.5" }).pagina === 1);
+  ok("página que não é número vira 1", lerFiltrosDeComentarios({ pagina: "x" }).pagina === 1);
+  ok(
+    "página absurda vira 1 — não chega a OFFSET",
+    lerFiltrosDeComentarios({ pagina: "99999999" }).pagina === 1,
+  );
+  ok(
+    "valor repetido na URL vira o padrão",
+    igual(lerFiltrosDeComentarios({ notas: ["0-6", "9-10"], pagina: ["2", "3"] }), {
+      faixa: null,
+      pagina: 1,
+    }),
+  );
+
+  const ID = "6f1d3b2e-6a1c-4d3f-9f2a-8c7b5e4d3a21";
+  ok(
+    "endereço sem recorte não leva parâmetro",
+    enderecoDosComentarios(ID, null) === `/eventos/${ID}/pesquisa`,
+  );
+  ok(
+    "primeira página não aparece na URL",
+    enderecoDosComentarios(ID, "9-10", 1) === `/eventos/${ID}/pesquisa?notas=9-10`,
+  );
+  ok(
+    "faixa e página juntas",
+    enderecoDosComentarios(ID, "7-8", 2) ===
+      `/eventos/${ID}/pesquisa?notas=7-8&pagina=2`,
+  );
+  ok(
+    "o endereço montado relê igual",
+    igual(
+      lerFiltrosDeComentarios(
+        Object.fromEntries(
+          new URLSearchParams(enderecoDosComentarios(ID, "0-6", 4).split("?")[1]),
+        ),
+      ),
+      { faixa: "0-6", pagina: 4 },
+    ),
   );
 }
 

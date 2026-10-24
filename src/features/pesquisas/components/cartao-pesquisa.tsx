@@ -1,4 +1,5 @@
-import { ClipboardList } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import QRCode from "qrcode";
 
 import { MetricaCompacta } from "@/components/padroes/metrica-compacta";
@@ -15,7 +16,7 @@ import { formatarData } from "@/lib/format";
 
 import type { ComentarioDaPesquisa, PesquisaDoEvento } from "../queries";
 import {
-  contarRespostas,
+  contarComentarios,
   fraseDeLeitura,
   type Satisfacao,
 } from "../satisfacao";
@@ -168,18 +169,35 @@ export async function CartaoPesquisa({
 
             <div className="space-y-3 border-t pt-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-muted-foreground text-xs font-medium">
-                  Comentários recentes
-                  {satisfacao.respostas > 0
-                    ? ` · ${contarRespostas(satisfacao.respostas)} no total`
-                    : ""}
-                </p>
-                {satisfacao.respostas > 0 ? (
-                  <BotaoReiniciarPesquisa
-                    eventoId={eventoId}
-                    respostas={satisfacao.respostas}
-                  />
-                ) : null}
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Comentários recentes
+                  </p>
+                  {/* Comentários e respostas juntos: "40 respostas" sozinho em
+                      cima de cinco comentários faria parecer que 35 sumiram. */}
+                  <p className="text-muted-foreground text-xs">
+                    {contarComentarios(satisfacao)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  {/* O card mostra cinco; a lista inteira, paginada e com
+                      filtro por nota, mora na aba — como documentos e links. */}
+                  {satisfacao.comentarios > 0 ? (
+                    <Link
+                      href={`/eventos/${eventoId}/pesquisa`}
+                      className="text-primary flex items-center gap-1 rounded-sm px-1 text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      Ver todos ({satisfacao.comentarios})
+                      <ArrowRight className="size-3.5" aria-hidden />
+                    </Link>
+                  ) : null}
+                  {satisfacao.respostas > 0 ? (
+                    <BotaoReiniciarPesquisa
+                      eventoId={eventoId}
+                      respostas={satisfacao.respostas}
+                    />
+                  ) : null}
+                </div>
               </div>
               <ListaComentarios comentarios={comentarios} />
             </div>

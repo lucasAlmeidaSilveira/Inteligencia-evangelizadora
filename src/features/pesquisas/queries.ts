@@ -1,59 +1,39 @@
 import "server-only";
 
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 
+import { CINCO_MINUTOS, leituraCacheada } from "@/server/cache";
 import { emIso } from "@/server/db/iso";
 import type { Transacao } from "@/server/db/index";
 import { eventoPesquisas, eventoRespostas } from "@/server/db/schema";
+import { ETIQUETAS } from "@/server/etiquetas";
 import {
   comPesquisaLimitada,
   marcarTokenDesconhecido,
   tokenDesconhecido,
 } from "@/server/pesquisa";
 
-import type { AgregadoRespostas } from "./satisfacao";
+import { comentariosPaginados } from "./agregados";
+
+/* O agregado mora em `agregados.ts`, sem `server-only`, para o teste de
+   consultas alcançá-lo; quem importa daqui continua importando daqui. */
+export { respostasPorEvento } from "./agregados";
 
 /**
- * Respostas de várias ações, agregadas numa consulta.
+ * A lista completa de comentários da aba "Pesquisa", uma página por vez.
  *
- * Uma única tabela no FROM, pelo mesmo motivo de `financeiroPorEvento`: uma
- * subconsulta correlacionada em `sql` bruto resolveria o nome da coluna para a
- * tabela errada e devolveria zero em silêncio. Os literais 0..10 do `array`
- * são montados em código, nunca de entrada externa.
+ * Mesma etiqueta da ação: uma resposta nova (a action pública expira só
+ * essa etiqueta) ou uma exclusão (`revalidarEvento`) já invalidam a lista,
+ * sem que ninguém precise lembrar de que ela existe.
  */
-const CONTAGEM_POR_NOTA = sql.raw(
-  Array.from({ length: 11 }, (_, n) => `count(*) filter (where nota = ${n})::int`)
-    .join(", "),
+export const listarComentarios = leituraCacheada(
+  "comentarios-pesquisa",
+  comentariosPaginados,
+  {
+    etiquetas: ([eventoId]) => [ETIQUETAS.evento(eventoId)],
+    revalidar: CINCO_MINUTOS,
+  },
 );
-
-export async function respostasPorEvento(tx: Transacao, eventoIds: string[]) {
-  const mapa = new Map<string, AgregadoRespostas>();
-  if (eventoIds.length === 0) return mapa;
-
-  const linhas = await tx
-    .select({
-      eventoId: eventoRespostas.eventoId,
-      quantidade: sql<number>`count(*)::int`,
-      soma: sql<number>`coalesce(sum(nota), 0)::int`,
-      promotores: sql<number>`count(*) filter (where nota >= 9)::int`,
-      detratores: sql<number>`count(*) filter (where nota <= 6)::int`,
-      distribuicao: sql<number[]>`array[${CONTAGEM_POR_NOTA}]`,
-    })
-    .from(eventoRespostas)
-    .where(inArray(eventoRespostas.eventoId, eventoIds))
-    .groupBy(eventoRespostas.eventoId);
-
-  for (const linha of linhas) {
-    mapa.set(linha.eventoId, {
-      quantidade: linha.quantidade,
-      soma: linha.soma,
-      promotores: linha.promotores,
-      detratores: linha.detratores,
-      distribuicao: linha.distribuicao,
-    });
-  }
-  return mapa;
-}
 
 /** A pesquisa de uma ação, como o coordenador a vê. ISO para caber no cache. */
 export async function pesquisaDoEvento(tx: Transacao, eventoId: string) {
@@ -95,7 +75,8 @@ export async function comentariosDoEvento(
         isNotNull(eventoRespostas.comentario),
       ),
     )
-    .orderBy(desc(eventoRespostas.respondidaEm))
+    // Mesmo desempate da lista paginada: o card e a aba mostram a mesma ordem.
+    .orderBy(desc(eventoRespostas.respondidaEm), desc(eventoRespostas.id))
     .limit(limite);
 }
 

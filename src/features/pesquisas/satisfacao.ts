@@ -13,6 +13,8 @@ export type AgregadoRespostas = {
   promotores: number;
   /** Notas de 0 a 6. */
   detratores: number;
+  /** Quantas respostas trouxeram comentário — o que a aba lista. */
+  comentarios: number;
   /** Quantas respostas em cada nota, índice 0 a 10. */
   distribuicao: number[];
 };
@@ -22,8 +24,22 @@ export const SEM_RESPOSTAS: AgregadoRespostas = {
   soma: 0,
   promotores: 0,
   detratores: 0,
+  comentarios: 0,
   distribuicao: Array<number>(11).fill(0),
 };
+
+/**
+ * As três faixas de leitura, num lugar só: a distribuição do card, o filtro
+ * da lista de comentários e a frase "X% deram 9 ou 10" falam das mesmas
+ * fronteiras, e duas cópias divergiriam na primeira mudança.
+ */
+export const FAIXAS_DE_NOTA = [
+  { valor: "0-6", rotulo: "0 a 6", de: 0, ate: 6 },
+  { valor: "7-8", rotulo: "7 e 8", de: 7, ate: 8 },
+  { valor: "9-10", rotulo: "9 e 10", de: 9, ate: 10 },
+] as const;
+
+export type FaixaDeNota = (typeof FAIXAS_DE_NOTA)[number]["valor"];
 
 export type FonteDaNota = "pesquisa" | "manual";
 
@@ -35,6 +51,7 @@ export type Satisfacao = {
   respostas: number;
   promotores: number;
   detratores: number;
+  comentarios: number;
   distribuicao: number[];
 };
 
@@ -59,6 +76,7 @@ export function resumirSatisfacao(
       respostas: respostas.quantidade,
       promotores: respostas.promotores,
       detratores: respostas.detratores,
+      comentarios: respostas.comentarios,
       distribuicao: respostas.distribuicao,
     };
   }
@@ -74,6 +92,7 @@ export function resumirSatisfacao(
     respostas: 0,
     promotores: 0,
     detratores: 0,
+    comentarios: 0,
     distribuicao: SEM_RESPOSTAS.distribuicao,
   };
 }
@@ -98,6 +117,19 @@ export function fraseDeLeitura(s: Satisfacao) {
 /** "1 resposta" / "37 respostas". */
 export function contarRespostas(n: number) {
   return `${n} ${n === 1 ? "resposta" : "respostas"}`;
+}
+
+/**
+ * "12 comentários em 40 respostas". Os dois números juntos de propósito:
+ * "40 respostas" sozinho, em cima de uma lista de comentários, faria parecer
+ * que 35 sumiram — a maioria das pessoas só marca a nota.
+ */
+export function contarComentarios(s: Pick<Satisfacao, "respostas" | "comentarios">) {
+  if (s.respostas === 0) return "Nenhuma resposta ainda";
+  const respostas = contarRespostas(s.respostas);
+  if (s.comentarios === 0) return `Nenhum comentário em ${respostas}`;
+  const comentarios = `${s.comentarios} ${s.comentarios === 1 ? "comentário" : "comentários"}`;
+  return `${comentarios} em ${respostas}`;
 }
 
 /** Texto da fonte para a tela. */

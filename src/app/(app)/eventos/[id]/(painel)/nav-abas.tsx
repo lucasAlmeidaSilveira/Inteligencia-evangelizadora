@@ -11,7 +11,12 @@ export function NavAbas({
   contagens,
 }: {
   eventoId: string;
-  contagens: { lancamentos: number; documentos: number; links: number };
+  contagens: {
+    lancamentos: number;
+    documentos: number;
+    links: number;
+    respostas: number;
+  };
 }) {
   const caminho = usePathname();
   const base = `/eventos/${eventoId}`;
@@ -29,6 +34,13 @@ export function NavAbas({
       contagem: contagens.documentos,
     },
     { rotulo: "Links úteis", href: `${base}/links`, contagem: contagens.links },
+    /* Por último, e não junto da visão geral: as abas que já existiam ficam
+       onde quem entra uma vez por mês se acostumou a encontrá-las. */
+    {
+      rotulo: "Pesquisa",
+      href: `${base}/pesquisa`,
+      contagem: contagens.respostas,
+    },
   ];
 
   return (

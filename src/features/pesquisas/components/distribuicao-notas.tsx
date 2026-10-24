@@ -1,4 +1,4 @@
-import { contarRespostas, percentual } from "../satisfacao";
+import { contarRespostas, FAIXAS_DE_NOTA, percentual } from "../satisfacao";
 
 /**
  * Quantas respostas em cada nota, de 0 a 10.
@@ -16,13 +16,12 @@ export function DistribuicaoNotas({
   total: number;
 }) {
   const maior = Math.max(1, ...distribuicao);
-  const faixa = (de: number, ate: number) =>
-    distribuicao.slice(de, ate + 1).reduce((s, n) => s + n, 0);
-  const faixas = [
-    { rotulo: "0 a 6", quantidade: faixa(0, 6) },
-    { rotulo: "7 e 8", quantidade: faixa(7, 8) },
-    { rotulo: "9 e 10", quantidade: faixa(9, 10) },
-  ];
+  const faixas = FAIXAS_DE_NOTA.map((f) => ({
+    rotulo: f.rotulo,
+    quantidade: distribuicao
+      .slice(f.de, f.ate + 1)
+      .reduce((s, n) => s + n, 0),
+  }));
 
   return (
     <div className="space-y-3">
